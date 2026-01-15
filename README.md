@@ -59,6 +59,13 @@ Existing projects work without changes
 * **Undo/Redo System**
 * **Professional Video Rendering** ⭐ NEW
 
+## 📸 Screenshots
+
+![Image 1](gallery/1.png "Starting up a basic project from scratch...")
+![Image 2](gallery/2.png "Inserting elements and search for new animations...")
+![Image 3](gallery/3.png "Getting better with cool animations, now customizing...")
+![Image 4](gallery/4.png "Render working, a beautiful animation is generated...")
+
 ---
 
 ## ⚙️ Example Workflow: Type-Safe Animation

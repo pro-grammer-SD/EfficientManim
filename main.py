@@ -1903,12 +1903,11 @@ class AIPanel(QWidget):
             self.status_label.setText("Status: No code block found")
             
     def _extract_nodes_from_code(self, code: str):
-        """Extract Manim objects from AI-generated code with FULL parameters."""
+        """Extract BOTH mobjects and animations from AI-generated code."""
         self.extracted_nodes = []
         self.nodes_list.clear()
         
-        # Pattern to detect object creation with parameters: var = ClassName(...)
-        # Uses DOTALL to capture multi-line parameters
+        # Extract all object definitions
         pattern = r'(\w+)\s*=\s*([A-Z][a-zA-Z0-9]*)\s*\((.*?)\)(?:\s|$)'
         matches = re.finditer(pattern, code, re.DOTALL)
         
@@ -1922,19 +1921,37 @@ class AIPanel(QWidget):
             # Extract and parse ALL parameters
             params = self._parse_node_parameters(params_str)
             param_count = len(params)
+            
+            # Determine if it's an animation
+            is_animation = False
+            try:
+                if hasattr(manim, class_name):
+                    cls = getattr(manim, class_name)
+                    is_animation = issubclass(cls, manim.Animation) if hasattr(manim, 'Animation') else 'Animation' in class_name
+            except:
+                pass
                 
             self.extracted_nodes.append({
                 'var_name': var_name,
                 'class_name': class_name,
                 'params': params,
                 'params_str': params_str,
-                'source': 'ai'
+                'source': 'ai',
+                'type': 'animation' if is_animation else 'mobject'
             })
             
-            # Add to list with tooltip showing parameter count
-            item = QListWidgetItem(f"✨ {var_name}: {class_name} ({param_count} params)")
-            item.setBackground(QColor("#e3f2fd"))
-            item.setForeground(QColor("#1565c0"))
+            # Add to list with icon indicating type
+            node_icon = "🎬" if is_animation else "📦"
+            node_type_label = "Animation" if is_animation else "Mobject"
+            item = QListWidgetItem(f"{node_icon} {var_name}: {class_name} ({param_count} params) [{node_type_label}]")
+            
+            # Color code: blue for mobjects, purple for animations
+            if is_animation:
+                item.setBackground(QColor("#f3e5f5"))
+                item.setForeground(QColor("#7b1fa2"))
+            else:
+                item.setBackground(QColor("#e3f2fd"))
+                item.setForeground(QColor("#1565c0"))
             
             # Build detailed tooltip with parameter list
             param_list = "\n".join([f"  • {k}={v[:40]}" for k, v in list(params.items())[:5]])
@@ -1942,13 +1959,48 @@ class AIPanel(QWidget):
                 param_list += f"\n  ... and {len(params)-5} more"
             
             item.setToolTip(
-                f"AI Generated Object\n"
+                f"AI Generated {node_type_label}\n"
                 f"Variable: {var_name}\n"
                 f"Type: {class_name}\n"
                 f"Parameters ({param_count}):\n{param_list}\n\n"
                 f"All parameters are captured and ready to use."
             )
             self.nodes_list.addItem(item)
+        
+        # Also show animations from self.play() calls
+        pattern_play = r'self\.play\((.*?)\)(?=\s|$)'
+        for match in re.finditer(pattern_play, code, re.DOTALL):
+            play_content = match.group(1)
+            anim_pattern = r'([A-Z][a-zA-Z0-9]*)\((.*?)\)'
+            
+            for anim_match in re.finditer(anim_pattern, play_content):
+                anim_class = anim_match.group(1)
+                
+                # Skip if not a Manim animation class
+                if not hasattr(manim, anim_class):
+                    continue
+                
+                try:
+                    cls = getattr(manim, anim_class)
+                    is_anim = issubclass(cls, manim.Animation) if hasattr(manim, 'Animation') else 'Animation' in anim_class
+                    
+                    if is_anim and not any(n['class_name'] == anim_class and n['type'] == 'animation' for n in self.extracted_nodes):
+                        # Add this animation if not already added
+                        self.extracted_nodes.append({
+                            'var_name': f"{anim_class.lower()}_1",
+                            'class_name': anim_class,
+                            'params': {},
+                            'source': 'ai',
+                            'type': 'animation'
+                        })
+                        
+                        item = QListWidgetItem(f"🎬 {anim_class.lower()}_1: {anim_class} (from self.play)")
+                        item.setBackground(QColor("#f3e5f5"))
+                        item.setForeground(QColor("#7b1fa2"))
+                        item.setToolTip(f"Animation: {anim_class}\nExtracted from self.play() call")
+                        self.nodes_list.addItem(item)
+                except:
+                    pass
     
     def _parse_node_parameters(self, params_str: str) -> dict:
         """Parse parameters from node definition string, handling nested structures."""
@@ -2022,36 +2074,81 @@ class AINodeIntegrator:
     """Handles integration of AI-generated nodes into the scene graph."""
     
     @staticmethod
-    def parse_ai_code(code: str) -> list:
+    def parse_ai_code(code: str) -> tuple:
         """
-        Parse AI-generated code and extract node definitions.
+        Parse AI-generated code and extract BOTH node and animation definitions.
         
-        Returns list of dicts: {var_name, class_name, init_params}
+        Returns: (mobjects, animations, connections)
+        Where connections = [(animation_var, mobject_var), ...]
         """
-        nodes = []
+        mobjects = []
+        animations = []
+        connections = []
         
-        # Pattern: var = ClassName(params...)
-        pattern = r'(\w+)\s*=\s*([A-Z][a-zA-Z0-9]*)\s*\((.*?)\)'
+        # Extract mobject definitions: var = ClassName(params...)
+        # Exclude Animation classes
+        pattern_mobjects = r'(\w+)\s*=\s*([A-Z][a-zA-Z0-9]*)\s*\((.*?)\)'
         
-        for match in re.finditer(pattern, code, re.DOTALL):
+        for match in re.finditer(pattern_mobjects, code, re.DOTALL):
             var_name, class_name, params_str = match.groups()
             
             # Skip non-Manim classes
             if not hasattr(manim, class_name):
                 continue
-                
-            # Parse parameters (simple extraction)
+            
+            # Check if it's an Animation class
+            is_animation = False
+            try:
+                if hasattr(manim, class_name):
+                    cls = getattr(manim, class_name)
+                    is_animation = issubclass(cls, manim.Animation) if hasattr(manim, 'Animation') else 'Animation' in class_name
+            except:
+                pass
+            
+            # Parse parameters
             params = AINodeIntegrator._parse_params(params_str)
             
-            nodes.append({
-                'var_name': var_name,
-                'class_name': class_name,
-                'params': params,
-                'source': 'ai',
-                'code_snippet': match.group(0)
-            })
+            if is_animation:
+                animations.append({
+                    'var_name': var_name,
+                    'class_name': class_name,
+                    'params': params,
+                    'source': 'ai',
+                    'code_snippet': match.group(0)
+                })
+            else:
+                mobjects.append({
+                    'var_name': var_name,
+                    'class_name': class_name,
+                    'params': params,
+                    'source': 'ai',
+                    'code_snippet': match.group(0)
+                })
+        
+        # Extract animations from self.play() calls
+        # Pattern: self.play(AnimClass(obj, ...))
+        pattern_play = r'self\.play\((.*?)\)(?=\s|$)'
+        
+        for match in re.finditer(pattern_play, code, re.DOTALL):
+            play_content = match.group(1)
             
-        return nodes
+            # Extract individual animations from play call
+            anim_pattern = r'([A-Z][a-zA-Z0-9]*)\((.*?(?:\([^)]*\))?[^)]*?)\)'
+            for anim_match in re.finditer(anim_pattern, play_content, re.DOTALL):
+                anim_class, anim_args = anim_match.groups()
+                
+                # Skip if not an animation
+                if not hasattr(manim, anim_class):
+                    continue
+                
+                # Find which mobject this animation applies to
+                for mobject in mobjects:
+                    if mobject['var_name'] in anim_args:
+                        # Create connection: animation -> mobject
+                        connections.append((anim_class, mobject['var_name']))
+                        break
+        
+        return mobjects, animations, connections
         
     @staticmethod
     def _parse_params(params_str: str) -> dict:
@@ -2079,8 +2176,9 @@ class AINodeIntegrator:
         return params
         
     @staticmethod
+    @staticmethod
     def create_node_from_ai(var_name: str, class_name: str, 
-                            params: dict, scene_graph) -> 'NodeItem':
+                            params: dict, scene_graph, node_type=NodeType.MOBJECT) -> 'NodeItem':
         """
         Create a node in the scene graph from AI definition.
         
@@ -2089,12 +2187,13 @@ class AINodeIntegrator:
             class_name: Manim class name (e.g., 'Circle')
             params: Parameter dict
             scene_graph: The SceneGraph instance
+            node_type: NodeType.MOBJECT or NodeType.ANIMATION
             
         Returns:
             NodeItem: The created node
         """
         # Create NodeData with AI metadata
-        node_data = NodeData(var_name, NodeType.MOBJECT, class_name)
+        node_data = NodeData(var_name, node_type, class_name)
         
         # Apply parameters with type safety
         for param_name, param_value in params.items():
@@ -2188,7 +2287,7 @@ class AINodeIntegrator:
     @staticmethod
     def merge_ai_code_to_scene(code: str, scene_graph) -> dict:
         """
-        Merge AI-generated code into scene.
+        Merge AI-generated code into scene with animations and connections.
         
         Returns: {
             'success': bool,
@@ -2198,25 +2297,66 @@ class AINodeIntegrator:
         }
         """
         try:
-            # Parse code
-            nodes_def = AINodeIntegrator.parse_ai_code(code)
+            # Parse code - now returns (mobjects, animations, connections)
+            mobjects, animations, connections = AINodeIntegrator.parse_ai_code(code)
             
-            # Validate
-            valid_nodes, errors = AINodeIntegrator.validate_ai_nodes(nodes_def)
+            # Validate all nodes
+            valid_mobjects, mob_errors = AINodeIntegrator.validate_ai_nodes(mobjects)
+            valid_animations, anim_errors = AINodeIntegrator.validate_ai_nodes(animations)
             
-            # Create nodes
+            errors = mob_errors + anim_errors
+            
+            # Create mobject nodes
             created_nodes = []
-            for node_def in valid_nodes:
+            mobject_items = {}  # Track var_name -> NodeItem mapping
+            
+            for node_def in valid_mobjects:
                 try:
                     item = AINodeIntegrator.create_node_from_ai(
                         node_def['var_name'],
                         node_def['class_name'],
                         node_def['params'],
-                        scene_graph
+                        scene_graph,
+                        node_type=NodeType.MOBJECT
+                    )
+                    created_nodes.append(item)
+                    mobject_items[node_def['var_name']] = item
+                except Exception as e:
+                    errors.append(f"Failed to create mobject {node_def['var_name']}: {str(e)}")
+            
+            # Create animation nodes and connect them
+            for node_def in valid_animations:
+                try:
+                    # Generate unique name for animation node
+                    anim_var = f"{node_def['class_name'].lower()}_1"
+                    
+                    item = AINodeIntegrator.create_node_from_ai(
+                        anim_var,
+                        node_def['class_name'],
+                        node_def['params'],
+                        scene_graph,
+                        node_type=NodeType.ANIMATION
                     )
                     created_nodes.append(item)
                 except Exception as e:
-                    errors.append(f"Failed to create {node_def['var_name']}: {str(e)}")
+                    errors.append(f"Failed to create animation {node_def['class_name']}: {str(e)}")
+            
+            # Create connections between animations and mobjects
+            for anim_class, mobobj_var in connections:
+                if mobobj_var in mobject_items:
+                    # Find animation node that applies to this mobject
+                    for node in created_nodes:
+                        if node.data.type == NodeType.ANIMATION and node.data.cls_name == anim_class:
+                            mob_node = mobject_items[mobobj_var]
+                            # Create wire: animation output -> mobject input
+                            try:
+                                wire = WireItem(node.out_socket, mob_node.in_socket)
+                                scene_graph.scene.addItem(wire)
+                                node.out_socket.links.append(wire)
+                                mob_node.in_socket.links.append(wire)
+                            except Exception as e:
+                                pass
+                            break
                     
             return {
                 'success': len(created_nodes) > 0,
@@ -2226,6 +2366,7 @@ class AINodeIntegrator:
             }
             
         except Exception as e:
+            LOGGER.error(f"merge_ai_code_to_scene error: {e}")
             return {
                 'success': False,
                 'nodes_added': 0,
