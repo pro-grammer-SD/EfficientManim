@@ -415,7 +415,7 @@ class KeyboardShortcuts:
         "Save": (QKeySequence.Save, "Save project"),
         "Open": (QKeySequence.Open, "Open project"),
         "Fit View": (QKeySequence(Qt.CTRL | Qt.Key_0), "Fit scene to view"),
-        "Clear": (QKeySequence(Qt.CTRL | Qt.ALT | Qt.Key_Delete), "Clear all nodes"),
+        "Clear": (QKeySequence(Qt.CTRL| Qt.Key_Delete), "Clear all nodes"),
     }
     
     @classmethod
