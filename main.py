@@ -2824,6 +2824,9 @@ class EfficientManimWindow(QMainWindow):
         self.init_font()
         self.setup_ui()
         self.setup_menu()
+
+        # --- NEW: Apply initial theme state ---
+        self.apply_theme()
         
         self.render_queue = []
         self.render_timer = QTimer()
@@ -2929,8 +2932,23 @@ class EfficientManimWindow(QMainWindow):
         main.setSizes([1000, 600])
 
     def setup_menu(self):
+        """Setup menu bar with all actions."""
         bar = self.menuBar()
         
+        # --- FIX: Use self.corner_container to prevent Garbage Collection crash ---
+        self.corner_container = QWidget()
+        corner_layout = QHBoxLayout(self.corner_container)
+        corner_layout.setContentsMargins(0, 0, 15, 0) # 15px right margin
+        
+        self.theme_btn = QPushButton()
+        self.theme_btn.setCursor(Qt.PointingHandCursor)
+        # REMOVED: self.theme_btn.setFixedSize(30, 30) <--- Allow it to expand
+        self.theme_btn.clicked.connect(self.toggle_theme)
+        
+        corner_layout.addWidget(self.theme_btn)
+        bar.setCornerWidget(self.corner_container, Qt.TopRightCorner)
+        # -------------------------------------------------------------------------
+
         # File Menu
         file_menu = bar.addMenu("File")
         file_menu.addAction("New Project", self.new_project, QKeySequence.New)
@@ -3019,7 +3037,67 @@ class EfficientManimWindow(QMainWindow):
             "A visual node-based Manim IDE with AI integration.\n\n"
             "© 2024 - Efficient Manim Team"
         )
+
+    def toggle_theme(self):
+        """Switch between light and dark themes."""
+        current = THEME_MANAGER.current_theme
+        new_theme = ThemeManager.DARK_THEME if current == ThemeManager.LIGHT_THEME else ThemeManager.LIGHT_THEME
+        
+        THEME_MANAGER.set_theme(new_theme)
+        self.apply_theme()
     
+    def apply_theme(self):
+        """Apply the current theme stylesheet and update UI elements."""
+        is_dark = THEME_MANAGER.current_theme == ThemeManager.DARK_THEME
+        
+        # 1. Apply Stylesheet
+        self.setStyleSheet(THEME_MANAGER.get_stylesheet())
+        
+        # 2. Update Toggle Button Visuals (With Safety Check)
+        if hasattr(self, 'theme_btn'):
+            try:
+                # Text indicates what you will switch TO
+                btn_text = "  ☀ Light Mode  " if is_dark else "  🌙 Dark Mode  "
+                self.theme_btn.setText(btn_text)
+                self.theme_btn.setToolTip("Toggle Theme")
+                
+                # Dynamic Colors for high visibility
+                if is_dark:
+                    # Dark Mode Styling (Button looks bright/white to indicate Light option)
+                    btn_style = """
+                        QPushButton { 
+                            border: 1px solid #555; 
+                            border-radius: 4px;
+                            background-color: #333; 
+                            color: #fff;
+                            padding: 4px 8px;
+                            font-weight: bold;
+                        }
+                        QPushButton:hover { background-color: #444; border-color: #fff; }
+                    """
+                else:
+                    # Light Mode Styling (Button looks dark to indicate Dark option)
+                    btn_style = """
+                        QPushButton { 
+                            border: 1px solid #ccc; 
+                            border-radius: 4px;
+                            background-color: #f0f0f0; 
+                            color: #333;
+                            padding: 4px 8px;
+                            font-weight: bold;
+                        }
+                        QPushButton:hover { background-color: #e0e0e0; border-color: #333; }
+                    """
+                
+                self.theme_btn.setStyleSheet(btn_style)
+            except RuntimeError:
+                pass # Widget might be deleted during shutdown or reload, ignore safely
+
+        # 3. Update Canvas Background
+        if hasattr(self, 'scene'):
+            bg_color = QColor("#2d2d2d") if is_dark else QColor("#f4f6f7")
+            self.scene.setBackgroundBrush(QBrush(bg_color))
+
     def mark_modified(self):
         """Mark project as modified and update window title."""
         self.project_modified = True
