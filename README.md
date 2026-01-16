@@ -115,6 +115,7 @@ pip install PySide6 manim google-genai pydub
 
 # 2. Run the Application
 python main.py
+```
 
 ## 📸 Screenshots
 
