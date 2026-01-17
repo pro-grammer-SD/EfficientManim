@@ -79,16 +79,18 @@ from PySide6.QtWidgets import (
     QCheckBox, QPushButton, QDialog, QFormLayout, QComboBox, QColorDialog,
     QScrollArea, QFrame, QMessageBox,
     QFileDialog, QListWidget, QListWidgetItem,
-    QStyle
+    QStyle, QSlider
 )
 from PySide6.QtCore import (
     Qt, Signal, QObject, QThread, QPointF, QRectF, QTimer,
-    QSettings, QSize, QMimeData, QStandardPaths
+    QSettings, QSize, QMimeData, QStandardPaths, QUrl
 )
 from PySide6.QtGui import (
     QAction, QColor, QPen, QBrush, QFont, QPainter, QPixmap, QKeySequence, QFontDatabase, QIcon, QPainterPath,
     QDrag, QTextCursor
 )
+from PySide6.QtMultimedia import QMediaPlayer, QAudioOutput
+from PySide6.QtMultimediaWidgets import QVideoWidget
 
 # Manim Import (Safe)
 try:
@@ -669,7 +671,6 @@ class VideoRenderWorker(QThread):
             if self.resolution:
                 w, h = self.resolution
                 flags.append(f"--resolution={w},{h}")
-            flags.insert(0, "-p")
             cmd = ["manim"] + flags + [str(self.script_path), "EfficientScene"]
             
             self.progress.emit(f"Starting render...")
@@ -1241,7 +1242,115 @@ class ColorNormalizer:
     def normalize_to_hex(value):
         """Convert any color representation to hex string."""
         return TypeSafeParser.parse_color(value)
-    
+
+class VideoOutputPanel(QWidget):
+    """Integrated Video Player with Seek and Play/Pause controls."""
+    def __init__(self):
+        super().__init__()
+        self.setup_ui()
+        self.duration = 0
+        
+        # Init Player
+        self.player = QMediaPlayer()
+        self.audio_output = QAudioOutput()
+        self.player.setAudioOutput(self.audio_output)
+        
+        self.player.setVideoOutput(self.video_widget)
+        
+        # Connections
+        self.player.positionChanged.connect(self.on_position_changed)
+        self.player.durationChanged.connect(self.on_duration_changed)
+        self.player.mediaStatusChanged.connect(self.on_media_status_changed)
+
+    def setup_ui(self):
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(0)
+        
+        # Header
+        header_bar = QFrame()
+        header_bar.setStyleSheet("background: #2c3e50; border-bottom: 1px solid #34495e;")
+        header_layout = QHBoxLayout(header_bar)
+        header_layout.setContentsMargins(10, 5, 10, 5)
+        
+        lbl = QLabel("🎥 Output Monitor")
+        lbl.setStyleSheet("color: white; font-weight: bold;")
+        header_layout.addWidget(lbl)
+        layout.addWidget(header_bar)
+        
+        # Video Area
+        self.video_widget = QVideoWidget()
+        self.video_widget.setStyleSheet("background-color: black;")
+        layout.addWidget(self.video_widget, 1) # Expandable
+        
+        # Controls Area
+        controls = QFrame()
+        controls.setStyleSheet("background: #ecf0f1; border-top: 1px solid #bdc3c7;")
+        ctrl_layout = QHBoxLayout(controls)
+        ctrl_layout.setContentsMargins(10, 5, 10, 5)
+        
+        # Play/Pause Button
+        self.btn_play = QPushButton("▶")
+        self.btn_play.setFixedSize(30, 30)
+        self.btn_play.clicked.connect(self.toggle_play)
+        ctrl_layout.addWidget(self.btn_play)
+        
+        # Slider
+        self.slider = QSlider(Qt.Horizontal)
+        self.slider.setRange(0, 0)
+        self.slider.sliderMoved.connect(self.set_position)
+        ctrl_layout.addWidget(self.slider)
+        
+        # Time Label
+        self.lbl_time = QLabel("00:00 / 00:00")
+        self.lbl_time.setStyleSheet("font-family: monospace;")
+        ctrl_layout.addWidget(self.lbl_time)
+        
+        layout.addWidget(controls)
+
+    def load_video(self, file_path, autoplay=True):
+        """Load a video file and optionally start playing."""
+        self.player.setSource(QUrl.fromLocalFile(file_path))
+        self.audio_output.setVolume(1.0) # 100% volume
+        if autoplay:
+            self.player.play()
+            self.btn_play.setText("⏸")
+
+    def toggle_play(self):
+        if self.player.playbackState() == QMediaPlayer.PlayingState:
+            self.player.pause()
+            self.btn_play.setText("▶")
+        else:
+            self.player.play()
+            self.btn_play.setText("⏸")
+
+    def on_position_changed(self, position):
+        """Update slider as video plays."""
+        if not self.slider.isSliderDown():
+            self.slider.setValue(position)
+        self.update_time_label(position)
+
+    def on_duration_changed(self, duration):
+        """Update slider range when video loads."""
+        self.duration = duration
+        self.slider.setRange(0, duration)
+
+    def set_position(self, position):
+        """User dragged slider."""
+        self.player.setPosition(position)
+
+    def update_time_label(self, current_ms):
+        def fmt(ms):
+            seconds = (ms // 1000) % 60
+            minutes = (ms // 60000)
+            return f"{minutes:02}:{seconds:02}"
+        
+        self.lbl_time.setText(f"{fmt(current_ms)} / {fmt(self.duration)}")
+
+    def on_media_status_changed(self, status):
+        if status == QMediaPlayer.EndOfMedia:
+            self.btn_play.setText("▶")
+
 class GraphView(QGraphicsView):
     """Custom View with Zoom (Ctrl+Wheel) and Pan (Middle Mouse) support."""
     def __init__(self, scene):
@@ -1599,9 +1708,109 @@ class ElementsPanel(QWidget):
             t = "Mobject" if p.text(0) == "Mobjects" else "Animation"
             self.add_requested.emit(t, item.text(0))
 
+class VideoOutputPanel(QWidget):
+    """Integrated Video Player with Seek and Play/Pause controls."""
+    def __init__(self):
+        super().__init__()
+        self.duration = 0
+        self.player = QMediaPlayer()
+        self.audio_output = QAudioOutput()
+        self.player.setAudioOutput(self.audio_output)
+        
+        # Create Video Widget
+        self.video_widget = QVideoWidget()
+        self.player.setVideoOutput(self.video_widget)
+        
+        # Connections
+        self.player.positionChanged.connect(self.on_position_changed)
+        self.player.durationChanged.connect(self.on_duration_changed)
+        self.player.mediaStatusChanged.connect(self.on_media_status_changed)
+        
+        self.setup_ui()
+
+    def setup_ui(self):
+        # NOTE: This uses addWidget, NOT setCentralWidget
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(0)
+        
+        # Header
+        header_bar = QFrame()
+        header_bar.setStyleSheet("background: #2c3e50; border-bottom: 1px solid #34495e;")
+        header_layout = QHBoxLayout(header_bar)
+        header_layout.setContentsMargins(10, 5, 10, 5)
+        lbl = QLabel("🎥 Output Monitor")
+        lbl.setStyleSheet("color: white; font-weight: bold;")
+        header_layout.addWidget(lbl)
+        layout.addWidget(header_bar)
+        
+        # Video Area
+        self.video_widget.setStyleSheet("background-color: black;")
+        layout.addWidget(self.video_widget, 1)
+        
+        # Controls
+        controls = QFrame()
+        controls.setStyleSheet("background: #ecf0f1; border-top: 1px solid #bdc3c7;")
+        ctrl_layout = QHBoxLayout(controls)
+        ctrl_layout.setContentsMargins(10, 5, 10, 5)
+        
+        self.btn_play = QPushButton("▶")
+        self.btn_play.setFixedSize(30, 30)
+        self.btn_play.clicked.connect(self.toggle_play)
+        ctrl_layout.addWidget(self.btn_play)
+        
+        self.slider = QSlider(Qt.Horizontal)
+        self.slider.setRange(0, 0)
+        self.slider.sliderMoved.connect(self.set_position)
+        ctrl_layout.addWidget(self.slider)
+        
+        self.lbl_time = QLabel("00:00 / 00:00")
+        self.lbl_time.setStyleSheet("font-family: monospace;")
+        ctrl_layout.addWidget(self.lbl_time)
+        
+        layout.addWidget(controls)
+
+    def load_video(self, file_path, autoplay=True):
+        self.player.setSource(QUrl.fromLocalFile(file_path))
+        self.audio_output.setVolume(1.0)
+        if autoplay:
+            self.player.play()
+            self.btn_play.setText("⏸")
+
+    def toggle_play(self):
+        if self.player.playbackState() == QMediaPlayer.PlayingState:
+            self.player.pause()
+            self.btn_play.setText("▶")
+        else:
+            self.player.play()
+            self.btn_play.setText("⏸")
+
+    def on_position_changed(self, position):
+        if not self.slider.isSliderDown():
+            self.slider.setValue(position)
+        self.update_time_label(position)
+
+    def on_duration_changed(self, duration):
+        self.duration = duration
+        self.slider.setRange(0, duration)
+
+    def set_position(self, position):
+        self.player.setPosition(position)
+
+    def update_time_label(self, current_ms):
+        def fmt(ms):
+            seconds = (ms // 1000) % 60
+            minutes = (ms // 60000)
+            return f"{minutes:02}:{seconds:02}"
+        self.lbl_time.setText(f"{fmt(current_ms)} / {fmt(self.duration)}")
+
+    def on_media_status_changed(self, status):
+        if status == QMediaPlayer.EndOfMedia:
+            self.btn_play.setText("▶")
+
 class VideoRenderPanel(QWidget):
     """Panel for rendering scenes to video."""
-    render_requested = Signal(dict)  # Config dict: fps, resolution, quality, output_path
+    render_requested = Signal(dict)
 
     def __init__(self):
         super().__init__()
@@ -1609,9 +1818,9 @@ class VideoRenderPanel(QWidget):
         self.setup_ui()
 
     def setup_ui(self):
+        # NOTE: This is a QWidget. It uses addLayout/addWidget.
         layout = QVBoxLayout(self)
         
-        # Title
         title = QLabel("🎬 Video Render")
         title_font = title.font()
         title_font.setPointSize(12)
@@ -1619,17 +1828,13 @@ class VideoRenderPanel(QWidget):
         title.setFont(title_font)
         layout.addWidget(title)
         
-        # Settings Form
         form = QFormLayout()
         
-        # FPS
         self.fps_spin = QSpinBox()
         self.fps_spin.setRange(15, 60)
         self.fps_spin.setValue(30)
-        self.fps_spin.setSuffix(" FPS")
         form.addRow("Frame Rate:", self.fps_spin)
         
-        # Resolution
         res_layout = QHBoxLayout()
         self.width_spin = QSpinBox()
         self.width_spin.setRange(320, 3840)
@@ -1646,15 +1851,13 @@ class VideoRenderPanel(QWidget):
         res_layout.addWidget(self.height_spin)
         form.addRow("Resolution:", res_layout)
         
-        # Quality
         self.quality_combo = QComboBox()
-        self.quality_combo.addItems(["Low (ql) - Fast", "Medium (qm)", "High (qh) - Slow", "Ultra (qk) - Very Slow"])
-        self.quality_combo.setCurrentIndex(1)  # Medium
+        self.quality_combo.addItems(["Low (ql)", "Medium (qm)", "High (qh)", "Ultra (qk)"])
+        self.quality_combo.setCurrentIndex(1)
         form.addRow("Quality:", self.quality_combo)
         
         layout.addLayout(form)
         
-        # Output Path
         path_layout = QHBoxLayout()
         self.output_path_lbl = QLineEdit()
         self.output_path_lbl.setReadOnly(True)
@@ -1667,11 +1870,9 @@ class VideoRenderPanel(QWidget):
         path_layout.addWidget(self.browse_btn)
         layout.addLayout(path_layout)
         
-        # Render Controls
         ctrl_layout = QHBoxLayout()
-        
         self.render_scene_btn = QPushButton("📽 Render Full Scene")
-        self.render_scene_btn.setStyleSheet("background-color: #27ae60; color: white; padding: 8px; font-weight: bold;")
+        self.render_scene_btn.setStyleSheet("background-color: #27ae60; color: white; padding: 8px;")
         self.render_scene_btn.clicked.connect(self.render_full_scene)
         ctrl_layout.addWidget(self.render_scene_btn)
         
@@ -1683,86 +1884,54 @@ class VideoRenderPanel(QWidget):
         
         layout.addLayout(ctrl_layout)
         
-        # Status Display
         self.status_display = QTextEdit()
         self.status_display.setReadOnly(True)
         self.status_display.setMaximumHeight(120)
-        self.status_display.setStyleSheet("background: #ecf0f1; color: #2c3e50;")
         layout.addWidget(QLabel("Status:"))
         layout.addWidget(self.status_display)
         
         layout.addStretch()
 
+    # ... (Keep existing browse_output, render_full_scene, update_status, etc.) ...
     def browse_output(self):
-        """Let user select output directory."""
-        path = QFileDialog.getExistingDirectory(
-            self,
-            "Select Output Directory",
-            str(AppPaths.TEMP_DIR)
-        )
-        if path:
-            self.output_path_lbl.setText(path)
+        path = QFileDialog.getExistingDirectory(self, "Select Output", str(AppPaths.TEMP_DIR))
+        if path: self.output_path_lbl.setText(path)
 
     def render_full_scene(self):
-        """Render the full compiled scene to video."""
-        # This will be called from main window with the scene code
         output_path = Path(self.output_path_lbl.text())
-        if not output_path.exists():
-            QMessageBox.warning(self, "Error", "Output directory does not exist.")
-            return
-        
-        # Quality map
-        quality_map = {0: "l", 1: "m", 2: "h", 3: "k"}
-        quality = quality_map.get(self.quality_combo.currentIndex(), "m")
-        
+        if not output_path.exists(): return
+        qual = ["l","m","h","k"][self.quality_combo.currentIndex()]
         config = {
             "fps": self.fps_spin.value(),
             "resolution": (self.width_spin.value(), self.height_spin.value()),
-            "quality": quality,
+            "quality": qual,
             "output_path": str(output_path)
         }
-        
         self.render_requested.emit(config)
 
     def cancel_render(self):
-        """Cancel ongoing render."""
-        if self.render_worker:
-            self.render_worker.stop_render()
-            self.update_status("Render cancelled.", "orange")
+        if self.render_worker: self.render_worker.stop_render()
 
     def start_rendering(self, worker):
-        """Called by main window when render starts."""
         self.render_worker = worker
         self.render_scene_btn.setEnabled(False)
         self.cancel_btn.setEnabled(True)
-        self.update_status("Rendering in progress...", "blue")
-        
-        worker.progress.connect(lambda msg: self.update_status(msg, "blue"))
+        worker.progress.connect(lambda m: self.update_status(m, "blue"))
         worker.success.connect(self.on_render_success)
-        # --- FIX: Connect to a proper handler that resets buttons ---
         worker.error.connect(self.on_render_error)
 
-    def on_render_error(self, err_msg):
-        """Called when render fails/cancels to ensure buttons unlock."""
+    def on_render_success(self, path):
         self.render_scene_btn.setEnabled(True)
         self.cancel_btn.setEnabled(False)
-        self.update_status(f"❌ Error: {err_msg}", "red")
-        LOGGER.error(f"Render process stopped: {err_msg}")
+        self.update_status(f"Done: {Path(path).name}", "green")
 
-    def on_render_success(self, video_path):
-        """Called when render completes successfully."""
+    def on_render_error(self, err):
         self.render_scene_btn.setEnabled(True)
         self.cancel_btn.setEnabled(False)
-        self.update_status(f"✓ Video saved!\n{Path(video_path).name}", "green")
-        LOGGER.info(f"Video rendered: {video_path}")
+        self.update_status(f"Error: {err}", "red")
 
-    def update_status(self, message, color="black"):
-        """Update status display with colored text."""
-        self.status_display.append(f"<span style='color:{color}'><b>[{datetime.now().strftime('%H:%M:%S')}]</b> {message}</span>")
-        # Auto-scroll to bottom
-        self.status_display.verticalScrollBar().setValue(
-            self.status_display.verticalScrollBar().maximum()
-        )
+    def update_status(self, msg, col):
+        self.status_display.append(f"<span style='color:{col}'>{msg}</span>")
 
 class AIPanel(QWidget):
     """Enhanced AI Panel with visual distinction and node generation."""
@@ -2844,76 +3013,68 @@ class EfficientManimWindow(QMainWindow):
                 self.setFont(QFont(fam, 10))
 
     def setup_ui(self):
+        # NOTE: This is QMainWindow. It MUST use setCentralWidget.
         main = QSplitter(Qt.Horizontal)
         self.setCentralWidget(main)
         
-        # LEFT
+        # --- LEFT SIDE (Graph + Video Splitter) ---
+        left_splitter = QSplitter(Qt.Vertical)
+        
+        # 1. Top: Graph Scene
         self.scene = GraphScene()
         self.scene.selection_changed_signal.connect(self.on_selection)
-        
-        # NEW: Connect graph changes to modified tracker
         self.scene.graph_changed_signal.connect(self.mark_modified) 
         self.scene.graph_changed_signal.connect(self.compile_graph)
         
-        # NEW: Use custom GraphView
         self.view = GraphView(self.scene) 
-        main.addWidget(self.view)
+        left_splitter.addWidget(self.view)
         
-        # RIGHT
+        # 2. Bottom: Video Output Panel (NEW)
+        self.panel_output = VideoOutputPanel()
+        left_splitter.addWidget(self.panel_output)
+        
+        left_splitter.setSizes([700, 300])
+        main.addWidget(left_splitter)
+        
+        # --- RIGHT SIDE (Tabs) ---
         right = QSplitter(Qt.Vertical)
         self.tabs_top = QTabWidget()
         
-       # NEW: Connect property changes to modified tracker
         self.panel_props = PropertiesPanel()
-        self.panel_props.node_updated.connect(self.mark_modified) # Track prop changes
+        self.panel_props.node_updated.connect(self.mark_modified)
         self.panel_props.node_updated.connect(self.on_node_changed)
-
+        
         self.panel_elems = ElementsPanel()
         self.panel_elems.add_requested.connect(self.add_node_center)
         
         self.panel_assets = AssetsPanel()
         
+        # 3. This is the SETTINGS panel (VideoRenderPanel), NOT the player
         self.panel_video = VideoRenderPanel()
         self.panel_video.render_requested.connect(self.render_to_video)
         
         self.panel_ai = AIPanel()
         self.panel_ai.merge_requested.connect(self.merge_ai_code)
         
-        # NEW: Init Voiceover Panel
         self.panel_voice = VoiceoverPanel(self)
         
         self.tabs_top.addTab(self.panel_elems, "📦 Elements")
         self.tabs_top.addTab(self.panel_props, "🧩 Properties")
         self.tabs_top.addTab(self.panel_assets, "🗂 Assets")
-        
-        # AI Integration
-        self.tabs_top.addTab(self.panel_ai, "🤖 AI")
-        # NEW: Add Voiceover Tab
         self.tabs_top.addTab(self.panel_voice, "🎙️ Voiceover")
-        
-        # Video Rendering Tab
         self.tabs_top.addTab(self.panel_video, "🎬 Video")
-
+        self.tabs_top.addTab(self.panel_ai, "🤖 AI")
         right.addWidget(self.tabs_top)
         
         self.tabs_bot = QTabWidget()
         
-        # Preview Area with Toolbar
+        # Preview Area
         prev_widget = QWidget()
         prev_layout = QVBoxLayout(prev_widget)
-        prev_tb = QHBoxLayout()
-        prev_tb.addWidget(QLabel("Preview"))
-        prev_tb.addStretch()
-        prev_layout.addLayout(prev_tb)
-        
         self.preview_lbl = QLabel("No Preview")
         self.preview_lbl.setObjectName("PreviewLabel")
         self.preview_lbl.setAlignment(Qt.AlignCenter)
-        scr = QScrollArea()
-        scr.setWidget(self.preview_lbl)
-        scr.setWidgetResizable(True)
-        scr.setAlignment(Qt.AlignCenter)
-        prev_layout.addWidget(scr)
+        prev_layout.addWidget(self.preview_lbl)
         
         self.code_view = QTextEdit()
         self.code_view.setReadOnly(True)
@@ -3510,6 +3671,10 @@ class EfficientManimWindow(QMainWindow):
         LOGGER.info(f"✓ Video rendered successfully: {video_path}")
         self.panel_video.on_render_success(video_path)
         
+        # --- FIX: Auto-play in the new panel ---
+        if os.path.exists(video_path):
+            self.panel_output.load_video(video_path, autoplay=True)
+
         # Optionally show file dialog to open the video
         reply = QMessageBox.information(
             self,
