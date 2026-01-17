@@ -55,6 +55,8 @@ def generate(prompt, on_chunk, model="gemini-3-flash-preview"):
 # EFFICIENT MANIM ULTIMATE - MONOLITHIC SOURCE
 # ==============================================================================
 
+import requests
+import urllib.parse
 import shutil
 import json
 import uuid
@@ -107,7 +109,7 @@ except ImportError:
 # ==============================================================================
 
 APP_NAME = "EfficientManim"
-APP_VERSION = "0.1.1"
+APP_VERSION = "0.1.2"
 PROJECT_EXT = ".efp" # EfficientManim Project (Zip)
 
 class AppPaths:
@@ -444,7 +446,7 @@ class KeyboardShortcuts:
 # ==============================================================================
 
 # ==============================================================================
-# 4. WORKER THREADS
+# 4a. WORKER THREADS
 # ==============================================================================
 
 class AIWorker(QThread):
@@ -464,8 +466,41 @@ class AIWorker(QThread):
     def handle_chunk(self, text):
         self.chunk_received.emit(text)
 
+# 4b. LaTeX Worker Threads
+class LatexApiWorker(QThread):
+    """Fetches rendered LaTeX PNG from external API in background."""
+    success = Signal(bytes)
+    error = Signal(str)
+
+    def __init__(self, latex_str):
+        super().__init__()
+        self.latex_str = latex_str
+
+    def run(self):
+        if not self.latex_str.strip():
+            return
+            
+        try:
+            # Using mathpad.ai as requested
+            base = "https://mathpad.ai/api/v1/latex2image"
+            params = {
+                "latex": self.latex_str,
+                "format": "png",
+                "scale": 4 # High quality
+            }
+            url = f"{base}?{urllib.parse.urlencode(params)}"
+            
+            # Timeout is important to prevent hanging
+            response = requests.get(url, timeout=10)
+            response.raise_for_status()
+            
+            self.success.emit(response.content)
+            
+        except Exception as e:
+            self.error.emit(str(e))
+
 # ==============================================================================
-# 4b. TTS WORKER (NEW)
+# 4c. TTS WORKER (NEW)
 # ==============================================================================
 
 def convert_to_wav(audio_data: bytes, mime_type: str) -> bytes:
@@ -1242,6 +1277,197 @@ class ColorNormalizer:
     def normalize_to_hex(value):
         """Convert any color representation to hex string."""
         return TypeSafeParser.parse_color(value)
+
+class LatexEditorPanel(QWidget):
+    """Panel for Live LaTeX editing via API."""
+    
+    def __init__(self, main_window):
+        super().__init__()
+        self.main_window = main_window
+        self.worker = None
+        self.temp_preview_path = AppPaths.TEMP_DIR / "latex_preview.png"
+        
+        self.setup_ui()
+        
+        # Debouncer timer (Auto-update logic)
+        self.debouncer = QTimer()
+        self.debouncer.setSingleShot(True)
+        self.debouncer.setInterval(800) # Wait 800ms after typing stops
+        self.debouncer.timeout.connect(self.trigger_render)
+
+    def setup_ui(self):
+        layout = QVBoxLayout(self)
+        
+        # Header
+        header = QLabel("✒️ LaTeX Studio (Online)")
+        header.setStyleSheet("font-weight: bold; font-size: 14px; color: #2c3e50;")
+        layout.addWidget(header)
+        
+        # Editor
+        self.editor = QPlainTextEdit()
+        self.editor.setPlaceholderText("Enter LaTeX here... e.g. E = mc^2")
+        self.editor.setStyleSheet("font-family: Consolas; font-size: 12pt;")
+        self.editor.setMaximumHeight(100)
+        self.editor.textChanged.connect(self.on_text_changed)
+        layout.addWidget(self.editor)
+        
+        # Preview Area (Using Label as Media Widget for PNG)
+        self.preview_lbl = QLabel("Preview will appear here...")
+        self.preview_lbl.setAlignment(Qt.AlignCenter)
+        self.preview_lbl.setStyleSheet("background: white; border: 2px dashed #bdc3c7; border-radius: 4px;")
+        self.preview_lbl.setMinimumHeight(150)
+        
+        # Scroll area for large formulas
+        scroll = QScrollArea()
+        scroll.setWidget(self.preview_lbl)
+        scroll.setWidgetResizable(True)
+        layout.addWidget(scroll)
+        
+        # Controls Group
+        ctrl_group = QFrame()
+        ctrl_group.setStyleSheet("background: #ecf0f1; border-radius: 4px; padding: 4px;")
+        ctrl_layout = QVBoxLayout(ctrl_group)
+        
+        # Target Node Selector
+        self.node_combo = QComboBox()
+        self.node_combo.setPlaceholderText("Select Target Node...")
+        ctrl_layout.addWidget(QLabel("Apply to Node:"))
+        ctrl_layout.addWidget(self.node_combo)
+        
+        # Refresh Button
+        btn_refresh = QPushButton("🔄 Refresh Node List")
+        btn_refresh.clicked.connect(self.refresh_nodes)
+        ctrl_layout.addWidget(btn_refresh)
+        
+        # Apply Button
+        self.btn_apply = QPushButton("✅ Apply to Node")
+        self.btn_apply.setStyleSheet("background-color: #27ae60; color: white; font-weight: bold; padding: 6px;")
+        self.btn_apply.clicked.connect(self.apply_to_node)
+        ctrl_layout.addWidget(self.btn_apply)
+        
+        layout.addWidget(ctrl_group)
+        
+        # Status
+        self.status_lbl = QLabel("Ready")
+        self.status_lbl.setStyleSheet("color: gray;")
+        layout.addWidget(self.status_lbl)
+
+    def on_text_changed(self):
+        """Called on every keystroke."""
+        self.status_lbl.setText("Typing...")
+        self.debouncer.start() # Reset timer
+
+    def trigger_render(self):
+        """Called by timer to start API call."""
+        tex = self.editor.toPlainText().strip()
+        if not tex: return
+        
+        self.status_lbl.setText("Fetching render from API...")
+        self.worker = LatexApiWorker(tex)
+        self.worker.success.connect(self.on_render_success)
+        self.worker.error.connect(self.on_render_error)
+        self.worker.start()
+
+    def on_render_success(self, image_data):
+        self.status_lbl.setText("Render received.")
+        
+        # 1. Save PNG as requested
+        try:
+            with open(self.temp_preview_path, "wb") as f:
+                f.write(image_data)
+        except Exception as e:
+            LOGGER.warn(f"Could not cache LaTeX png: {e}")
+
+        # 2. Display in UI
+        pixmap = QPixmap()
+        pixmap.loadFromData(image_data)
+        
+        # Scale if too large
+        if pixmap.width() > self.preview_lbl.width():
+            pixmap = pixmap.scaledToWidth(self.preview_lbl.width() - 20, Qt.SmoothTransformation)
+            
+        self.preview_lbl.setPixmap(pixmap)
+        self.preview_lbl.setText("") # Clear text
+
+    def on_render_error(self, err_msg):
+        self.status_lbl.setText("API Error.")
+        self.preview_lbl.setText(f"❌ Error:\n{err_msg}")
+        self.preview_lbl.setPixmap(QPixmap()) # Clear image
+
+    def refresh_nodes(self):
+        """Populate combo with nodes that look like they accept text."""
+        current = self.node_combo.currentData()
+        self.node_combo.clear()
+        
+        count = 0
+        for nid, node in self.main_window.nodes.items():
+            # Filter for Text/Tex/MathTex nodes
+            cname = node.data.cls_name.lower()
+            if "tex" in cname or "text" in cname or "label" in cname:
+                self.node_combo.addItem(f"{node.data.name} ({node.data.cls_name})", nid)
+                count += 1
+                
+        if current:
+            idx = self.node_combo.findData(current)
+            if idx >= 0: self.node_combo.setCurrentIndex(idx)
+            
+        self.status_lbl.setText(f"Found {count} text-compatible nodes.")
+
+    def apply_to_node(self):
+        node_id = self.node_combo.currentData()
+        if not node_id or node_id not in self.main_window.nodes:
+            QMessageBox.warning(self, "Error", "Please select a valid target node.")
+            return
+
+        tex_code = self.editor.toPlainText().strip()
+        if not tex_code:
+            return
+
+        # Balance parentheses: remove unmatched closing ')' at the end
+        open_count = 0
+        balanced_tex = ""
+        for char in tex_code:
+            if char == '(':
+                open_count += 1
+                balanced_tex += char
+            elif char == ')':
+                if open_count > 0:
+                    open_count -= 1
+                    balanced_tex += char
+            else:
+                balanced_tex += char
+        # Add missing ')' for unmatched '('
+        balanced_tex += ')' * open_count
+
+        node = self.main_window.nodes[node_id]
+
+        for k in ("tex_strings", "arg0", "arg1", "t"):
+            node.data.params.pop(k, None)
+
+        # FIXED: Escape backslashes BEFORE creating the raw string
+        safe_tex = balanced_tex.replace('\\', '\\\\')
+        
+        # FIXED: Use raw string literal format that will work in code generation
+        # Store as a properly escaped string that _format_param_value can handle
+        formatted_code = f'r"""{safe_tex}"""'
+
+        if node.data.cls_name == "MathTex":
+            # Store the formatted string value
+            node.data.params["arg0"] = formatted_code
+            # IMPORTANT: Mark this parameter to NOT be quoted again during code generation
+            node.data.set_escape_string("arg0", True)
+        elif node.data.cls_name == "Text":
+            node.data.params["text"] = formatted_code
+            node.data.set_escape_string("text", True)
+        else:
+            node.data.params["text"] = formatted_code
+            node.data.set_escape_string("text", True)
+
+        node.update()
+        self.main_window.compile_graph()
+        self.status_lbl.setText(f"Applied to {node.data.name}!")
+        node.setSelected(True)
+        self.main_window.on_selection()
 
 class VideoOutputPanel(QWidget):
     """Integrated Video Player with Seek and Play/Pause controls."""
@@ -3040,6 +3266,7 @@ class EfficientManimWindow(QMainWindow):
         right = QSplitter(Qt.Vertical)
         self.tabs_top = QTabWidget()
         
+        # Initialize Panels
         self.panel_props = PropertiesPanel()
         self.panel_props.node_updated.connect(self.mark_modified)
         self.panel_props.node_updated.connect(self.on_node_changed)
@@ -3049,7 +3276,6 @@ class EfficientManimWindow(QMainWindow):
         
         self.panel_assets = AssetsPanel()
         
-        # 3. This is the SETTINGS panel (VideoRenderPanel), NOT the player
         self.panel_video = VideoRenderPanel()
         self.panel_video.render_requested.connect(self.render_to_video)
         
@@ -3058,12 +3284,20 @@ class EfficientManimWindow(QMainWindow):
         
         self.panel_voice = VoiceoverPanel(self)
         
+        # NEW: Initialize LaTeX Panel
+        self.panel_latex = LatexEditorPanel(self)
+        
+        # Add Tabs
         self.tabs_top.addTab(self.panel_elems, "📦 Elements")
         self.tabs_top.addTab(self.panel_props, "🧩 Properties")
         self.tabs_top.addTab(self.panel_assets, "🗂 Assets")
+        
+        self.tabs_top.addTab(self.panel_latex, "✒️ LaTeX")  # <--- NEW TAB
+        
         self.tabs_top.addTab(self.panel_voice, "🎙️ Voiceover")
-        self.tabs_top.addTab(self.panel_video, "🎬 Video")
         self.tabs_top.addTab(self.panel_ai, "🤖 AI")
+
+        self.tabs_top.addTab(self.panel_video, "🎬 Video")
         right.addWidget(self.tabs_top)
         
         self.tabs_bot = QTabWidget()
@@ -3196,7 +3430,7 @@ class EfficientManimWindow(QMainWindow):
             self, "About", 
             f"{APP_NAME} v{APP_VERSION}\n\n"
             "A visual node-based Manim IDE with AI integration.\n\n"
-            "© 2024 - Efficient Manim Team"
+            "© 2026 - Soumalya Das (@pro-grammer-SD)"
         )
 
     def toggle_theme(self):
@@ -3417,9 +3651,29 @@ class EfficientManimWindow(QMainWindow):
         m_vars = {}
         for m in mobjects:
             args = []
+            
+            # HANDLE POSITIONAL ARGS (arg0, arg1...)
+            # Collect keys like arg0, arg1, sort them, and add as positional
+            pos_args = {}
+            named_args = {}
+            
             for k, v in m.data.params.items():
                 if k.startswith("_"): continue
                 if not m.data.is_param_enabled(k): continue
+                
+                if k.startswith("arg") and k[3:].isdigit():
+                    idx = int(k[3:])
+                    v_clean = self._format_param_value(k, v, m.data)
+                    pos_args[idx] = v_clean
+                else:
+                    named_args[k] = v
+
+            # Add positional args in order
+            for i in sorted(pos_args.keys()):
+                args.append(pos_args[i])
+
+            # Add named args
+            for k, v in named_args.items():
                 v_clean = self._format_param_value(k, v, m.data)
                 args.append(f'{k}={v_clean}')
                 
@@ -3452,13 +3706,22 @@ class EfficientManimWindow(QMainWindow):
             play_lines = []
             
             # Process this batch of animations
+            # Process this batch of animations
             for anim, targets in ready_anims:
                 anim_args = targets.copy()
                 
                 # Check for Voiceover Sync
                 audio_path = None
                 duration_var = None
-                
+
+                # CHECK FOR MISSING MOBJECT PARAM
+                if "mobject" in anim.data.params or "mobjects" in anim.data.params:
+                    # Check if the value is actually a valid UUID reference
+                    val = anim.data.params.get("mobject") or anim.data.params.get("mobjects")
+                    if not val or (isinstance(val, str) and len(val) != 36):
+                         LOGGER.warn(f"Animation '{anim.data.name}' has a 'mobject' parameter but no target selected!")
+                         # We could also popup a message here, but logging is safer during compilation loop
+
                 if anim.data.audio_asset_id:
                     path = ASSETS.get_asset_path(anim.data.audio_asset_id)
                     if path and PYDUB_AVAILABLE:
@@ -3500,14 +3763,22 @@ class EfficientManimWindow(QMainWindow):
     def _format_param_value(self, param_name, value, node_data):
         """Safely format parameter value with type enforcement and string escaping."""
         try:
+            # 0. MOBJECT REFERENCE
+            if isinstance(value, str) and len(value) == 36:
+                if value in self.nodes:
+                    return f"m_{value[:6]}"
+
             # 1. ASSET HANDLING
-            # If the value matches an Asset ID, return the absolute path string
             if isinstance(value, str) and value in ASSETS.assets:
                 abs_path = ASSETS.get_asset_path(value)
                 if abs_path:
-                    # Manim needs forward slashes even on Windows
-                    return f'r"{abs_path}"' 
+                    return f'r"{abs_path}"'
             
+            # FIXED: Check if this is an already-formatted raw string (from LaTeX panel)
+            if isinstance(value, str) and value.startswith('r"""') and value.endswith('"""'):
+                # Return as-is - it's already a complete raw string literal
+                return value
+                    
             # 2. Type-safe formatting
             if TypeSafeParser.is_color_param(param_name):
                 color_val = str(value).strip()
@@ -3525,6 +3796,7 @@ class EfficientManimWindow(QMainWindow):
             
             # 3. String escaping
             elif isinstance(value, str):
+                # If marked to escape (don't add quotes), return raw value
                 if node_data.should_escape_string(param_name):
                     return value.strip("'\"")
                 return repr(value)

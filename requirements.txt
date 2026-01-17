@@ -1,4 +1,18 @@
-google-genai
-pydub
-PySide6
+# Core Animation Library
 manim
+
+# GUI Framework (Includes QtMultimedia)
+PySide6
+
+# Google Gemini AI SDK
+google-genai
+
+# Audio Processing
+# Note: You must also have FFmpeg installed on your system PATH
+pydub
+
+# API Requests (For the LaTeX preview feature)
+requests
+
+# Numerical Operations
+numpy

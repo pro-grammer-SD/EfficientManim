@@ -102,21 +102,42 @@ A powerful 3-column property editor located on the right.
 
 ## 🚀 Getting Started
 
-### Prerequisites
-*   Python 3.10+
-*   [Manim Community](https://www.manim.community/)
-*   [FFmpeg](https://ffmpeg.org/)
-*   **Optional:** `pydub` (Required for Voiceover auto-sync features)
+### 🛠️ Prerequisites
 
-### Installation
-```bash
-# 1. Install Dependencies
-pip install PySide6 manim google-genai pydub
+Before running the app, ensure you have the following installed on your system:
 
-# 2. Run the Application
-python main.py
-```
+1.  **Python 3.10+**: [Download Python](https://www.python.org/downloads/)
+2.  **FFmpeg**: Required for video rendering and audio processing.
+    *   [Download FFmpeg](https://ffmpeg.org/download.html)
+    *   *Important:* Ensure `ffmpeg` is added to your system's PATH variable.
+3.  **LaTeX** (Optional): Required only if you want to render LaTeX locally instead of using the online API.
+    *   Windows: [MiKTeX](https://miktex.org/)
+    *   Mac: [MacTeX](https://www.tug.org/mactex/)
+    *   Linux: `texlive-full`
 
+### 📦 Installation
+
+1.  **Clone the repository:**
+    ```bash
+    git clone https://github.com/yourusername/EfficientManim.git
+    cd EfficientManim
+    ```
+
+2.  **Install Python dependencies:**
+    ```bash
+    pip install -r requirements.txt
+    ```
+
+    *If you prefer installing manually:*
+    ```bash
+    pip install manim PySide6 google-genai pydub requests numpy
+    ```
+
+3.  **Run the Application:**
+    ```bash
+    python main.py
+    ```
+    
 ## 📸 Screenshots
 
 ![Image 1](gallery/1.png "Starting up a basic project from scratch...")
