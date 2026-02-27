@@ -112,7 +112,7 @@ except ImportError:
 # ==============================================================================
 
 APP_NAME = "EfficientManim"
-APP_VERSION = "0.1.2"
+APP_VERSION = "0.2.0-preview"
 PROJECT_EXT = ".efp" # EfficientManim Project (Zip)
 
 class AppPaths:
