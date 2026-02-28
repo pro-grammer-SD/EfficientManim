@@ -3,7 +3,7 @@ Utility module for type safety, validation, and font management
 Provides robust handling of Qt objects and parameters
 """
 
-from PySide6.QtGui import QFont, QColor, QPixmap
+from PySide6.QtGui import QColor, QPixmap
 from PySide6.QtCore import QPointF, QSize
 from typing import Optional, Union, Any
 import logging
@@ -179,4 +179,3 @@ class SafeDict(dict):
                 return default
 
         return value
-    

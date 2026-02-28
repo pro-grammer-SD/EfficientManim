@@ -260,6 +260,7 @@ class HomeScreen(QMainWindow):
     def _apply_theme(self):
         """Apply light-mode stylesheet to home screen."""
         from themes import THEME_MANAGER
+
         self.setStyleSheet(THEME_MANAGER.get_stylesheet())
 
     # ── Recent Projects ────────────────────────────────────────────────────────
@@ -323,23 +324,38 @@ class HomeScreen(QMainWindow):
     def _launch_editor(self, project_path: str | None):
         """Import and launch the main editor window."""
         try:
-            import importlib.util
+            # FIX: Use standard import to avoid re-running main.py multiple times
+            try:
+                import main
+            except ImportError:
+                # Fallback to dynamic load if not in path (rare)
+                import importlib.util
 
-            spec = importlib.util.spec_from_file_location(
-                "main", Path(__file__).parent / "main.py"
-            )
-            if spec is None or spec.loader is None:
-                raise ImportError("Cannot load main.py")
+                spec = importlib.util.spec_from_file_location(
+                    "main", Path(__file__).parent / "main.py"
+                )
+                if spec is None or spec.loader is None:
+                    raise ImportError("Cannot load main.py")
+                if "main" not in sys.modules:
+                    main = importlib.util.module_from_spec(spec)
+                    sys.modules["main"] = main
+                    spec.loader.exec_module(main)
+                else:
+                    main = sys.modules["main"]
 
-            module = importlib.util.module_from_spec(spec)
-            spec.loader.exec_module(module)  # type: ignore[union-attr]
-
-            # Find the main window class
-            WindowClass = getattr(module, "EfficientManimWindow", None)
+            WindowClass = getattr(main, "EfficientManimWindow", None)
             if WindowClass is None:
                 raise AttributeError("EfficientManimWindow not found in main.py")
 
             self._editor_window = WindowClass()
+
+            # Re-show home screen when editor is destroyed
+            def on_editor_close():
+                self._refresh_recents()
+                self.show()
+                self._editor_window = None
+
+            self._editor_window.destroyed.connect(on_editor_close)
             self._editor_window.show()
 
             # If a project path was given, open it after the window is shown
@@ -352,16 +368,11 @@ class HomeScreen(QMainWindow):
             # Hide (not close) the home screen
             self.hide()
 
-            # Re-show home screen when editor is closed
-            def on_editor_close():
-                self._refresh_recents()
-                self.show()
-
-            self._editor_window.destroyed.connect(on_editor_close)
-
         except Exception as e:
             from PySide6.QtWidgets import QMessageBox
+            import traceback
 
+            traceback.print_exc()
             QMessageBox.critical(
                 self,
                 "Launch Error",
@@ -372,11 +383,12 @@ class HomeScreen(QMainWindow):
 # ── Entry Point ────────────────────────────────────────────────────────────────
 def main():
     app = QApplication.instance() or QApplication(sys.argv)
-    
+
     # ── Apply Global Light-Mode Stylesheet ────────────────────────────────
     from themes import THEME_MANAGER
+
     app.setStyleSheet(THEME_MANAGER.get_stylesheet())
-    
+
     app.setApplicationName("EfficientManim")
     app.setOrganizationName("EfficientManim")
 

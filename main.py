@@ -23,10 +23,9 @@ except ImportError:
 import os
 from google import genai
 from google.genai import types
-from themes import ThemeManager
 
 
-def generate(prompt, on_chunk, model="gemini-2.5-flash-preview"):
+def generate(prompt, on_chunk, model="gemini-3-flash-preview"):
     """
     Gemini AI Integration Hook.
     Retrieves API Key from Settings and uses selected model.
@@ -110,6 +109,8 @@ from PySide6.QtWidgets import (
     QTableWidget,
     QTableWidgetItem,
     QInputDialog,
+    QDockWidget,
+    QProgressBar,
 )
 from PySide6.QtCore import (
     Qt,
@@ -125,7 +126,12 @@ from PySide6.QtCore import (
     QMimeData,
     QStandardPaths,
     QUrl,
+    QLoggingCategory,
 )
+
+# Suppress Qt Multimedia / FFmpeg debug and warning messages
+QLoggingCategory.setFilterRules("qt.multimedia.*=false")
+os.environ["QT_LOGGING_RULES"] = "qt.multimedia.*=false"
 from PySide6.QtGui import (
     QAction,
     QColor,
@@ -145,7 +151,6 @@ from PySide6.QtMultimedia import QMediaPlayer, QAudioOutput
 from PySide6.QtMultimediaWidgets import QVideoWidget
 
 
-
 # Manim Import (Safe)
 try:
     import manim
@@ -156,6 +161,16 @@ try:
 except ImportError:
     MANIM_AVAILABLE = False
     print("CRITICAL: Manim library not found. Rendering will be disabled.")
+
+# MCP (Model Context Protocol) — safe lazy import; MCPAgent is instantiated
+# after the main window is fully constructed in EfficientManimWindow.__init__.
+try:
+    from mcp import MCPAgent as _MCPAgent
+    MCP_AVAILABLE = True
+except ImportError:
+    _MCPAgent = None  # type: ignore[assignment,misc]
+    MCP_AVAILABLE = False
+    print("WARNING: mcp.py not found. MCP Agent Mode will be disabled.")
 
 # ==============================================================================
 # 1. CORE CONFIGURATION & UTILS
@@ -238,21 +253,21 @@ class AppPaths:
 def detect_scene_class(code: str) -> str:
     """
     Detect Scene class name in Python code.
-    
+
     Args:
         code: Python source code
-        
+
     Returns:
         Class name of the first Scene subclass found, or "Scene" if none found
     """
     # Try to find class definitions that inherit from Scene
     # Pattern: class ClassName(Scene):
-    pattern = r'class\s+(\w+)\s*\(\s*Scene\s*\)'
+    pattern = r"class\s+(\w+)\s*\(\s*Scene\s*\)"
     matches = re.findall(pattern, code)
-    
+
     if matches:
         return matches[0]  # Return first matching Scene subclass
-    
+
     # Fallback: return "Scene" if no subclass found
     return "Scene"
 
@@ -336,7 +351,11 @@ class UserDataManager:
 
     def record_use(self, class_name: str, node_type: str = "mobject") -> None:
         """Increment counter for class_name under typed bucket (mobject/animation)."""
-        bucket = "animation" if str(node_type).lower() in ("animation", "anim") else "mobject"
+        bucket = (
+            "animation"
+            if str(node_type).lower() in ("animation", "anim")
+            else "mobject"
+        )
         if not isinstance(self._usage, dict):
             self._usage = {}
         typed = self._usage.setdefault(bucket, {})
@@ -345,7 +364,11 @@ class UserDataManager:
 
     def top_by_type(self, node_type: str, n: int = 5) -> list:
         """Return [(class_name, count), ...] for the top-n in given type bucket."""
-        bucket = "animation" if str(node_type).lower() in ("animation", "anim") else "mobject"
+        bucket = (
+            "animation"
+            if str(node_type).lower() in ("animation", "anim")
+            else "mobject"
+        )
         typed = self._usage.get(bucket, {}) if isinstance(self._usage, dict) else {}
         return sorted(typed.items(), key=lambda kv: kv[1], reverse=True)[:n]
 
@@ -915,7 +938,15 @@ class VideoRenderWorker(QThread):
     success = Signal(str)  # Output video path
     error = Signal(str)  # Error message
 
-    def __init__(self, script_path, output_dir, fps, resolution, quality, scene_class: str = "Scene"):
+    def __init__(
+        self,
+        script_path,
+        output_dir,
+        fps,
+        resolution,
+        quality,
+        scene_class: str = "Scene",
+    ):
         super().__init__()
         self.script_path = script_path
         self.output_dir = output_dir
@@ -1021,8 +1052,10 @@ class NodeData:
         self.pos_x = 0
         self.pos_y = 0
         self.preview_path = None
-        # NEW: Voiceover support
+        # Voiceover support
         self.audio_asset_id = None
+        self.voiceover_transcript: str | None = None
+        self.voiceover_duration: float = 0.0
         # AI metadata
         self.is_ai_generated = False
         self.ai_source: str | None = None  # Original Manim class name
@@ -1038,7 +1071,9 @@ class NodeData:
             "param_metadata": self.param_metadata,
             "pos": (self.pos_x, self.pos_y),
             "preview_path": self.preview_path,
-            "audio_asset_id": self.audio_asset_id,  # NEW
+            "audio_asset_id": self.audio_asset_id,
+            "voiceover_transcript": self.voiceover_transcript,
+            "voiceover_duration": self.voiceover_duration,
             "is_ai_generated": self.is_ai_generated,
             "ai_source": self.ai_source,
             "ai_code_snippet": self.ai_code_snippet,
@@ -1052,7 +1087,9 @@ class NodeData:
         n.param_metadata = d.get("param_metadata", {})
         n.pos_x, n.pos_y = d["pos"]
         n.preview_path = d.get("preview_path")
-        n.audio_asset_id = d.get("audio_asset_id")  # NEW
+        n.audio_asset_id = d.get("audio_asset_id")
+        n.voiceover_transcript = d.get("voiceover_transcript")
+        n.voiceover_duration = d.get("voiceover_duration", 0.0)
         n.is_ai_generated = d.get("is_ai_generated", False)
         n.ai_source = d.get("ai_source")
         n.ai_code_snippet = d.get("ai_code_snippet")
@@ -1099,6 +1136,56 @@ class Asset:
             "kind": self.kind,
             "local": self.local_file,
         }
+
+    @staticmethod
+    def from_dict(d):
+        """
+        Reconstruct Asset from saved dict.
+        
+        CRITICAL FIX: Recalculate current_path on load.
+        
+        The saved original_path might be from a different machine/session.
+        We need to validate it exists, otherwise look for local_file or fail safely.
+        """
+        a = Asset(d["name"], d["original"], d["kind"])
+        a.id = d["id"]
+        a.local_file = d.get("local", "")
+        
+        # ═══════════════════════════════════════════════════════════════
+        # CRITICAL VALIDATION: Revalidate current_path on deserialization
+        # ═══════════════════════════════════════════════════════════════
+        original = Path(d["original"])
+        
+        # Attempt 1: Original path exists as-is
+        if original.exists():
+            a.current_path = original.as_posix()
+            LOGGER.info(f"Asset '{a.name}' (id={a.id[:8]}): original path valid")
+            return a
+        
+        # Attempt 2: Local file was extracted to temp
+        if a.local_file and (AppPaths.TEMP_DIR / a.local_file).exists():
+            a.current_path = (AppPaths.TEMP_DIR / a.local_file).as_posix()
+            LOGGER.warn(
+                f"Asset '{a.name}' (id={a.id[:8]}): original missing, using temp: {a.current_path}"
+            )
+            return a
+        
+        # Attempt 3: User data assets folder
+        user_assets = AppPaths.USER_DATA / "assets" / a.local_file
+        if a.local_file and user_assets.exists():
+            a.current_path = user_assets.as_posix()
+            LOGGER.warn(
+                f"Asset '{a.name}' (id={a.id[:8]}): found in user assets: {a.current_path}"
+            )
+            return a
+        
+        # FAILED: No valid path found
+        LOGGER.error(
+            f"Asset '{a.name}' (id={a.id[:8]}): MISSING - original={a.original_path}, "
+            f"local={a.local_file}. Render may fail."
+        )
+        a.current_path = a.original_path  # Keep original in hopes it reappears
+        return a
 
 
 # ==============================================================================
@@ -1465,9 +1552,31 @@ class AssetManager(QObject):
         return list(self.assets.values())
 
     def get_asset_path(self, asset_id):
-        """Safely retrieve the absolute POSIX path for Manim."""
+        """
+        Safely retrieve the absolute POSIX path for Manim.
+        
+        CRITICAL FIX: Validate file exists before returning.
+        Logs error if asset file is missing so user knows render will fail.
+        """
         if asset_id in self.assets:
-            return self.assets[asset_id].current_path
+            asset = self.assets[asset_id]
+            
+            # ══════════════════════════════════════════════════════════════
+            # VALIDATION: Confirm file exists before returning
+            # This prevents silent render failures
+            # ══════════════════════════════════════════════════════════════
+            path_str = asset.current_path
+            path_obj = Path(path_str)
+            
+            if not path_obj.exists():
+                LOGGER.error(
+                    f"Asset file missing: '{asset.name}' (id={asset_id[:8]}) → {path_str}"
+                )
+                return None
+            
+            return path_str
+        
+        LOGGER.error(f"Unknown asset ID: {asset_id}")
         return None
 
 
@@ -2772,6 +2881,7 @@ class AIPanel(QWidget):
         self.worker = None
         self.last_code = None
         self.extracted_nodes = []  # Track AI-generated nodes
+        self._mcp_agent = None     # Set by EfficientManimWindow after construction
 
         # Create main layout with visual distinction
         main_layout = QVBoxLayout(self)
@@ -2874,6 +2984,36 @@ class AIPanel(QWidget):
             "background: white; padding: 6px; }"
         )
         layout.addWidget(self.input)
+
+        # ── Auto Voiceover toggle ──────────────────────────────────
+        self.chk_auto_voiceover = QCheckBox("🎙️ Enable Auto Voiceover")
+        self.chk_auto_voiceover.setToolTip(
+            "When enabled, Gemini will act as an autonomous agent:\n"
+            "it will analyze all animation nodes, extract meaningful text,\n"
+            "generate optimized voiceover scripts, generate TTS audio per\n"
+            "animation, and automatically attach voiceovers to nodes.\n"
+            "The result is a fully voiceover-synced project ready to render."
+        )
+        self.chk_auto_voiceover.setStyleSheet("font-weight: bold; color: #8e44ad;")
+        layout.addWidget(self.chk_auto_voiceover)
+
+        # ── MCP Agent Mode toggle ──────────────────────────────────
+        self.chk_mcp_mode = QCheckBox("🔌 MCP Agent Mode")
+        self.chk_mcp_mode.setToolTip(
+            "Instead of generating Manim code, Gemini reads the live scene\n"
+            "state and issues MCP commands to directly create/modify/delete\n"
+            "nodes in the graph — no code generation, no merge step needed.\n\n"
+            "Gemini sees all current nodes, params, and assets before acting."
+        )
+        self.chk_mcp_mode.setStyleSheet("font-weight: bold; color: #1a73e8;")
+        # Only one mode can be active at once
+        self.chk_mcp_mode.toggled.connect(
+            lambda on: self.chk_auto_voiceover.setEnabled(not on)
+        )
+        self.chk_auto_voiceover.toggled.connect(
+            lambda on: self.chk_mcp_mode.setEnabled(not on)
+        )
+        layout.addWidget(self.chk_mcp_mode)
 
         return frame
 
@@ -2989,7 +3129,15 @@ class AIPanel(QWidget):
         return frame
 
     def generate(self):
-        """Generate AI code."""
+        """Generate AI code, run Auto Voiceover agent, or execute MCP Agent Mode."""
+        if self.chk_auto_voiceover.isChecked():
+            self._run_auto_voiceover_agent()
+            return
+
+        if self.chk_mcp_mode.isChecked():
+            self._run_mcp_agent_mode()
+            return
+
         txt = self.input.toPlainText().strip()
         if not txt:
             self.status_label.setText("Status: Empty prompt")
@@ -3043,7 +3191,7 @@ class AIPanel(QWidget):
         )
 
         # Get selected model and create worker
-        selected_model = str(SETTINGS.get("GEMINI_MODEL", "gemini-2.5-flash-preview"))
+        selected_model = str(SETTINGS.get("GEMINI_MODEL", "gemini-3-flash-preview"))
         self.worker = AIWorker(sys_prompt, model=selected_model)
         self.worker.chunk_received.connect(self.on_chunk)
         self.worker.finished_signal.connect(self.on_finish)
@@ -3242,6 +3390,475 @@ class AIPanel(QWidget):
                 pass
 
         return params
+
+    def _run_auto_voiceover_agent(self):
+        """Gemini auto-voiceover agent: analyze all nodes, generate and attach voiceovers.
+
+        This is the 'Enable Auto Voiceover' mode. Gemini acts as an autonomous
+        agent that:
+          1. Inspects all animation nodes in the scene.
+          2. Extracts meaningful text / context from each node.
+          3. Generates an optimized voiceover script per node.
+          4. Generates TTS audio for each script via TTSWorker.
+          5. Attaches audio to each node and syncs durations.
+        """
+        main_window = self._get_main_window()
+        if main_window is None:
+            QMessageBox.critical(self, "Error", "Cannot find main window reference.")
+            return
+
+        nodes: dict = main_window.nodes
+        if not nodes:
+            QMessageBox.warning(self, "No Nodes", "There are no nodes in the scene to voiceover.")
+            return
+
+        self.output.clear()
+        self.btn_gen.setEnabled(False)
+        self.status_label.setText("Status: Auto Voiceover Agent running…")
+        self.output.append("<b style='color:#8e44ad;'>🤖 Auto Voiceover Agent</b><br>")
+        self.output.append(f"Analyzing <b>{len(nodes)}</b> nodes…<br>")
+
+        # Build node context for Gemini
+        node_summaries = []
+        for nid, node_item in nodes.items():
+            d = node_item.data
+            params_str = ", ".join(
+                f"{k}={v}" for k, v in list(d.params.items())[:5]
+            ) if d.params else "no params"
+            node_summaries.append(
+                f"  - [{d.type.name}] {d.name} ({d.cls_name}): {params_str}"
+            )
+
+        node_context = "\n".join(node_summaries)
+
+        agent_prompt = (
+            "You are an expert animation narrator and voiceover script writer.\n\n"
+            "Here is a list of animation nodes in a Manim scene:\n\n"
+            f"{node_context}\n\n"
+            "Your job:\n"
+            "For EACH node listed above, write a short, engaging voiceover script (1-2 sentences max).\n"
+            "The script should naturally describe what the animation is doing.\n"
+            "Use plain, spoken English — no markdown, no code.\n\n"
+            "Output ONLY a JSON array, with one object per node, in this exact format:\n"
+            '[\n'
+            '  {"node_name": "<exact node name>", "script": "<voiceover script>"},\n'
+            '  ...\n'
+            ']\n\n'
+            "Output ONLY the JSON array. No explanation, no markdown fences."
+        )
+
+        selected_model = str(SETTINGS.get("GEMINI_MODEL", "gemini-3-flash-preview"))
+        self._auto_vo_nodes = nodes
+        self._auto_vo_worker = AIWorker(agent_prompt, model=selected_model)
+        self._auto_vo_buffer = ""
+        self._auto_vo_worker.chunk_received.connect(self._on_auto_vo_chunk)
+        self._auto_vo_worker.finished_signal.connect(self._on_auto_vo_scripts_ready)
+        self._auto_vo_worker.start()
+
+    def _on_auto_vo_chunk(self, txt: str):
+        self._auto_vo_buffer += txt
+        self.output.moveCursor(QTextCursor.MoveOperation.End)
+        self.output.insertPlainText(txt)
+
+    def _on_auto_vo_scripts_ready(self):
+        """Parse Gemini's JSON response and kick off TTS generation per node."""
+        raw = self._auto_vo_buffer.strip()
+
+        # Strip markdown fences if present
+        raw = re.sub(r"```json|```", "", raw).strip()
+
+        try:
+            scripts: list[dict] = json.loads(raw)
+        except json.JSONDecodeError as e:
+            self.btn_gen.setEnabled(True)
+            self.status_label.setText("Status: Agent parse error.")
+            LOGGER.error(f"Auto Voiceover agent parse error: {e}\nRaw: {raw[:200]}")
+            self.output.append(
+                "<br><span style='color:red'>❌ Failed to parse scripts from Gemini. "
+                "Check Logs for details.</span>"
+            )
+            return
+
+        if not scripts:
+            self.btn_gen.setEnabled(True)
+            self.status_label.setText("Status: Agent returned empty scripts.")
+            return
+
+        self.output.append(
+            f"<br><b>✅ Scripts generated for {len(scripts)} nodes.</b> Starting TTS…<br>"
+        )
+        self._auto_vo_queue = list(scripts)
+        self._auto_vo_node_map = {
+            node_item.data.name: node_item
+            for node_item in self._auto_vo_nodes.values()
+        }
+        self._auto_vo_voice = SETTINGS.get("DEFAULT_VOICE", "Zephyr")
+        self._auto_vo_model = SETTINGS.get("TTS_MODEL", "gemini-2.5-flash-preview-tts")
+        self._auto_vo_active_worker = None
+        self._auto_vo_index = 0
+        self._process_next_auto_vo()
+
+    def _process_next_auto_vo(self):
+        """Process TTS generation for the next item in the queue."""
+        if not self._auto_vo_queue:
+            self._finish_auto_voiceover()
+            return
+
+        item = self._auto_vo_queue.pop(0)
+        node_name = item.get("node_name", "")
+        script = item.get("script", "")
+        self._auto_vo_index += 1
+
+        if not script or node_name not in self._auto_vo_node_map:
+            self.output.append(
+                f"<span style='color:orange'>⚠️ Skipping '{node_name}' — "
+                f"{'no script' if not script else 'node not found'}</span><br>"
+            )
+            QTimer.singleShot(100, self._process_next_auto_vo)
+            return
+
+        self.output.append(
+            f"<span style='color:#1a73e8'>🎙 [{self._auto_vo_index}] {node_name}</span>: "
+            f"{script}<br>"
+        )
+        self.status_label.setText(f"Status: TTS for '{node_name}'…")
+
+        worker = TTSWorker(script, self._auto_vo_voice, self._auto_vo_model)
+        # Store metadata on the worker for the callback to access
+        worker._target_node_name = node_name
+        worker._script = script
+        worker.finished_signal.connect(
+            lambda path, n=node_name, s=script: self._on_auto_vo_tts_done(path, n, s)
+        )
+        worker.error_signal.connect(
+            lambda err, n=node_name: self._on_auto_vo_tts_error(err, n)
+        )
+        self._auto_vo_active_worker = worker
+        worker.start()
+
+    def _on_auto_vo_tts_done(self, file_path: str, node_name: str, script: str):
+        """Attach generated audio to target node and process the next one."""
+        asset = ASSETS.add_asset(file_path)
+        node_item = self._auto_vo_node_map.get(node_name)
+
+        if asset and node_item:
+            node_item.data.audio_asset_id = asset.id
+            node_item.data.voiceover_transcript = script
+            # Estimate duration from pydub if available
+            if PYDUB_AVAILABLE:
+                try:
+                    from pydub import AudioSegment as _AS
+                    seg = _AS.from_file(file_path)
+                    node_item.data.voiceover_duration = len(seg) / 1000.0
+                except Exception:
+                    pass
+            node_item.update()
+            self.output.append(
+                f"<span style='color:#27ae60'>✅ Attached to '{node_name}'</span><br>"
+            )
+        else:
+            self.output.append(
+                f"<span style='color:red'>❌ Failed to attach to '{node_name}'</span><br>"
+            )
+
+        QTimer.singleShot(200, self._process_next_auto_vo)
+
+    def _on_auto_vo_tts_error(self, err: str, node_name: str):
+        self.output.append(
+            f"<span style='color:red'>❌ TTS error for '{node_name}': {err}</span><br>"
+        )
+        LOGGER.error(f"Auto Voiceover TTS error for {node_name}: {err}")
+        QTimer.singleShot(200, self._process_next_auto_vo)
+
+    def _finish_auto_voiceover(self):
+        """Finalize auto-voiceover run."""
+        main_window = self._get_main_window()
+        if main_window:
+            main_window.compile_graph()
+            main_window.mark_modified()
+
+        self.btn_gen.setEnabled(True)
+        self.status_label.setText("Status: Auto Voiceover complete ✅")
+        self.output.append(
+            "<br><b style='color:#27ae60;font-size:13px;'>"
+            "🎬 Auto Voiceover complete! All nodes have been synced and the project is render-ready."
+            "</b><br>"
+        )
+        QMessageBox.information(
+            self,
+            "Auto Voiceover Complete",
+            "All animation nodes have been voiceover-synced.\n"
+            "The project is now render-ready with synchronized audio.",
+        )
+
+    # ══════════════════════════════════════════════════════════════
+    # MCP AGENT INTEGRATION
+    # ══════════════════════════════════════════════════════════════
+
+    def set_mcp_agent(self, agent) -> None:
+        """Called by EfficientManimWindow after construction to inject the live agent."""
+        self._mcp_agent = agent
+        LOGGER.info("AIPanel: MCP Agent connected.")
+        # Enable MCP mode checkbox now that an agent is available
+        if hasattr(self, "chk_mcp_mode"):
+            self.chk_mcp_mode.setEnabled(True)
+
+    def _get_mcp_agent(self):
+        """Return the MCP agent, trying to lazy-init if not yet injected."""
+        if self._mcp_agent is not None:
+            return self._mcp_agent
+        # Fallback: walk widget tree and grab agent from window
+        win = self._get_main_window()
+        if win is not None and hasattr(win, "mcp") and win.mcp is not None:
+            self._mcp_agent = win.mcp
+            return self._mcp_agent
+        return None
+
+    def _run_mcp_agent_mode(self) -> None:
+        """
+        MCP Agent Mode: Gemini reads the live scene state (via get_context),
+        then outputs a JSON list of MCP commands which are executed directly
+        against the running application — no code generation, no merge step.
+        """
+        txt = self.input.toPlainText().strip()
+        if not txt:
+            self.status_label.setText("Status: Empty prompt")
+            return
+
+        agent = self._get_mcp_agent()
+        if agent is None:
+            if not MCP_AVAILABLE:
+                QMessageBox.critical(
+                    self,
+                    "MCP Not Available",
+                    "mcp.py was not found next to main.py.\n"
+                    "Make sure mcp.py is in the same directory and restart.",
+                )
+            else:
+                QMessageBox.critical(
+                    self,
+                    "MCP Error",
+                    "MCP Agent is not initialised yet.\n"
+                    "Please wait for the application to finish loading.",
+                )
+            self.chk_mcp_mode.setChecked(False)
+            return
+
+        self.output.clear()
+        self.nodes_list.clear()
+        self.btn_gen.setEnabled(False)
+        self.status_label.setText("Status: MCP Agent running…")
+        self.output.append(
+            "<b style='color:#1a73e8;font-size:13px;'>🔌 MCP Agent Mode</b><br>"
+            f"<b>Instruction:</b> {txt}<br><br>"
+        )
+        self.input.clear()
+
+        # ── 1. Capture live scene state ────────────────────────────────────
+        ctx_result = agent.execute("get_context")
+        ctx_json = (
+            json.dumps(ctx_result.data, indent=2, default=str)
+            if ctx_result.success
+            else "{}"
+        )
+
+        cmds_result = agent.execute("list_commands")
+        available_commands: list = cmds_result.data if cmds_result.success else []
+
+        # Commands Gemini is allowed to use (exclude destructive ops unless asked)
+        safe_commands = [
+            c for c in available_commands
+            if c not in ("clear_scene",)
+        ]
+
+        self._mcp_ctx_before = ctx_result.data  # save for diff display later
+
+        # ── 2. Build the Gemini prompt ─────────────────────────────────────
+        selected_model = str(SETTINGS.get("GEMINI_MODEL", "gemini-3-flash-preview"))
+
+        system_prompt = (
+            "You are an autonomous animation editing agent for EfficientManim.\n\n"
+            f"Available MCP commands:\n{json.dumps(safe_commands, indent=2)}\n\n"
+            "Command payload reference:\n"
+            "  create_node:      {cls_name, name, node_type (ANIMATION|MOBJECT), params: {}, x, y}\n"
+            "  set_node_param:   {node_id, key, value}\n"
+            "  rename_node:      {node_id, name}\n"
+            "  delete_node:      {node_id, confirm: true}  ← only if user explicitly asks to delete\n"
+            "  attach_voiceover: {node_id, audio_path, transcript, duration}\n"
+            "  remove_voiceover: {node_id}\n"
+            "  select_node:      {node_id}\n"
+            "  switch_tab:       {tab}  ← partial name ok, e.g. 'Properties'\n"
+            "  compile_graph:    {}\n"
+            "  trigger_render:   {node_id (optional)}\n"
+            "  save_project:     {}\n"
+            "  switch_scene:     {scene_name}\n\n"
+            "Rules:\n"
+            "1. Output ONLY a valid JSON array. No explanation. No markdown. No fences.\n"
+            "2. Each element: {\"command\": \"...\", \"payload\": {...}}\n"
+            "3. For nodes you CREATE in this session, use 'node_name' key instead of "
+            "'node_id' in subsequent commands — it will be resolved automatically.\n"
+            "4. Always end with compile_graph if you modified the scene.\n"
+            "5. Use node IDs from the current state for existing nodes.\n"
+            "6. NEVER issue clear_scene or delete_node unless the user explicitly asked.\n\n"
+            f"Current project state:\n{ctx_json}\n\n"
+            f"USER INSTRUCTION: {txt}\n\n"
+            "Output the JSON array now. Start with [ and end with ]. Nothing else."
+        )
+
+        # ── 3. Stream Gemini response ──────────────────────────────────────
+        self._mcp_buffer = ""
+
+        def on_chunk(text: str) -> None:
+            self._mcp_buffer += text
+            self.output.moveCursor(QTextCursor.MoveOperation.End)
+            self.output.insertPlainText(text)
+
+        def on_finish() -> None:
+            self._execute_mcp_commands_from_buffer()
+            self.btn_gen.setEnabled(True)
+
+        self.worker = AIWorker(system_prompt, model=selected_model)
+        self.worker.chunk_received.connect(on_chunk)
+        self.worker.finished_signal.connect(on_finish)
+        self.worker.start()
+
+    def _execute_mcp_commands_from_buffer(self) -> None:
+        """
+        Parse Gemini's JSON command list and execute each one through MCPAgent.
+        Handles node name → ID resolution for nodes created in the same batch.
+        """
+        agent = self._get_mcp_agent()
+        if agent is None:
+            self.status_label.setText("Status: MCP agent lost.")
+            return
+
+        raw = self._mcp_buffer.strip()
+
+        # Strip any markdown fences Gemini occasionally adds
+        raw = re.sub(r"```(?:json)?|```", "", raw).strip()
+
+        # Try to extract a JSON array substring as a fallback
+        def _try_parse(text: str):
+            try:
+                return json.loads(text)
+            except json.JSONDecodeError:
+                start = text.find("[")
+                end = text.rfind("]") + 1
+                if start != -1 and end > start:
+                    return json.loads(text[start:end])
+                raise
+
+        try:
+            commands: list = _try_parse(raw)
+        except json.JSONDecodeError as e:
+            self.status_label.setText("Status: ❌ Parse error.")
+            self.output.append(
+                f"<br><span style='color:red;'>❌ Could not parse Gemini's command list: {e}</span><br>"
+                "<span style='color:#888;'>Raw output logged to console.</span>"
+            )
+            LOGGER.error(f"MCP agent parse error: {e}\nRaw:\n{raw[:800]}")
+            return
+
+        if not isinstance(commands, list) or len(commands) == 0:
+            self.output.append(
+                "<br><span style='color:orange;'>⚠️ Gemini returned no commands.</span>"
+            )
+            self.status_label.setText("Status: No commands to execute.")
+            return
+
+        self.output.append(
+            f"<br><b style='color:#1a73e8;'>Executing {len(commands)} command(s):</b><br>"
+        )
+
+        # ── Node name → ID resolution table ───────────────────────────────
+        # Populated as create_node results come in; used to patch node_name refs.
+        name_to_id: dict[str, str] = {}
+
+        success_count = 0
+        fail_count = 0
+
+        for cmd_obj in commands:
+            if not isinstance(cmd_obj, dict):
+                continue
+
+            command: str = cmd_obj.get("command", "")
+            payload: dict = dict(cmd_obj.get("payload", {}))
+
+            if not command:
+                continue
+
+            # Resolve node_name → node_id if Gemini used a name for a just-created node
+            if "node_name" in payload and "node_id" not in payload:
+                resolved_id = name_to_id.get(payload.pop("node_name"))
+                if resolved_id:
+                    payload["node_id"] = resolved_id
+                else:
+                    self.output.append(
+                        f"<span style='color:orange;'>⚠️ {command} — "
+                        f"could not resolve node_name to an id, skipping.</span><br>"
+                    )
+                    fail_count += 1
+                    continue
+
+            result = agent.execute(command, payload)
+
+            if result.success:
+                # If we just created a node, remember its id by name
+                if command == "create_node" and isinstance(result.data, dict):
+                    created_name = payload.get("name", "")
+                    created_id = result.data.get("id", "")
+                    if created_name and created_id:
+                        name_to_id[created_name] = created_id
+
+                data_str = str(result.data) if result.data else ""
+                self.output.append(
+                    f"<span style='color:#27ae60;'>✅ {command}</span>"
+                    + (f" <span style='color:#555;font-size:10px;'>→ {data_str[:80]}</span>" if data_str else "")
+                    + "<br>"
+                )
+                success_count += 1
+            else:
+                self.output.append(
+                    f"<span style='color:red;'>❌ {command} — {result.error}</span><br>"
+                )
+                fail_count += 1
+
+        # ── Show node count delta ──────────────────────────────────────────
+        try:
+            after = agent.execute("get_context")
+            if after.success and hasattr(self, "_mcp_ctx_before") and self._mcp_ctx_before:
+                before_count = self._mcp_ctx_before.get("node_count", 0)
+                after_count = after.data.get("node_count", 0)
+                delta = after_count - before_count
+                if delta > 0:
+                    self.output.append(
+                        f"<span style='color:#27ae60;'>📊 {delta} new node(s) added.</span><br>"
+                    )
+                elif delta < 0:
+                    self.output.append(
+                        f"<span style='color:orange;'>📊 {abs(delta)} node(s) removed.</span><br>"
+                    )
+        except Exception:
+            pass
+
+        status_icon = "✅" if fail_count == 0 else "⚠️"
+        self.status_label.setText(
+            f"Status: {status_icon} Done — {success_count} ok, {fail_count} failed."
+        )
+        self.output.append(
+            f"<br><b style='color:#1a73e8;'>"
+            f"🔌 MCP Agent finished — {success_count}/{success_count + fail_count} commands succeeded."
+            f"</b>"
+        )
+
+    def _get_main_window(self):
+        """Walk up the widget tree to find the EfficientManimWindow."""
+        widget = self.parent()
+        while widget is not None:
+            if isinstance(widget, EfficientManimWindow):
+                return widget
+            widget = widget.parent()
+        return None
 
     def merge(self):
         """Emit merge signal with code."""
@@ -3748,42 +4365,59 @@ class AssetsPanel(QWidget):
 
 
 class VoiceoverPanel(QWidget):
-    """Panel for AI TTS generation and Node synchronization."""
+    """Panel for AI TTS generation, audio preview, and node synchronization.
+
+    Supports voiceover attachment to ALL animation node types.
+    Includes full playback controls: play, pause, stop, seek, duration display.
+    """
 
     def __init__(self, main_window):
         super().__init__()
-        self.main_window = main_window  # Reference to access nodes
+        self.main_window = main_window
         self.tts_worker = None
+        self._current_audio_path: str | None = None
+        self._player = QMediaPlayer()
+        self._audio_out = QAudioOutput()
+        self._player.setAudioOutput(self._audio_out)
+        self._audio_out.setVolume(1.0)
+        self._player_duration = 0
+
+        # Wire player signals
+        self._player.positionChanged.connect(self._on_position_changed)
+        self._player.durationChanged.connect(self._on_duration_changed)
+        self._player.mediaStatusChanged.connect(self._on_media_status)
+        self._player.playbackStateChanged.connect(self._on_playback_state_changed)
+        # NEW: Error handler for media load failures
+        self._player.errorChanged.connect(self._on_player_error)
+
         self.setup_ui()
 
     def setup_ui(self):
         layout = QVBoxLayout(self)
+        layout.setSpacing(6)
 
-        # Header
+        # ── Header ────────────────────────────────────────────────
         header = QLabel("🎙️ AI Voiceover Studio")
         header.setStyleSheet("font-size: 14px; font-weight: bold; color: #2c3e50;")
         layout.addWidget(header)
 
-        # Settings Grid
+        # ── Settings Grid ─────────────────────────────────────────
         form = QFormLayout()
-
-        # Voice Selector
         self.voice_combo = QComboBox()
-        # Gemini Voices (Standard set)
         voices = ["Puck", "Charon", "Kore", "Fenrir", "Aoede", "Zephyr"]
         self.voice_combo.addItems(voices)
         self.voice_combo.setCurrentText("Zephyr")
         form.addRow("Voice:", self.voice_combo)
-
         layout.addLayout(form)
 
-        # Text Input
+        # ── Script Input ──────────────────────────────────────────
         layout.addWidget(QLabel("Script:"))
         self.text_input = QPlainTextEdit()
         self.text_input.setPlaceholderText("Enter text to speak here...")
+        self.text_input.setMaximumHeight(90)
         layout.addWidget(self.text_input)
 
-        # Generate Button
+        # ── Generate Button ───────────────────────────────────────
         self.btn_gen = QPushButton("⚡ Generate Audio")
         self.btn_gen.setStyleSheet(
             "background-color: #8e44ad; color: white; padding: 8px; font-weight: bold;"
@@ -3791,58 +4425,145 @@ class VoiceoverPanel(QWidget):
         self.btn_gen.clicked.connect(self.generate_audio)
         layout.addWidget(self.btn_gen)
 
-        # Separator
+        # ── Generation Progress ───────────────────────────────────
+        self.progress_bar = QProgressBar()
+        self.progress_bar.setRange(0, 0)  # indeterminate
+        self.progress_bar.setVisible(False)
+        self.progress_bar.setMaximumHeight(6)
+        layout.addWidget(self.progress_bar)
+
+        # ── Audio Preview ─────────────────────────────────────────
+        preview_frame = QFrame()
+        preview_frame.setFrameShape(QFrame.Shape.StyledPanel)
+        preview_frame.setStyleSheet(
+            "QFrame { background: #1a1a2e; border-radius: 6px; border: 1px solid #444; }"
+        )
+        preview_layout = QVBoxLayout(preview_frame)
+        preview_layout.setContentsMargins(8, 6, 8, 6)
+        preview_layout.setSpacing(4)
+
+        preview_lbl = QLabel("🎵 Audio Preview")
+        preview_lbl.setStyleSheet("color: #a0a0c0; font-size: 11px; font-weight: bold; border: none;")
+        preview_layout.addWidget(preview_lbl)
+
+        # Seek slider
+        self.seek_slider = QSlider(Qt.Orientation.Horizontal)
+        self.seek_slider.setRange(0, 0)
+        self.seek_slider.setEnabled(False)
+        self.seek_slider.sliderMoved.connect(self._on_seek)
+        self.seek_slider.setStyleSheet(
+            "QSlider::groove:horizontal { height: 4px; background: #444; border-radius: 2px; }"
+            "QSlider::sub-page:horizontal { background: #8e44ad; border-radius: 2px; }"
+            "QSlider::handle:horizontal { width: 12px; height: 12px; margin: -4px 0; "
+            "background: white; border-radius: 6px; }"
+        )
+        preview_layout.addWidget(self.seek_slider)
+
+        # Time label
+        self.lbl_time = QLabel("00:00 / 00:00")
+        self.lbl_time.setStyleSheet("color: #808090; font-family: monospace; font-size: 10px; border: none;")
+        self.lbl_time.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        preview_layout.addWidget(self.lbl_time)
+
+        # Playback controls row
+        ctrl_row = QHBoxLayout()
+        ctrl_row.setSpacing(4)
+
+        self.btn_play = QPushButton("▶")
+        self.btn_play.setFixedSize(32, 32)
+        self.btn_play.setEnabled(False)
+        self.btn_play.setToolTip("Play / Pause")
+        self.btn_play.clicked.connect(self._toggle_play)
+        self.btn_play.setStyleSheet(
+            "QPushButton { background: #8e44ad; color: white; border-radius: 16px; font-size: 12px; border: none; }"
+            "QPushButton:disabled { background: #555; }"
+        )
+
+        self.btn_stop = QPushButton("⏹")
+        self.btn_stop.setFixedSize(32, 32)
+        self.btn_stop.setEnabled(False)
+        self.btn_stop.setToolTip("Stop")
+        self.btn_stop.clicked.connect(self._stop_audio)
+        self.btn_stop.setStyleSheet(
+            "QPushButton { background: #555; color: white; border-radius: 16px; font-size: 12px; border: none; }"
+            "QPushButton:disabled { background: #444; color: #888; }"
+        )
+
+        ctrl_row.addStretch()
+        ctrl_row.addWidget(self.btn_play)
+        ctrl_row.addWidget(self.btn_stop)
+        ctrl_row.addStretch()
+        preview_layout.addLayout(ctrl_row)
+
+        layout.addWidget(preview_frame)
+
+        # ── Separator ─────────────────────────────────────────────
         line = QFrame()
         line.setFrameShape(QFrame.Shape.HLine)
         line.setStyleSheet("color: #bdc3c7;")
         layout.addWidget(line)
 
-        # Node Sync Section
-        sync_lbl = QLabel("🔗 Sync to Animation")
+        # ── Node Sync Section ─────────────────────────────────────
+        sync_lbl = QLabel("🔗 Attach to Animation Node")
         sync_lbl.setStyleSheet("font-weight: bold;")
         layout.addWidget(sync_lbl)
 
+        node_row = QHBoxLayout()
         self.node_combo = QComboBox()
         self.node_combo.setPlaceholderText("Select an Animation Node...")
-        layout.addWidget(self.node_combo)
+        node_row.addWidget(self.node_combo, 1)
 
-        # Refresh Nodes Button (in case new ones added)
-        btn_refresh = QPushButton("🔄 Refresh Node List")
+        btn_refresh = QPushButton("🔄")
+        btn_refresh.setFixedSize(28, 28)
+        btn_refresh.setToolTip("Refresh Node List")
         btn_refresh.clicked.connect(self.refresh_nodes)
-        layout.addWidget(btn_refresh)
+        node_row.addWidget(btn_refresh)
+        layout.addLayout(node_row)
+
+        # "Add to Animation Node" button
+        self.btn_attach = QPushButton("📎 Add to Animation Node")
+        self.btn_attach.setStyleSheet(
+            "background-color: #27ae60; color: white; padding: 7px; font-weight: bold;"
+        )
+        self.btn_attach.setEnabled(False)
+        self.btn_attach.setToolTip("Attach the generated audio to the selected animation node")
+        self.btn_attach.clicked.connect(self._attach_to_node)
+        layout.addWidget(self.btn_attach)
 
         self.status_lbl = QLabel("Ready")
-        self.status_lbl.setStyleSheet("color: gray;")
+        self.status_lbl.setStyleSheet("color: gray; font-size: 11px;")
         layout.addWidget(self.status_lbl)
+
+        layout.addStretch()
 
         # Initial refresh
         QTimer.singleShot(1000, self.refresh_nodes)
 
+    # ── Node population ────────────────────────────────────────────
+
     def refresh_nodes(self):
-        """Populate combo with nodes that look like they accept text."""
+        """Populate combo with ALL animation nodes (any type)."""
         current = self.node_combo.currentData()
         self.node_combo.clear()
 
         count = 0
         for nid, node in self.main_window.nodes.items():
-            # Filter for Text/Tex/MathTex nodes
-            cname = node.data.cls_name.lower()
-            if "tex" in cname or "text" in cname or "label" in cname:
-                # --- FIX: Format as "Name (First 6 chars of ID)" ---
-                # This ensures it looks like: "MathTex (f3d875)"
-                short_id = nid[:6]
-                display_text = f"{node.data.name} ({short_id})"
-                # ---------------------------------------------------
-
-                self.node_combo.addItem(display_text, nid)
-                count += 1
+            short_id = nid[:6]
+            type_tag = (
+                "🎬" if node.data.type == NodeType.ANIMATION else "🔷"
+            )
+            display_text = f"{type_tag} {node.data.name} ({short_id})"
+            self.node_combo.addItem(display_text, nid)
+            count += 1
 
         if current:
             idx = self.node_combo.findData(current)
             if idx >= 0:
                 self.node_combo.setCurrentIndex(idx)
 
-        self.status_lbl.setText(f"Found {count} text-compatible nodes.")
+        self.status_lbl.setText(f"Found {count} nodes.")
+
+    # ── Audio generation ───────────────────────────────────────────
 
     def generate_audio(self):
         text = self.text_input.toPlainText().strip()
@@ -3851,11 +4572,10 @@ class VoiceoverPanel(QWidget):
             return
 
         self.btn_gen.setEnabled(False)
-        self.status_lbl.setText("Generating audio via Gemini...")
+        self.progress_bar.setVisible(True)
+        self.status_lbl.setText("Generating audio via Gemini TTS…")
 
         voice = self.voice_combo.currentText()
-
-        # FIX: Read model from Global Settings
         model = SETTINGS.get("TTS_MODEL", "gemini-2.5-flash-preview-tts")
 
         self.tts_worker = TTSWorker(text, voice, model)
@@ -3865,42 +4585,226 @@ class VoiceoverPanel(QWidget):
 
     def on_tts_success(self, file_path):
         self.btn_gen.setEnabled(True)
-        self.status_lbl.setText("Audio generated!")
+        self.progress_bar.setVisible(False)
+        self.status_lbl.setText("✅ Audio generated — ready for preview.")
 
-        # 1. Register as Asset
         asset = ASSETS.add_asset(file_path)
         if not asset:
-            self.status_lbl.setText("Error registering asset.")
+            self.status_lbl.setText("⚠️ Error registering asset.")
             return
 
-        # 2. Assign to Node (if selected)
-        node_id = self.node_combo.currentData()
-        if node_id and node_id in self.main_window.nodes:
-            node = self.main_window.nodes[node_id]
-            node.data.audio_asset_id = asset.id
-            node.update()  # Refresh graph
-            self.status_lbl.setText(f"Saved & Synced to '{node.data.name}'")
+        self._current_audio_path = file_path
+        self._load_preview(file_path)
+        self.btn_attach.setEnabled(True)
 
-            # Trigger graph re-compile to add the duration logic
-            self.main_window.compile_graph()
-
-            QMessageBox.information(
-                self,
-                "Success",
-                f"Audio generated and attached to {node.data.name}.\nRun Time will auto-fit.",
-            )
-        else:
-            QMessageBox.information(
-                self,
-                "Success",
-                "Audio generated and added to Assets.\n(No node selected for sync)",
-            )
+        # Store transcript on the worker's text for later node attachment
+        self._last_transcript = self.text_input.toPlainText().strip()
+        self._last_asset = asset
 
     def on_tts_error(self, err):
         self.btn_gen.setEnabled(True)
-        self.status_lbl.setText("Generation Failed.")
+        self.progress_bar.setVisible(False)
+        self.status_lbl.setText("❌ Generation failed.")
         LOGGER.error(f"TTS Error: {err}")
         QMessageBox.critical(self, "TTS Error", err)
+
+    # ── Audio preview ──────────────────────────────────────────────
+
+    def _load_preview(self, file_path: str):
+        """
+        Load audio file into the preview player.
+        
+        CRITICAL FIX: Proper QUrl conversion with error handling.
+        - Convert path to QUrl with proper escaping
+        - Validate file exists before loading
+        - Clear any previous errors
+        - Log load status
+        """
+        try:
+            # ═════════════════════════════════════════════════════════════
+            # VALIDATION: File must exist
+            # ═════════════════════════════════════════════════════════════
+            file_path_obj = Path(file_path)
+            if not file_path_obj.exists():
+                self.status_lbl.setText(f"❌ File not found: {file_path}")
+                LOGGER.error(f"Audio preview: file missing at {file_path}")
+                self.btn_play.setEnabled(False)
+                self.btn_stop.setEnabled(False)
+                self.seek_slider.setEnabled(False)
+                return
+            
+            # ═════════════════════════════════════════════════════════════
+            # FIX: Use QUrl.fromLocalFile() for proper path escaping
+            # Windows paths with backslashes must be converted safely
+            # ═════════════════════════════════════════════════════════════
+            from PySide6.QtCore import QUrl
+            
+            # Convert to absolute path to prevent relative path issues
+            abs_path = file_path_obj.resolve()
+            
+            # Create QUrl with proper local file encoding
+            # This handles spaces, special characters, and backslashes correctly
+            media_url = QUrl.fromLocalFile(str(abs_path))
+            
+            if not media_url.isValid():
+                self.status_lbl.setText("❌ Invalid file path or unsupported format")
+                LOGGER.error(f"Audio preview: invalid QUrl for {abs_path}")
+                self.btn_play.setEnabled(False)
+                self.btn_stop.setEnabled(False)
+                self.seek_slider.setEnabled(False)
+                return
+            
+            # ═════════════════════════════════════════════════════════════
+            # LOAD: Set media source and enable controls
+            # ═════════════════════════════════════════════════════════════
+            self._player.setSource(media_url)
+            
+            # Enable playback controls
+            self.seek_slider.setEnabled(True)
+            self.btn_play.setEnabled(True)
+            self.btn_stop.setEnabled(True)
+            
+            self.status_lbl.setText("✅ Audio loaded. Press ▶ to preview.")
+            LOGGER.info(f"Audio preview loaded: {abs_path}")
+            
+        except Exception as e:
+            self.status_lbl.setText(f"❌ Error loading audio: {type(e).__name__}")
+            LOGGER.error(f"Audio preview load error: {e}", exc_info=True)
+            self.btn_play.setEnabled(False)
+            self.btn_stop.setEnabled(False)
+            self.seek_slider.setEnabled(False)
+
+    def _toggle_play(self):
+        state = self._player.playbackState()
+        if state == QMediaPlayer.PlaybackState.Playing:
+            self._player.pause()
+        else:
+            self._player.play()
+
+    def _stop_audio(self):
+        self._player.stop()
+        self.seek_slider.setValue(0)
+        self.lbl_time.setText("00:00 / 00:00")
+
+    def _on_seek(self, position: int):
+        self._player.setPosition(position)
+
+    def _on_position_changed(self, position: int):
+        if not self.seek_slider.isSliderDown():
+            self.seek_slider.setValue(position)
+        self._update_time_label(position)
+
+    def _on_duration_changed(self, duration: int):
+        self._player_duration = duration
+        self.seek_slider.setRange(0, duration)
+        self._update_time_label(0)
+
+    def _on_media_status(self, status):
+        """
+        Handle media status changes.
+        
+        Catches load errors, end-of-media, and other status changes.
+        """
+        try:
+            # Handle end of media
+            if status == QMediaPlayer.MediaStatus.EndOfMedia:
+                self.btn_play.setText("▶")
+                LOGGER.info("Audio playback: end of media reached")
+            
+            # Handle load errors
+            elif status == QMediaPlayer.MediaStatus.InvalidMedia:
+                self.status_lbl.setText("❌ Invalid audio format or corrupted file")
+                LOGGER.error(f"Audio preview: invalid media format")
+                self.btn_play.setEnabled(False)
+                self.btn_stop.setEnabled(False)
+            
+            elif status == QMediaPlayer.MediaStatus.NoMedia:
+                # No media loaded (expected after clear or init)
+                pass
+            
+            elif status == QMediaPlayer.MediaStatus.LoadedMedia:
+                # Media successfully loaded
+                LOGGER.info("Audio preview: media loaded successfully")
+            
+            elif status == QMediaPlayer.MediaStatus.LoadingMedia:
+                # Media is being loaded
+                self.status_lbl.setText("⏳ Loading audio...")
+        
+        except Exception as e:
+            LOGGER.error(f"Error in _on_media_status: {e}")
+
+    def _on_player_error(self):
+        """
+        Handle QMediaPlayer errors.
+        
+        Called when an error occurs during playback or loading.
+        """
+        try:
+            error = self._player.error()
+            error_string = self._player.errorString()
+            
+            if error != QMediaPlayer.Error.NoError:
+                self.status_lbl.setText(f"❌ Playback error: {error_string}")
+                LOGGER.error(f"Audio preview error: {error} - {error_string}")
+                self.btn_play.setEnabled(False)
+                self.btn_stop.setEnabled(False)
+        
+        except Exception as e:
+            LOGGER.error(f"Error in _on_player_error: {e}")
+
+    def _on_playback_state_changed(self, state):
+        if state == QMediaPlayer.PlaybackState.Playing:
+            self.btn_play.setText("⏸")
+        else:
+            self.btn_play.setText("▶")
+
+    def _update_time_label(self, current_ms: int):
+        def fmt(ms):
+            s = (ms // 1000) % 60
+            m = ms // 60000
+            return f"{m:02}:{s:02}"
+
+        self.lbl_time.setText(f"{fmt(current_ms)} / {fmt(self._player_duration)}")
+
+    # ── Node attachment ────────────────────────────────────────────
+
+    def _attach_to_node(self):
+        """Attach generated audio to the selected animation node."""
+        node_id = self.node_combo.currentData()
+        if not node_id:
+            QMessageBox.warning(self, "No Node Selected", "Please select an animation node first.")
+            return
+
+        if node_id not in self.main_window.nodes:
+            QMessageBox.warning(self, "Invalid Node", "Selected node no longer exists.")
+            return
+
+        if not hasattr(self, "_last_asset") or self._last_asset is None:
+            QMessageBox.warning(self, "No Audio", "Generate audio first before attaching.")
+            return
+
+        node = self.main_window.nodes[node_id]
+        node.data.audio_asset_id = self._last_asset.id
+        node.data.voiceover_transcript = getattr(self, "_last_transcript", "")
+        if self._player_duration > 0:
+            node.data.voiceover_duration = self._player_duration / 1000.0
+
+        node.update()
+        self.main_window.compile_graph()
+        self.main_window.mark_modified()
+
+        self.status_lbl.setText(f"✅ Attached to '{node.data.name}'")
+        LOGGER.info(f"Voiceover attached to node {node.data.name} ({node_id[:6]})")
+
+        QMessageBox.information(
+            self,
+            "Voiceover Attached",
+            f"Audio successfully attached to '{node.data.name}'.\n"
+            f"Duration: {node.data.voiceover_duration:.2f}s\n"
+            "The node will use this audio during render.",
+        )
+
+
 
 
 class KeyboardShortcutsDialog(QDialog):
@@ -4479,12 +5383,21 @@ class VGroupPanel(QWidget):
         row1 = QHBoxLayout()
         row1.setSpacing(4)
 
-        self.btn_rename = self._make_btn("✏️ Rename", "#0891b2", self._rename_vgroup,
-                                         "Rename the selected VGroup")
-        self.btn_duplicate = self._make_btn("⧉ Duplicate", "#0891b2", self._duplicate_vgroup,
-                                             "Create a copy of this VGroup with a new name")
-        self.btn_copy_code = self._make_btn("📋 Copy Code", "#059669", self._copy_code,
-                                             "Copy  name = VGroup(members…)  to clipboard")
+        self.btn_rename = self._make_btn(
+            "✏️ Rename", "#0891b2", self._rename_vgroup, "Rename the selected VGroup"
+        )
+        self.btn_duplicate = self._make_btn(
+            "⧉ Duplicate",
+            "#0891b2",
+            self._duplicate_vgroup,
+            "Create a copy of this VGroup with a new name",
+        )
+        self.btn_copy_code = self._make_btn(
+            "📋 Copy Code",
+            "#059669",
+            self._copy_code,
+            "Copy  name = VGroup(members…)  to clipboard",
+        )
         row1.addWidget(self.btn_rename)
         row1.addWidget(self.btn_duplicate)
         row1.addWidget(self.btn_copy_code)
@@ -4494,12 +5407,24 @@ class VGroupPanel(QWidget):
         row2 = QHBoxLayout()
         row2.setSpacing(4)
 
-        self.btn_highlight = self._make_btn("🎯 Highlight", "#7c3aed", self._highlight_on_canvas,
-                                             "Select all member nodes on the canvas")
-        self.btn_add_members = self._make_btn("＋ Add Nodes", "#059669", self._add_members,
-                                               "Add currently selected canvas nodes to this group")
-        self.btn_remove_member = self._make_btn("－ Remove Member", "#f59e0b", self._remove_member,
-                                                 "Remove the selected member from this group")
+        self.btn_highlight = self._make_btn(
+            "🎯 Highlight",
+            "#7c3aed",
+            self._highlight_on_canvas,
+            "Select all member nodes on the canvas",
+        )
+        self.btn_add_members = self._make_btn(
+            "＋ Add Nodes",
+            "#059669",
+            self._add_members,
+            "Add currently selected canvas nodes to this group",
+        )
+        self.btn_remove_member = self._make_btn(
+            "－ Remove Member",
+            "#f59e0b",
+            self._remove_member,
+            "Remove the selected member from this group",
+        )
         row2.addWidget(self.btn_highlight)
         row2.addWidget(self.btn_add_members)
         row2.addWidget(self.btn_remove_member)
@@ -4508,8 +5433,12 @@ class VGroupPanel(QWidget):
         # Row 3: destructive
         row3 = QHBoxLayout()
         row3.addStretch()
-        self.btn_delete = self._make_btn("🗑 Delete Group", "#dc2626", self._delete_vgroup,
-                                          "Permanently remove this VGroup (does not delete nodes)")
+        self.btn_delete = self._make_btn(
+            "🗑 Delete Group",
+            "#dc2626",
+            self._delete_vgroup,
+            "Permanently remove this VGroup (does not delete nodes)",
+        )
         self.btn_delete.setMinimumWidth(130)
         row3.addWidget(self.btn_delete)
         tb_layout.addLayout(row3)
@@ -4535,8 +5464,14 @@ class VGroupPanel(QWidget):
     # ── Button state management ──────────────────────────────────────────────
 
     def _set_buttons_enabled(self, group_selected: bool, member_selected: bool = False):
-        for btn in (self.btn_rename, self.btn_duplicate, self.btn_copy_code,
-                    self.btn_highlight, self.btn_add_members, self.btn_delete):
+        for btn in (
+            self.btn_rename,
+            self.btn_duplicate,
+            self.btn_copy_code,
+            self.btn_highlight,
+            self.btn_add_members,
+            self.btn_delete,
+        ):
             btn.setEnabled(group_selected)
         self.btn_remove_member.setEnabled(member_selected)
 
@@ -4579,7 +5514,9 @@ class VGroupPanel(QWidget):
     # ── Tree refresh ─────────────────────────────────────────────────────────
 
     def _refresh_tree(self):
-        filter_txt = self.search_edit.text().lower() if hasattr(self, "search_edit") else ""
+        filter_txt = (
+            self.search_edit.text().lower() if hasattr(self, "search_edit") else ""
+        )
         self.tree.clear()
         for gname, ids in self._groups.items():
             if filter_txt and filter_txt not in gname.lower():
@@ -4595,8 +5532,11 @@ class VGroupPanel(QWidget):
             # Header text: icon + name + source badge + count
             root.setText(0, f"{icon}  {gname}  ·  {source}  ·  {count_str}")
             root.setForeground(0, QBrush(QColor(color)))
-            root.setFont(0, QFont("", -1, QFont.Weight.Bold))
-            root.setToolTip(0, f"Source: {source}\nMembers: {', '.join(members) if members else 'none'}")
+            root.setFont(0, QFont("Segoe UI", 10, QFont.Weight.Bold))
+            root.setToolTip(
+                0,
+                f"Source: {source}\nMembers: {', '.join(members) if members else 'none'}",
+            )
 
             if members:
                 for mname in members:
@@ -4628,25 +5568,34 @@ class VGroupPanel(QWidget):
     def _create_vgroup(self):
         sel = self.main_window.scene.selectedItems()
         members = [
-            item for item in sel
+            item
+            for item in sel
             if isinstance(item, NodeItem) and item.data.type == NodeType.MOBJECT
         ]
         if not members:
-            QMessageBox.warning(self, "No Selection",
-                                "Select at least one Mobject node on the canvas first.")
+            QMessageBox.warning(
+                self,
+                "No Selection",
+                "Select at least one Mobject node on the canvas first.",
+            )
             return
         name = self.name_edit.text().strip() or f"vgroup_{len(self._groups) + 1}"
         if not name.isidentifier():
-            QMessageBox.warning(self, "Invalid Name",
-                                "VGroup name must be a valid Python identifier.")
+            QMessageBox.warning(
+                self, "Invalid Name", "VGroup name must be a valid Python identifier."
+            )
             return
         if name in self._groups:
-            QMessageBox.warning(self, "Duplicate Name",
-                                f"A VGroup named '{name}' already exists.")
+            QMessageBox.warning(
+                self, "Duplicate Name", f"A VGroup named '{name}' already exists."
+            )
             return
         ids = [m.data.id for m in members]
         self._groups[name] = ids
-        self._meta[name] = {"source": "canvas", "members": [m.data.name for m in members]}
+        self._meta[name] = {
+            "source": "canvas",
+            "members": [m.data.name for m in members],
+        }
         self.vgroup_created.emit(name, ids)
         self._refresh_tree()
         self.name_edit.clear()
@@ -4672,15 +5621,19 @@ class VGroupPanel(QWidget):
         if not new_name or new_name == name:
             return
         if not new_name.isidentifier():
-            QMessageBox.warning(self, "Invalid Name",
-                                "VGroup name must be a valid Python identifier.")
+            QMessageBox.warning(
+                self, "Invalid Name", "VGroup name must be a valid Python identifier."
+            )
             return
         if new_name in self._groups:
-            QMessageBox.warning(self, "Duplicate Name",
-                                f"A VGroup named '{new_name}' already exists.")
+            QMessageBox.warning(
+                self, "Duplicate Name", f"A VGroup named '{new_name}' already exists."
+            )
             return
         # Re-insert preserving order
-        self._groups = {(new_name if k == name else k): v for k, v in self._groups.items()}
+        self._groups = {
+            (new_name if k == name else k): v for k, v in self._groups.items()
+        }
         self._meta = {(new_name if k == name else k): v for k, v in self._meta.items()}
         self._refresh_tree()
 
@@ -4698,7 +5651,9 @@ class VGroupPanel(QWidget):
             i += 1
         self._groups[candidate] = list(self._groups[name])
         self._meta[candidate] = dict(self._meta.get(name, {}))
-        self._meta[candidate]["source"] = self._meta.get(name, {}).get("source", "canvas")
+        self._meta[candidate]["source"] = self._meta.get(name, {}).get(
+            "source", "canvas"
+        )
         self._refresh_tree()
 
     # ── Copy Code ────────────────────────────────────────────────────────────
@@ -4713,8 +5668,12 @@ class VGroupPanel(QWidget):
         QApplication.clipboard().setText(code)
         # Brief visual feedback via tooltip on button
         self.btn_copy_code.setToolTip(f"Copied: {code}")
-        QTimer.singleShot(2500, lambda: self.btn_copy_code.setToolTip(
-            "Copy  name = VGroup(members…)  to clipboard"))
+        QTimer.singleShot(
+            2500,
+            lambda: self.btn_copy_code.setToolTip(
+                "Copy  name = VGroup(members…)  to clipboard"
+            ),
+        )
 
     # ── Highlight on Canvas ───────────────────────────────────────────────────
 
@@ -4724,9 +5683,12 @@ class VGroupPanel(QWidget):
             return
         ids = self._groups.get(name, [])
         if not ids:
-            QMessageBox.information(self, "Canvas Highlight",
-                                    "This group was created from code — member nodes are not "
-                                    "tracked on the canvas.\nAdd them manually to enable highlighting.")
+            QMessageBox.information(
+                self,
+                "Canvas Highlight",
+                "This group was created from code — member nodes are not "
+                "tracked on the canvas.\nAdd them manually to enable highlighting.",
+            )
             return
         # Deselect all, then select members
         self.main_window.scene.clearSelection()
@@ -4737,8 +5699,11 @@ class VGroupPanel(QWidget):
                 node.setSelected(True)
                 found += 1
         if found == 0:
-            QMessageBox.information(self, "Canvas Highlight",
-                                    "None of the member nodes were found on the canvas.")
+            QMessageBox.information(
+                self,
+                "Canvas Highlight",
+                "None of the member nodes were found on the canvas.",
+            )
 
     # ── Add Members from Selection ────────────────────────────────────────────
 
@@ -4748,15 +5713,19 @@ class VGroupPanel(QWidget):
             return
         sel = self.main_window.scene.selectedItems()
         new_nodes = [
-            item for item in sel
+            item
+            for item in sel
             if isinstance(item, NodeItem)
             and item.data.type == NodeType.MOBJECT
             and item.data.id not in self._groups.get(name, [])
         ]
         if not new_nodes:
-            QMessageBox.information(self, "Add Members",
-                                    "Select new Mobject nodes on the canvas first.\n"
-                                    "(Already-added nodes are ignored.)")
+            QMessageBox.information(
+                self,
+                "Add Members",
+                "Select new Mobject nodes on the canvas first.\n"
+                "(Already-added nodes are ignored.)",
+            )
             return
         for node in new_nodes:
             self._groups.setdefault(name, []).append(node.data.id)
@@ -4796,11 +5765,15 @@ class VGroupPanel(QWidget):
         name = self._current_group_name()
         if not name:
             return
-        if QMessageBox.question(
-            self, "Delete VGroup",
-            f"Delete VGroup '{name}'?\n\nThis does NOT delete the canvas nodes.",
-            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.Cancel,
-        ) != QMessageBox.StandardButton.Yes:
+        if (
+            QMessageBox.question(
+                self,
+                "Delete VGroup",
+                f"Delete VGroup '{name}'?\n\nThis does NOT delete the canvas nodes.",
+                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.Cancel,
+            )
+            != QMessageBox.StandardButton.Yes
+        ):
             return
         self._groups.pop(name, None)
         self._meta.pop(name, None)
@@ -4827,28 +5800,29 @@ class VGroupPanel(QWidget):
         Returns the count of newly registered VGroups.
         """
         import re
+
         # Capture name and the full argument list (handles multi-line with re.DOTALL)
         pattern = re.compile(
-            r'^[ \t]*([a-zA-Z_][a-zA-Z0-9_]*)\s*=\s*VGroup\s*\(([^)]*)\)',
+            r"^[ \t]*([a-zA-Z_][a-zA-Z0-9_]*)\s*=\s*VGroup\s*\(([^)]*)\)",
             re.MULTILINE,
         )
-        _SKIP = frozenset(('self', 'cls', 'None', 'True', 'False', 'return'))
+        _SKIP = frozenset(("self", "cls", "None", "True", "False", "return"))
         new_count = 0
         for match in pattern.finditer(code):
             name = match.group(1)
-            if name.startswith('__') or name in _SKIP:
+            if name.startswith("__") or name in _SKIP:
                 continue
             if name in self._groups:
                 continue
             # Parse member names from argument list
             raw_args = match.group(2)
             members = []
-            for arg in raw_args.split(','):
+            for arg in raw_args.split(","):
                 arg = arg.strip()
                 # Accept simple identifiers only (skip *args, keyword=val, literals)
-                if re.fullmatch(r'[a-zA-Z_][a-zA-Z0-9_]*', arg) and arg not in _SKIP:
+                if re.fullmatch(r"[a-zA-Z_][a-zA-Z0-9_]*", arg) and arg not in _SKIP:
                     members.append(arg)
-            self._groups[name] = []          # no node IDs for code-origin groups
+            self._groups[name] = []  # no node IDs for code-origin groups
             self._meta[name] = {"source": source, "members": members}
             new_count += 1
         if new_count:
@@ -5011,7 +5985,7 @@ class RecentsPanel(QWidget):
     Updates live: no manual refresh required.
     """
 
-    add_requested = Signal(str, str)   # (type_str, class_name)
+    add_requested = Signal(str, str)  # (type_str, class_name)
 
     # How many to show per category
     TOP_N = 5
@@ -5065,10 +6039,10 @@ class RecentsPanel(QWidget):
         """Rebuild the tree from live usage statistics."""
         self.tree.clear()
 
-        mob_data  = USAGE_TRACKER.top_mobjects(self.TOP_N)
+        mob_data = USAGE_TRACKER.top_mobjects(self.TOP_N)
         anim_data = USAGE_TRACKER.top_animations(self.TOP_N)
 
-        self._populate_section("📦  Mobjects",   mob_data,  "#4f46e5", "mobject")
+        self._populate_section("📦  Mobjects", mob_data, "#4f46e5", "mobject")
         self._populate_section("🎬  Animations", anim_data, "#7c3aed", "animation")
 
         # Show/hide hint depending on whether there is any data
@@ -5078,7 +6052,7 @@ class RecentsPanel(QWidget):
     def _populate_section(
         self,
         label: str,
-        data: list,          # [(class_name, count), ...]
+        data: list,  # [(class_name, count), ...]
         color: str,
         type_str: str,
     ):
@@ -5087,7 +6061,9 @@ class RecentsPanel(QWidget):
         section.setForeground(0, QBrush(QColor(color)))
         section.setFont(0, _bold_font())
         section.setFlags(section.flags() & ~Qt.ItemFlag.ItemIsSelectable)
-        section.setToolTip(0, f"Double-click a {type_str} below to add it to the canvas")
+        section.setToolTip(
+            0, f"Double-click a {type_str} below to add it to the canvas"
+        )
 
         if not data:
             empty = QTreeWidgetItem(section)
@@ -5112,8 +6088,9 @@ class RecentsPanel(QWidget):
                 child.setData(0, Qt.ItemDataRole.UserRole, cls_name)
                 child.setData(0, Qt.ItemDataRole.UserRole + 1, type_str)
                 # Usage bar as second column label embedded in text
-                count_badge = QLabel(f"<span style='color:{color};font-size:10px'>"
-                                     f"{bar} {count}×</span>")
+                count_badge = QLabel(
+                    f"<span style='color:{color};font-size:10px'>{bar} {count}×</span>"
+                )
                 count_badge.setContentsMargins(0, 0, 4, 0)
                 self.tree.setItemWidget(child, 0, None)  # ensure text side is used
                 child.setText(0, f"  {rank}.  {cls_name}  ·  {count}×  {bar}")
@@ -5261,13 +6238,72 @@ class GitHubSnippetLoader(QWidget):
         )
         if r == QMessageBox.StandardButton.Yes:
             import shutil
+            import stat
+            import time
 
             try:
-                shutil.rmtree(path)
+                # ═══════════════════════════════════════════════════════════════
+                # WINDOWS-SAFE RECURSIVE DELETION
+                # 
+                # Fixes WinError 5: Access Denied
+                # - chmod files to remove read-only flags
+                # - Retry with exponential backoff
+                # - OS-specific force-close handling
+                # ═══════════════════════════════════════════════════════════════
+                
+                def handle_remove_readonly(func, path, exc_info):
+                    """
+                    Error handler for shutil.rmtree() on Windows.
+                    
+                    When a file is locked or read-only:
+                    1. Make it writable with os.chmod()
+                    2. Retry the operation
+                    """
+                    if not os.access(path, os.W_OK):
+                        # File is read-only or locked
+                        os.chmod(path, stat.S_IWUSR | stat.S_IRUSR)
+                        func(path)
+                    else:
+                        raise
+
+                # Attempt 1: Standard deletion
+                try:
+                    shutil.rmtree(path, onerror=handle_remove_readonly)
+                    LOGGER.info(f"Successfully deleted GitHub repo: {path}")
+                except Exception as e1:
+                    # Attempt 2: Force-chmod all files first, then retry
+                    LOGGER.warn(f"First deletion attempt failed: {e1}, retrying with force-chmod...")
+                    try:
+                        for root_dir, dirs, files in os.walk(path):
+                            for d in dirs:
+                                os.chmod(os.path.join(root_dir, d), stat.S_IWUSR | stat.S_IRUSR | stat.S_IXUSR)
+                            for f in files:
+                                os.chmod(os.path.join(root_dir, f), stat.S_IWUSR | stat.S_IRUSR)
+                        time.sleep(0.5)  # Brief delay for file handles to release
+                        shutil.rmtree(path)
+                        LOGGER.info(f"Successfully deleted GitHub repo (retry): {path}")
+                    except Exception as e2:
+                        # Attempt 3: Windows-specific: try moving to temp first
+                        if sys.platform == "win32":
+                            LOGGER.warn(f"Second deletion failed: {e2}, attempting temp relocation...")
+                            try:
+                                temp_loc = Path(tempfile.gettempdir()) / f"efm_del_{uuid.uuid4().hex[:8]}"
+                                shutil.move(path, str(temp_loc))
+                                shutil.rmtree(str(temp_loc), onerror=handle_remove_readonly)
+                                LOGGER.info(f"Successfully deleted via temp relocation: {path}")
+                            except Exception as e3:
+                                raise Exception(f"Could not delete after 3 attempts. Last error: {e3}")
+                        else:
+                            raise Exception(f"Could not delete. Last error: {e2}")
+                
+                # Remove from tree on success
                 idx = self.tree.indexOfTopLevelItem(root)
                 self.tree.takeTopLevelItem(idx)
+                self.status_lbl.setText(f"✅ Deleted '{root.text(0)}'")
+                
             except Exception as e:
-                QMessageBox.warning(self, "Error", str(e))
+                LOGGER.error(f"Failed to delete repo: {e}")
+                QMessageBox.warning(self, "Error", f"Could not delete repository:\n{str(e)[:100]}")
 
 
 # ── Editable Project Name Widget ──────────────────────────────────────────────
@@ -5351,10 +6387,60 @@ class EfficientManimWindow(QMainWindow):
         self.setup_menu()
         self.apply_theme()
 
+        # FIX: Ensure window is destroyed on close to trigger destroyed signal in home.py
+        self.setAttribute(Qt.WidgetAttribute.WA_DeleteOnClose)
+
         self.render_queue = []
         self.render_timer = QTimer()
         self.render_timer.timeout.connect(self.process_render_queue)
         self.render_timer.start(500)
+
+        # ═══════════════════════════════════════════════════════════════════════
+        # AUTO-RELOAD SYSTEM
+        # 
+        # Provides 3-second periodic preview refresh + immediate reload on changes
+        # - Detects code changes via content hash
+        # - Detects node graph changes via structure hash
+        # - Detects asset changes via modification timestamps
+        # - Prevents render flooding with debounce + in-progress flag
+        # - Respectsuser setting: ENABLE_PREVIEW
+        # ═══════════════════════════════════════════════════════════════════════
+        
+        self.auto_reload_enabled = True  # Toggleable via Settings UI
+        self.auto_reload_timer = QTimer()
+        self.auto_reload_timer.timeout.connect(self._auto_reload_tick)
+        self.auto_reload_timer.start(3000)  # Fire every 3 seconds
+        
+        # State tracking for change detection
+        self._last_code_hash = ""
+        self._last_graph_hash = ""
+        self._last_assets_hash = ""
+        
+        # Debounce: pending render from changes
+        self._pending_auto_render = False
+        self._auto_render_debounce = QTimer()
+        self._auto_render_debounce.timeout.connect(self._trigger_auto_render)
+        self._auto_render_debounce.setSingleShot(True)
+        
+        # In-progress tracking: prevent concurrent renders
+        self._render_in_progress = False
+        
+        LOGGER.info(
+            "Auto-reload system initialized: "
+            "3s timer + change detection + debounce + render-in-progress guard"
+        )
+
+        # ── MCP Agent — wired to this window, available app-wide as self.mcp ──
+        if MCP_AVAILABLE and _MCPAgent is not None:
+            self.mcp: "_MCPAgent | None" = _MCPAgent(self)
+            LOGGER.info("MCP Agent initialised. Use self.mcp.execute(command, payload).")
+        else:
+            self.mcp = None
+            LOGGER.info("MCP Agent not available (mcp.py missing).")
+
+        # Notify the AI Panel about the live mcp instance now that window is ready
+        if hasattr(self, "panel_ai") and self.mcp is not None:
+            self.panel_ai.set_mcp_agent(self.mcp)
 
         LOGGER.info("System Ready.")
 
@@ -5461,12 +6547,23 @@ class EfficientManimWindow(QMainWindow):
         self.tabs_top.addTab(self.panel_props, "🧩 Properties")
         self.tabs_top.addTab(self.panel_assets, "🗂 Assets")
         self.tabs_top.addTab(self.panel_latex, "✒️ LaTeX")
-        self.tabs_top.addTab(self.panel_ai, "🤖 AI")
         self.tabs_top.addTab(self.panel_snippets, "📚 Snippets")
         self.tabs_top.addTab(self.panel_github, "🐙 GitHub")
         self.tabs_top.addTab(self.panel_voice, "🎙️ Voiceover")
         self.tabs_top.addTab(self.panel_video, "🎬 Video")
         right.addWidget(self.tabs_top)
+
+        # ── AI Panel: permanent left dock (cannot float or be undocked) ──
+        self.ai_dock = QDockWidget("🤖 AI Assistant", self)
+        self.ai_dock.setObjectName("AIDockWidget")
+        # Lock the dock: no floating, no closing, no moving
+        self.ai_dock.setFeatures(
+            QDockWidget.DockWidgetFeature.NoDockWidgetFeatures
+        )
+        self.ai_dock.setAllowedAreas(Qt.DockWidgetArea.LeftDockWidgetArea)
+        self.ai_dock.setWidget(self.panel_ai)
+        self.ai_dock.setMinimumWidth(320)
+        self.addDockWidget(Qt.DockWidgetArea.LeftDockWidgetArea, self.ai_dock)
 
         self.tabs_bot = QTabWidget()
 
@@ -5613,6 +6710,43 @@ class EfficientManimWindow(QMainWindow):
             "Edit Keybindings…", self.show_keybindings, QKeySequence("Ctrl+,")
         )
         help_menu.addAction("About", self.show_about)
+        help_menu.addSeparator()
+
+        # ── MCP submenu ────────────────────────────────────────────────────
+        mcp_menu = help_menu.addMenu("🔌 MCP Agent")
+
+        mcp_status_action = QAction("MCP Status / Ping", self)
+        mcp_status_action.setToolTip("Ping the MCP agent and show current node count.")
+        mcp_status_action.triggered.connect(self._mcp_ping)
+        mcp_menu.addAction(mcp_status_action)
+
+        mcp_context_action = QAction("Inspect Scene Context (JSON)", self)
+        mcp_context_action.setToolTip("Show the full MCPContext JSON for the current scene.")
+        mcp_context_action.triggered.connect(self._mcp_show_context)
+        mcp_menu.addAction(mcp_context_action)
+
+        mcp_list_action = QAction("List All Commands", self)
+        mcp_list_action.setToolTip("Show all registered MCP command names.")
+        mcp_list_action.triggered.connect(self._mcp_list_commands)
+        mcp_menu.addAction(mcp_list_action)
+
+        mcp_log_action = QAction("Show Action Log", self)
+        mcp_log_action.setToolTip("Show every MCP command executed this session.")
+        mcp_log_action.triggered.connect(self._mcp_show_log)
+        mcp_menu.addAction(mcp_log_action)
+
+        mcp_menu.addSeparator()
+        mcp_compile_action = QAction("Force Compile Graph via MCP", self)
+        mcp_compile_action.triggered.connect(
+            lambda: self._mcp_exec_and_notify("compile_graph", {})
+        )
+        mcp_menu.addAction(mcp_compile_action)
+
+        mcp_save_action = QAction("Save Project via MCP", self)
+        mcp_save_action.triggered.connect(
+            lambda: self._mcp_exec_and_notify("save_project", {})
+        )
+        mcp_menu.addAction(mcp_save_action)
 
     # --- MENU ACTIONS ---
 
@@ -5654,6 +6788,151 @@ class EfficientManimWindow(QMainWindow):
         self.project_path = path
         self.project_name_edit.setText(Path(path).stem)
         self.save_project()
+
+    # ══════════════════════════════════════════════════════════════════════
+    # MCP MENU ACTIONS  (Help → MCP Agent submenu)
+    # ══════════════════════════════════════════════════════════════════════
+
+    def _mcp_ping(self) -> None:
+        """Ping the MCP agent and display status in a message box."""
+        if self.mcp is None:
+            QMessageBox.warning(self, "MCP Unavailable",
+                                "MCP Agent is not initialised.\n"
+                                "Make sure mcp.py is in the same directory as main.py.")
+            return
+        result = self.mcp.execute("ping")
+        if result.success:
+            node_count = result.data.get("node_count", "?")
+            QMessageBox.information(
+                self, "MCP Agent — OK",
+                f"✅ MCP Agent is alive.\n\n"
+                f"Nodes in current scene: {node_count}\n"
+                f"Registered commands: {len(self.mcp.list_commands())}"
+            )
+        else:
+            QMessageBox.critical(self, "MCP Error", f"Ping failed:\n{result.error}")
+
+    def _mcp_show_context(self) -> None:
+        """Open a dialog showing the full MCPContext JSON for the current scene."""
+        if self.mcp is None:
+            QMessageBox.warning(self, "MCP Unavailable", "MCP Agent is not initialised.")
+            return
+        result = self.mcp.execute("get_context")
+        if not result.success:
+            QMessageBox.critical(self, "MCP Error", result.error)
+            return
+        import json as _json
+        ctx_text = _json.dumps(result.data, indent=2, default=str)
+
+        dlg = QDialog(self)
+        dlg.setWindowTitle("MCP — Scene Context JSON")
+        dlg.resize(700, 550)
+        layout = QVBoxLayout(dlg)
+
+        lbl = QLabel(
+            f"Current scene: <b>{result.data.get('current_scene', '?')}</b>  |  "
+            f"Nodes: <b>{result.data.get('node_count', 0)}</b>  |  "
+            f"Assets: <b>{result.data.get('asset_count', 0)}</b>"
+        )
+        layout.addWidget(lbl)
+
+        txt = QTextEdit()
+        txt.setReadOnly(True)
+        txt.setFont(QFont("Consolas", 9))
+        txt.setPlainText(ctx_text)
+        layout.addWidget(txt)
+
+        btn_row = QHBoxLayout()
+        btn_copy = QPushButton("📋 Copy JSON")
+        btn_copy.clicked.connect(lambda: (
+            QApplication.clipboard().setText(ctx_text),
+            btn_copy.setText("✅ Copied!")
+        ))
+        btn_close = QPushButton("Close")
+        btn_close.clicked.connect(dlg.accept)
+        btn_row.addWidget(btn_copy)
+        btn_row.addStretch()
+        btn_row.addWidget(btn_close)
+        layout.addLayout(btn_row)
+        dlg.exec()
+
+    def _mcp_list_commands(self) -> None:
+        """Show all registered MCP command names in a dialog."""
+        if self.mcp is None:
+            QMessageBox.warning(self, "MCP Unavailable", "MCP Agent is not initialised.")
+            return
+        commands = self.mcp.list_commands()
+        text = "\n".join(f"  • {c}" for c in commands)
+        dlg = QDialog(self)
+        dlg.setWindowTitle(f"MCP — {len(commands)} Registered Commands")
+        dlg.resize(340, 500)
+        layout = QVBoxLayout(dlg)
+        lbl = QLabel(f"<b>{len(commands)} commands available:</b>")
+        layout.addWidget(lbl)
+        txt = QTextEdit()
+        txt.setReadOnly(True)
+        txt.setFont(QFont("Consolas", 9))
+        txt.setPlainText(text)
+        layout.addWidget(txt)
+        btn = QPushButton("Close")
+        btn.clicked.connect(dlg.accept)
+        layout.addWidget(btn)
+        dlg.exec()
+
+    def _mcp_show_log(self) -> None:
+        """Show every MCP command executed this session."""
+        if self.mcp is None:
+            QMessageBox.warning(self, "MCP Unavailable", "MCP Agent is not initialised.")
+            return
+        log = self.mcp.get_action_log()
+        if not log:
+            QMessageBox.information(self, "MCP Action Log", "No commands have been executed yet.")
+            return
+        import json as _json
+        lines = []
+        for i, entry in enumerate(log, 1):
+            payload_str = _json.dumps(entry.get("payload", {}), default=str)
+            lines.append(f"[{i:03}] {entry['command']}  {payload_str}")
+        text = "\n".join(lines)
+
+        dlg = QDialog(self)
+        dlg.setWindowTitle(f"MCP Action Log — {len(log)} entries")
+        dlg.resize(680, 480)
+        layout = QVBoxLayout(dlg)
+        txt = QTextEdit()
+        txt.setReadOnly(True)
+        txt.setFont(QFont("Consolas", 9))
+        txt.setPlainText(text)
+        layout.addWidget(txt)
+        btn_row = QHBoxLayout()
+        btn_copy = QPushButton("📋 Copy Log")
+        btn_copy.clicked.connect(lambda: QApplication.clipboard().setText(text))
+        btn_close = QPushButton("Close")
+        btn_close.clicked.connect(dlg.accept)
+        btn_row.addWidget(btn_copy)
+        btn_row.addStretch()
+        btn_row.addWidget(btn_close)
+        layout.addLayout(btn_row)
+        dlg.exec()
+
+    def _mcp_exec_and_notify(self, command: str, payload: dict) -> None:
+        """Execute a single MCP command and show a toast-style result notification."""
+        if self.mcp is None:
+            QMessageBox.warning(self, "MCP Unavailable", "MCP Agent is not initialised.")
+            return
+        result = self.mcp.execute(command, payload)
+        if result.success:
+            LOGGER.info(f"MCP [{command}] OK: {result.data}")
+            QMessageBox.information(
+                self, f"MCP — {command}",
+                f"✅ Command succeeded.\n\n{result.data}"
+            )
+        else:
+            LOGGER.error(f"MCP [{command}] FAILED: {result.error}")
+            QMessageBox.critical(
+                self, f"MCP — {command} failed",
+                f"❌ {result.error}"
+            )
 
     def show_shortcuts(self):
         """Show keyboard shortcuts dialog."""
@@ -5885,6 +7164,133 @@ class EfficientManimWindow(QMainWindow):
         else:
             event.accept()
 
+    # ═══════════════════════════════════════════════════════════════════════════
+    # AUTO-RELOAD SYSTEM IMPLEMENTATION
+    # ═══════════════════════════════════════════════════════════════════════════
+
+    def _compute_code_hash(self) -> str:
+        """Compute SHA256 hash of current code view content."""
+        try:
+            import hashlib
+            code = self.code_view.toPlainText()
+            return hashlib.sha256(code.encode()).hexdigest()
+        except Exception as e:
+            LOGGER.error(f"Error computing code hash: {e}")
+            return ""
+
+    def _compute_graph_hash(self) -> str:
+        """Compute hash of node graph structure (node IDs, connections)."""
+        try:
+            import hashlib
+            # Hash all node IDs + their parameters
+            node_data = []
+            for nid in sorted(self.nodes.keys()):
+                node = self.nodes[nid]
+                node_data.append(f"{nid}:{node.data.cls_name}:{sorted(node.data.params.items())}")
+            
+            # Hash all edges (connections)
+            edge_data = []
+            for node in self.nodes.values():
+                for wire in node.out_socket.links:
+                    edge_data.append(f"{id(wire)}")
+            
+            combined = "".join(node_data) + "".join(edge_data)
+            return hashlib.sha256(combined.encode()).hexdigest()
+        except Exception as e:
+            LOGGER.error(f"Error computing graph hash: {e}")
+            return ""
+
+    def _compute_assets_hash(self) -> str:
+        """Compute hash of asset timestamps and IDs."""
+        try:
+            import hashlib
+            asset_data = []
+            for asset in ASSETS.get_list():
+                try:
+                    mtime = os.path.getmtime(asset.current_path)
+                    asset_data.append(f"{asset.id}:{mtime}")
+                except Exception:
+                    asset_data.append(f"{asset.id}:missing")
+            
+            combined = "".join(asset_data)
+            return hashlib.sha256(combined.encode()).hexdigest()
+        except Exception as e:
+            LOGGER.error(f"Error computing assets hash: {e}")
+            return ""
+
+    def _auto_reload_tick(self):
+        """
+        Called every 3 seconds by auto_reload_timer.
+        
+        Detects changes in code, graph, or assets.
+        Queues re-render if state changed (with debounce).
+        """
+        try:
+            # Skip if disabled or AI-generated code
+            if not self.auto_reload_enabled or self.is_ai_generated_code:
+                return
+            
+            # Skip if render already in progress (prevent flooding)
+            if self._render_in_progress:
+                return
+            
+            # Compute current state
+            code_hash = self._compute_code_hash()
+            graph_hash = self._compute_graph_hash()
+            assets_hash = self._compute_assets_hash()
+            
+            # Check for changes
+            code_changed = (code_hash != self._last_code_hash)
+            graph_changed = (graph_hash != self._last_graph_hash)
+            assets_changed = (assets_hash != self._last_assets_hash)
+            
+            # Update hashes for next iteration
+            self._last_code_hash = code_hash
+            self._last_graph_hash = graph_hash
+            self._last_assets_hash = assets_hash
+            
+            # If anything changed, queue a render with debounce
+            if code_changed or graph_changed or assets_changed:
+                LOGGER.debug(
+                    f"Auto-reload: change detected "
+                    f"(code={code_changed}, graph={graph_changed}, assets={assets_changed})"
+                )
+                self._pending_auto_render = True
+                
+                # Debounce: wait 500ms before rendering to avoid flooding
+                # if user is making rapid edits
+                self._auto_render_debounce.stop()
+                self._auto_render_debounce.start(500)
+        
+        except Exception as e:
+            LOGGER.error(f"Error in _auto_reload_tick: {e}")
+
+    def _trigger_auto_render(self):
+        """
+        Called after debounce period expires.
+        
+        Triggers re-render if there's a pending change.
+        """
+        try:
+            if not self._pending_auto_render:
+                return
+            
+            self._pending_auto_render = False
+            
+            # Check if preview is enabled
+            if not SETTINGS.get("ENABLE_PREVIEW", True, type=bool):
+                return
+            
+            LOGGER.info("Auto-reload: triggering render due to detected changes")
+            
+            # Queue all mobject nodes for re-render
+            for node in self.nodes.values():
+                if node.data.type == NodeType.MOBJECT:
+                    self.queue_render(node)
+        
+        except Exception as e:
+            LOGGER.error(f"Error in _trigger_auto_render: {e}")
+
     def undo_action(self):
         """Undo last action."""
         if self.undo_manager.undo():
@@ -6071,22 +7477,24 @@ class EfficientManimWindow(QMainWindow):
         self.fit_view()
         LOGGER.info(f"Auto-layout applied to {len(nodes_list)} nodes")
 
-    def add_node(self, type_str, cls_name, params=None, pos=(0, 0), nid=None):
-        # FIX: Normalize string to uppercase to handle "Mobject" (from UI) and "MOBJECT" (from JSON)
+    def add_node(self, type_str, cls_name, params=None, pos=(0, 0), nid=None, name=None):
+        # Normalize type string to handle "Mobject" / "MOBJECT" / "mobject" variants
         is_mobject = str(type_str).upper() == "MOBJECT"
         ntype = NodeType.MOBJECT if is_mobject else NodeType.ANIMATION
 
-        data = NodeData(cls_name, ntype, cls_name)
+        # name defaults to cls_name when not provided (preserves all existing callers)
+        display_name = name if name else cls_name
+        data = NodeData(display_name, ntype, cls_name)
         if nid:
             data.id = nid
         if params:
-            data.params = params
+            data.params = dict(params)
         data.pos_x, data.pos_y = pos
 
         item = NodeItem(data)
         self.scene.addItem(item)
         self.nodes[data.id] = item
-        LOGGER.info(f"Created {cls_name}")
+        LOGGER.info(f"Created {cls_name} as '{display_name}' id={data.id[:8]}")
         self.compile_graph()  # Auto-Refresh
         return item
 
@@ -6209,6 +7617,11 @@ class EfficientManimWindow(QMainWindow):
         ]
         played = set()
 
+        # Voiceover precision tracking: (offset_ms: int, AudioSegment) pairs
+        # built up across all animation batches, then merged into one file.
+        _vo_entries: list[tuple[int, object]] = []  # (offset_ms, pydub.AudioSegment)
+        _timeline_ms: int = 0  # running cursor through the scene timeline
+
         while animations:
             ready_anims = []
             for anim in animations:
@@ -6227,64 +7640,187 @@ class EfficientManimWindow(QMainWindow):
                 break
 
             play_lines = []
+            # Per-batch maximum duration in ms — drives timeline advance
+            _batch_max_ms: int = 0
 
-            # Process this batch of animations
             # Process this batch of animations
             for anim, targets in ready_anims:
                 anim_args = targets.copy()
 
-                # Check for Voiceover Sync
-
-                # CHECK FOR MISSING MOBJECT PARAM
+                # Validate missing mobject param
                 if "mobject" in anim.data.params or "mobjects" in anim.data.params:
-                    # Check if the value is actually a valid UUID reference
-                    val = anim.data.params.get("mobject") or anim.data.params.get(
-                        "mobjects"
-                    )
+                    val = anim.data.params.get("mobject") or anim.data.params.get("mobjects")
                     if not val or (isinstance(val, str) and len(val) != 36):
                         LOGGER.warn(
                             f"Animation '{anim.data.name}' has a 'mobject' parameter but no target selected!"
                         )
-                        # We could also popup a message here, but logging is safer during compilation loop
+
+                # ── Voiceover precision sync ───────────────────────────────
+                # We do NOT mutate anim.data.params here.
+                # Instead we track an override for run_time separately.
+                _rt_override_s: float | None = None
 
                 if anim.data.audio_asset_id:
-                    path = ASSETS.get_asset_path(anim.data.audio_asset_id)
-                    if path and PYDUB_AVAILABLE:
-                        # Clean path for Python string
-                        clean_path = path.replace("\\", "/")
+                    _vo_path = ASSETS.get_asset_path(anim.data.audio_asset_id)
+                    
+                    # ═════════════════════════════════════════════════════
+                    # CRITICAL VALIDATION: Check file actually exists before
+                    # attempting to load it. Prevents silent render failure.
+                    # ═════════════════════════════════════════════════════
+                    if _vo_path is None:
+                        LOGGER.error(
+                            f"Voiceover for '{anim.data.name}': asset file missing or invalid. "
+                            f"Render will fail unless fixed."
+                        )
+                    elif not os.path.exists(_vo_path):
+                        LOGGER.error(
+                            f"Voiceover for '{anim.data.name}': file not found at {_vo_path}. "
+                            f"Skipping this voiceover."
+                        )
+                    elif not PYDUB_AVAILABLE:
+                        # pydub not installed — fall back to add_sound without merge
+                        _clean = _vo_path.replace("\\", "/")
+                        code += f"        # Voiceover for {anim.data.name} (pydub unavailable — no precision sync)\n"
+                        code += f"        self.add_sound(r'{_clean}')\n"
+                        LOGGER.warn(
+                            f"Voiceover for '{anim.data.name}': pydub unavailable, using fallback add_sound()"
+                        )
+                    else:
+                        # ═════════════════════════════════════════════════════
+                        # PYDUB AVAILABLE + FILE EXISTS: Proceed with precision
+                        # ═════════════════════════════════════════════════════
+                        try:
+                            from pydub import AudioSegment as _AS
+                            _seg = _AS.from_file(_vo_path)
+                            _duration_ms = len(_seg)  # pydub uses ms
 
-                        # Inject Audio Logic
-                        audio_var = f"audio_{anim.data.id[:6]}"
-                        code += f"        # Voiceover for {anim.data.name}\n"
-                        code += f"        self.add_sound(r'{clean_path}')\n"
-                        code += f"        {audio_var} = AudioSegment.from_file(r'{clean_path}')\n"
+                            # Validate: audio must have positive duration
+                            if _duration_ms <= 0:
+                                LOGGER.error(
+                                    f"Voiceover for '{anim.data.name}' has zero duration — skipping."
+                                )
+                            else:
+                                # Validate: store if this node already has a duration
+                                # recorded and detect drift (> 50ms = warning)
+                                recorded_s = anim.data.voiceover_duration
+                                if recorded_s > 0:
+                                    drift_ms = abs(_duration_ms - int(recorded_s * 1000))
+                                    if drift_ms > 50:
+                                        LOGGER.warn(
+                                            f"Voiceover drift detected for '{anim.data.name}': "
+                                            f"recorded={recorded_s:.3f}s, "
+                                            f"actual={_duration_ms/1000:.3f}s, "
+                                            f"drift={drift_ms}ms"
+                                        )
 
-                        # Override run_time parameter
-                        anim.data.params["run_time"] = f"{audio_var}.duration_seconds"
+                                # Update stored duration to the exact measured value
+                                anim.data.voiceover_duration = round(_duration_ms / 1000.0, 3)
 
-                # Format parameters
+                                # Record for merged-track builder
+                                _vo_entries.append((_timeline_ms, _seg))
+                                LOGGER.info(
+                                    f"Voiceover '{anim.data.name}': "
+                                    f"offset={_timeline_ms}ms duration={_duration_ms}ms file={_vo_path}"
+                                )
+
+                                # run_time override: match animation duration to audio exactly
+                                _rt_override_s = round(_duration_ms / 1000.0, 3)
+                                _batch_max_ms = max(_batch_max_ms, _duration_ms)
+
+                        except Exception as _e:
+                            LOGGER.error(
+                                f"pydub failed loading voiceover for '{anim.data.name}' from {_vo_path}: {_e}"
+                            )
+
+                # ── Format parameters ─────────────────────────────────────
+                _used_run_time = False
                 for k, v in anim.data.params.items():
-                    if not k.startswith("_") and anim.data.is_param_enabled(k):
-                        if (
-                            k == "run_time"
-                            and isinstance(v, str)
-                            and "duration_seconds" in v
-                        ):
-                            # It's a variable reference we just injected, don't format it as a string
-                            anim_args.append(f"{k}={v}")
+                    if k.startswith("_") or not anim.data.is_param_enabled(k):
+                        continue
+                    if k == "run_time":
+                        _used_run_time = True
+                        if _rt_override_s is not None:
+                            # Use the pydub-computed exact duration
+                            anim_args.append(f"run_time={_rt_override_s}")
+                        elif isinstance(v, str) and "duration_seconds" in v:
+                            # Legacy stale expression from old compile: reset it
+                            anim_args.append("run_time=1.0")
                         else:
                             v_clean = self._format_param_value(k, v, anim.data)
-                            anim_args.append(f"{k}={v_clean}")
+                            if v_clean is not None:
+                                anim_args.append(f"{k}={v_clean}")
+                        continue
+                    v_clean = self._format_param_value(k, v, anim.data)
+                    if v_clean is not None:
+                        anim_args.append(f"{k}={v_clean}")
+
+                # Inject run_time from override even if not already in params
+                if _rt_override_s is not None and not _used_run_time:
+                    anim_args.append(f"run_time={_rt_override_s}")
+
+                # Track batch max for non-voiceover animations too
+                if _rt_override_s is None:
+                    try:
+                        _rt_raw = anim.data.params.get("run_time", "1.0")
+                        if not (isinstance(_rt_raw, str) and "duration_seconds" in _rt_raw):
+                            _batch_max_ms = max(_batch_max_ms, int(float(_rt_raw) * 1000))
+                        else:
+                            _batch_max_ms = max(_batch_max_ms, 1000)
+                    except Exception:
+                        _batch_max_ms = max(_batch_max_ms, 1000)
 
                 play_lines.append(f"{anim.data.cls_name}({', '.join(anim_args)})")
                 played.add(anim)
 
             if play_lines:
                 code += f"        self.play({', '.join(play_lines)})\n"
-                # Add a small wait after animations to prevent audio cutoff
                 code += "        self.wait(0.5)\n"
 
+            # Advance timeline cursor: batch duration + 500ms wait
+            _timeline_ms += _batch_max_ms + 500
+
             animations = [a for a in animations if a not in played]
+
+        # ── Merged voiceover track injection ──────────────────────────────
+        # If any animation nodes had voiceovers, build a single merged WAV
+        # with millisecond-accurate silence padding and inject it once at
+        # scene start. This prevents drift and clipping across all voiceovers.
+        if _vo_entries and PYDUB_AVAILABLE:
+            try:
+                from pydub import AudioSegment as _AS
+                # Total merged track length = last offset + its segment duration + 500ms tail
+                _last_offset_ms, _last_seg = max(_vo_entries, key=lambda x: x[0])
+                _total_ms = _last_offset_ms + len(_last_seg) + 500
+
+                # Create silence canvas of the full required length
+                _merged = _AS.silent(duration=_total_ms,
+                                     frame_rate=_last_seg.frame_rate)
+
+                # Overlay each segment at its exact ms offset
+                for _offset_ms, _seg in _vo_entries:
+                    # Unify frame rates to prevent sample rate mismatch
+                    if _seg.frame_rate != _merged.frame_rate:
+                        _seg = _seg.set_frame_rate(_merged.frame_rate)
+                    _merged = _merged.overlay(_seg, position=_offset_ms)
+
+                # Export to a session-scoped temp file
+                _merged_path = AppPaths.TEMP_DIR / f"merged_vo_{uuid.uuid4().hex[:8]}.wav"
+                _merged.export(str(_merged_path), format="wav")
+                _merged_posix = _merged_path.as_posix()
+
+                # Inject a single add_sound call at the very start of construct()
+                _inject = f"        self.add_sound(r'{_merged_posix}')  # merged voiceover track\n"
+                code = code.replace(
+                    "class GeneratedScene(Scene):\n    def construct(self):\n",
+                    f"class GeneratedScene(Scene):\n    def construct(self):\n{_inject}",
+                    1,
+                )
+                LOGGER.info(
+                    f"Merged voiceover track: {len(_vo_entries)} segment(s), "
+                    f"total={_total_ms}ms → {_merged_path.name}"
+                )
+            except Exception as _e:
+                LOGGER.error(f"Merged voiceover build failed: {_e}")
 
         self.code_view.setText(code)
         return code
@@ -6376,8 +7912,20 @@ class EfficientManimWindow(QMainWindow):
         AppPaths.force_cleanup_old_files(age_seconds=300)
 
     def process_render_queue(self):
-        """Generates a dedicated, isolated script for Mobject previewing."""
+        """
+        Generates a dedicated, isolated script for Mobject previewing.
+        
+        CRITICAL FIX: Respect render-in-progress flag to prevent concurrent renders.
+        """
         try:
+            # ══════════════════════════════════════════════════════════════════
+            # RENDER FLOODING PROTECTION: Don't start another render if one is
+            # already in progress. This prevents UI freeze and memory leaks.
+            # ══════════════════════════════════════════════════════════════════
+            if self._render_in_progress:
+                LOGGER.debug("Skipping queue processing: render already in progress")
+                return
+            
             if not self.render_queue:
                 return
 
@@ -6579,7 +8127,7 @@ class EfficientManimWindow(QMainWindow):
 
             # Detect scene class name from code
             scene_class = detect_scene_class(scene_code)
-            
+
             # If no Scene subclass found, create a basic one
             if "class " not in scene_code or "Scene" not in scene_code:
                 scene_code = "from manim import *\n\nclass MyScene(Scene):\n    def construct(self):\n        pass\n"
@@ -6907,7 +8455,8 @@ class EfficientManimWindow(QMainWindow):
                         )
 
                         node = self.add_node(
-                            type_str, nd["cls_name"], nd["params"], nd["pos"], nd["id"]
+                            type_str, nd["cls_name"], nd["params"], nd["pos"], nd["id"],
+                            name=nd.get("name", nd["cls_name"])
                         )
 
                         # Restore metadata
@@ -6985,4 +8534,3 @@ if __name__ == "__main__":
     win = EfficientManimWindow()
     win.show()
     sys.exit(app.exec())
-    

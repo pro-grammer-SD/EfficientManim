@@ -587,5 +587,3 @@ QToolBar {
 
 /* End of Light Mode Stylesheet */
 """
-
-

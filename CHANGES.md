@@ -116,3 +116,4 @@ Initial production release including:
 - Usage tracking and Recents pane
 - Custom keybindings
 - Light mode design system
+- A new MCP system ([mcp.py](mcp.py) for source code)
