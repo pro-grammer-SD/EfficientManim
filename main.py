@@ -3,23 +3,30 @@ import ctypes
 import sys
 
 if sys.platform == "win32":
-    ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID("com.programmersd.efficientmanim")
+    ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID(
+        "com.programmersd.efficientmanim"
+    )
 
 import struct
 
 # Audio handling
 try:
     from pydub import AudioSegment
+
     PYDUB_AVAILABLE = True
 except ImportError:
     PYDUB_AVAILABLE = False
-    print("WARNING: pydub not found. Audio duration features will be disabled. 'pip install pydub'")
+    print(
+        "WARNING: pydub not found. Audio duration features will be disabled. 'pip install pydub'"
+    )
 
 import os
 from google import genai
 from google.genai import types
+from themes import ThemeManager
 
-def generate(prompt, on_chunk, model="gemini-3-flash-preview"):
+
+def generate(prompt, on_chunk, model="gemini-2.5-flash-preview"):
     """
     Gemini AI Integration Hook.
     Retrieves API Key from Settings and uses selected model.
@@ -31,25 +38,16 @@ def generate(prompt, on_chunk, model="gemini-3-flash-preview"):
 
     try:
         client = genai.Client(api_key=api_key)
-        contents = [
-            types.Content(
-                role="user",
-                parts=[types.Part.from_text(text=prompt)],
-            ),
-        ]
-        generate_content_config = types.GenerateContentConfig(
-            thinking_config=types.ThinkingConfig(thinking_level="HIGH"),
-        )
-
+        # Stream content using the simple text API
         for chunk in client.models.generate_content_stream(
             model=model,
-            contents=contents,
-            config=generate_content_config,
+            contents=prompt,
         ):
             if chunk.text:
                 on_chunk(chunk.text)
     except Exception as e:
         on_chunk(f"❌ Gemini Error: {str(e)}")
+
 
 # ==============================================================================
 # EFFICIENT MANIM ULTIMATE - MONOLITHIC SOURCE
@@ -74,34 +72,86 @@ from datetime import datetime
 
 # PySide6 Imports
 from PySide6.QtWidgets import (
-    QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
-    QSplitter, QTabWidget, QTextEdit, QPlainTextEdit, QTreeWidget, QTreeWidgetItem,
-    QGraphicsView, QGraphicsScene, QGraphicsItem, QGraphicsPathItem,
-    QLabel, QLineEdit, QSpinBox, QDoubleSpinBox,
-    QCheckBox, QPushButton, QDialog, QFormLayout, QComboBox, QColorDialog,
-    QScrollArea, QFrame, QMessageBox, QMenu,
-    QFileDialog, QListWidget, QListWidgetItem,
-    QStyle, QSlider, QGroupBox
+    QApplication,
+    QMainWindow,
+    QWidget,
+    QVBoxLayout,
+    QHBoxLayout,
+    QSplitter,
+    QTabWidget,
+    QTextEdit,
+    QPlainTextEdit,
+    QTreeWidget,
+    QTreeWidgetItem,
+    QGraphicsView,
+    QGraphicsScene,
+    QGraphicsItem,
+    QGraphicsPathItem,
+    QLabel,
+    QLineEdit,
+    QSpinBox,
+    QDoubleSpinBox,
+    QCheckBox,
+    QPushButton,
+    QDialog,
+    QFormLayout,
+    QComboBox,
+    QColorDialog,
+    QScrollArea,
+    QFrame,
+    QMessageBox,
+    QMenu,
+    QFileDialog,
+    QListWidget,
+    QListWidgetItem,
+    QStyle,
+    QSlider,
+    QGroupBox,
+    QTableWidget,
+    QTableWidgetItem,
+    QInputDialog,
 )
 from PySide6.QtCore import (
-    Qt, QKeyCombination, Signal, QObject, QThread, QPointF, QRectF, QTimer,
-    QSettings, QSize, QMimeData, QStandardPaths, QUrl
+    Qt,
+    QKeyCombination,
+    Signal,
+    QObject,
+    QThread,
+    QPointF,
+    QRectF,
+    QTimer,
+    QSettings,
+    QSize,
+    QMimeData,
+    QStandardPaths,
+    QUrl,
 )
 from PySide6.QtGui import (
-    QAction, QColor, QPen, QBrush, QFont, QPainter, QPixmap, QKeySequence, QFontDatabase, QIcon, QPainterPath,
-    QDrag, QTextCursor, QImage
+    QAction,
+    QColor,
+    QPen,
+    QBrush,
+    QFont,
+    QPainter,
+    QPixmap,
+    QKeySequence,
+    QIcon,
+    QPainterPath,
+    QDrag,
+    QTextCursor,
+    QImage,
 )
 from PySide6.QtMultimedia import QMediaPlayer, QAudioOutput
 from PySide6.QtMultimediaWidgets import QVideoWidget
 
-# Type Safety Utilities
-from utils import FontManager, ColorValidator, ImageValidator, PointValidator, StateValidator
+
 
 # Manim Import (Safe)
 try:
     import manim
     from manim import *
     from manim.utils.color import ManimColor, ParsableManimColor
+
     MANIM_AVAILABLE = True
 except ImportError:
     MANIM_AVAILABLE = False
@@ -112,20 +162,29 @@ except ImportError:
 # ==============================================================================
 
 APP_NAME = "EfficientManim"
-APP_VERSION = "0.2.0-preview"
-PROJECT_EXT = ".efp" # EfficientManim Project (Zip)
+APP_VERSION = "2.0.1"
+PROJECT_EXT = ".efp"  # EfficientManim Project (Zip)
+
 
 class AppPaths:
     """Centralized path management."""
-    USER_DATA = Path(QStandardPaths.writableLocation(QStandardPaths.StandardLocation.AppDataLocation)) / "EfficientManim"
+
+    USER_DATA = (
+        Path(
+            QStandardPaths.writableLocation(
+                QStandardPaths.StandardLocation.AppDataLocation
+            )
+        )
+        / "EfficientManim"
+    )
     TEMP_DIR = Path(tempfile.gettempdir()) / "EfficientManim_Session"
     FONTS_DIR = Path("fonts")
-    
+
     @staticmethod
     def ensure_dirs():
         """Ensure all required directories exist, with force cleanup of temp."""
         AppPaths.USER_DATA.mkdir(parents=True, exist_ok=True)
-        
+
         # Force re-create temp session dir on startup (handles locked files)
         if AppPaths.TEMP_DIR.exists():
             try:
@@ -134,7 +193,7 @@ class AppPaths:
             except PermissionError:
                 # If normal removal fails, try to remove individual files and directories
                 try:
-                    for item in AppPaths.TEMP_DIR.rglob('*'):
+                    for item in AppPaths.TEMP_DIR.rglob("*"):
                         try:
                             if item.is_file():
                                 item.unlink(missing_ok=True)
@@ -148,20 +207,23 @@ class AppPaths:
                     except (PermissionError, OSError):
                         pass
                 except Exception as e:
-                    print(f"⚠️ Warning: Could not fully clear temp dir (locked files): {e}")
+                    print(
+                        f"⚠️ Warning: Could not fully clear temp dir (locked files): {e}"
+                    )
             except Exception as e:
                 print(f"⚠️ Warning: Could not clear temp dir: {e}")
-        
+
         # Recreate clean temp directory
         AppPaths.TEMP_DIR.mkdir(parents=True, exist_ok=True)
-    
+
     @staticmethod
     def force_cleanup_old_files(age_seconds=3600):
         """Remove old files from temp directory (older than age_seconds)."""
         try:
             import time
+
             current_time = time.time()
-            for item in AppPaths.TEMP_DIR.rglob('*'):
+            for item in AppPaths.TEMP_DIR.rglob("*"):
                 try:
                     if item.is_file():
                         mtime = item.stat().st_mtime
@@ -169,48 +231,145 @@ class AppPaths:
                             item.unlink(missing_ok=True)
                 except (PermissionError, OSError):
                     pass
-        except Exception as e:
+        except Exception:
             pass  # Silently ignore cleanup errors
 
-class Theme:
-    """Application Styling."""
-    PRIMARY = "#3498db"
-    SECONDARY = "#2c3e50"
-    ACCENT = "#e67e22"
-    BG_LIGHT = "#ecf0f1"
-    BG_DARK = "#bdc3c7"
-    TEXT = "#2c3e50"
-    
-    STYLESHEET = f"""
-    QMainWindow {{ background-color: {BG_LIGHT}; }}
-    QWidget {{ font-family: "Geist", "Segoe UI", sans-serif; font-size: 13px; color: {TEXT}; }}
-    QSplitter::handle {{ background-color: {BG_DARK}; width: 2px; }}
-    QTabWidget::pane {{ border: 1px solid {BG_DARK}; background: white; border-radius: 4px; }}
-    QTabBar::tab {{ background: {BG_LIGHT}; border: 1px solid {BG_DARK}; padding: 6px 12px; margin-right: 2px; border-top-left-radius: 4px; border-top-right-radius: 4px; }}
-    QTabBar::tab:selected {{ background: white; border-bottom: 2px solid {PRIMARY}; font-weight: bold; color: {PRIMARY}; }}
-    QPushButton {{ background-color: white; border: 1px solid {BG_DARK}; padding: 6px 12px; border-radius: 4px; }}
-    QPushButton:hover {{ background-color: #f7f9f9; border-color: {PRIMARY}; }}
-    QPushButton:pressed {{ background-color: {BG_DARK}; }}
-    QLineEdit, QSpinBox, QDoubleSpinBox, QComboBox {{ padding: 4px; border: 1px solid {BG_DARK}; border-radius: 4px; background: white; }}
-    QTextEdit, QPlainTextEdit, QListWidget, QTreeWidget {{ border: 1px solid {BG_DARK}; border-radius: 4px; background: white; }}
-    QLabel#PreviewLabel {{ border: 2px dashed #bdc3c7; background-color: #ecf0f1; color: #7f8c8d; }}
+
+def detect_scene_class(code: str) -> str:
     """
+    Detect Scene class name in Python code.
+    
+    Args:
+        code: Python source code
+        
+    Returns:
+        Class name of the first Scene subclass found, or "Scene" if none found
+    """
+    # Try to find class definitions that inherit from Scene
+    # Pattern: class ClassName(Scene):
+    pattern = r'class\s+(\w+)\s*\(\s*Scene\s*\)'
+    matches = re.findall(pattern, code)
+    
+    if matches:
+        return matches[0]  # Return first matching Scene subclass
+    
+    # Fallback: return "Scene" if no subclass found
+    return "Scene"
+
+
+# Theme system - Light mode only, no switching
+LIGHT_MODE = True  # Always true
+
 
 # ==============================================================================
 # 2. LOGGING SYSTEM
 # ==============================================================================
 
+
 class LogManager(QObject):
-    log_signal = Signal(str, str) # Level, Message
+    log_signal = Signal(str, str)  # Level, Message
 
     def __init__(self):
         super().__init__()
 
-    def info(self, msg): self.log_signal.emit("INFO", str(msg))
-    def warn(self, msg): self.log_signal.emit("WARN", str(msg))
-    def error(self, msg): self.log_signal.emit("ERROR", str(msg))
-    def manim(self, msg): self.log_signal.emit("MANIM", str(msg))
-    def ai(self, msg): self.log_signal.emit("AI", str(msg))
+    def info(self, msg):
+        self.log_signal.emit("INFO", str(msg))
+
+    def warn(self, msg):
+        self.log_signal.emit("WARN", str(msg))
+
+    def error(self, msg):
+        self.log_signal.emit("ERROR", str(msg))
+
+    def manim(self, msg):
+        self.log_signal.emit("MANIM", str(msg))
+
+    def ai(self, msg):
+        self.log_signal.emit("AI", str(msg))
+
+
+# ==============================================================================
+# USER DATA TRACKING (Usage Stats, Recents, Keybindings)
+# ==============================================================================
+
+
+class UserDataManager:
+    """Tracks usage statistics, recent projects, and persists user preferences."""
+
+    _BASE_DIR = Path.home() / ".efficientmanim"
+    _RECENTS_FILE = _BASE_DIR / "recents.json"
+    _USAGE_FILE = _BASE_DIR / "usage.json"
+    _KEYBINDINGS_FILE = _BASE_DIR / "keybindings.json"
+
+    def __init__(self):
+        self._BASE_DIR.mkdir(parents=True, exist_ok=True)
+        self._recents: list = self._load_json(self._RECENTS_FILE, [])
+        self._usage: dict = self._load_json(self._USAGE_FILE, {})
+        self._keybindings: dict = self._load_json(self._KEYBINDINGS_FILE, {})
+
+    @staticmethod
+    def _load_json(path: Path, default):
+        try:
+            if path.exists():
+                return json.loads(path.read_text(encoding="utf-8"))
+        except Exception:
+            pass
+        return default
+
+    @staticmethod
+    def _save_json(path: Path, data) -> None:
+        try:
+            path.write_text(json.dumps(data, indent=2), encoding="utf-8")
+        except Exception:
+            pass
+
+    def add_recent(self, path: str) -> None:
+        if path in self._recents:
+            self._recents.remove(path)
+        self._recents.insert(0, path)
+        self._recents = self._recents[:10]
+        self._save_json(self._RECENTS_FILE, self._recents)
+
+    def get_recents(self) -> list:
+        self._recents = [p for p in self._recents if Path(p).exists()]
+        return list(self._recents)
+
+    def record_use(self, class_name: str, node_type: str = "mobject") -> None:
+        """Increment counter for class_name under typed bucket (mobject/animation)."""
+        bucket = "animation" if str(node_type).lower() in ("animation", "anim") else "mobject"
+        if not isinstance(self._usage, dict):
+            self._usage = {}
+        typed = self._usage.setdefault(bucket, {})
+        typed[class_name] = typed.get(class_name, 0) + 1
+        self._save_json(self._USAGE_FILE, self._usage)
+
+    def top_by_type(self, node_type: str, n: int = 5) -> list:
+        """Return [(class_name, count), ...] for the top-n in given type bucket."""
+        bucket = "animation" if str(node_type).lower() in ("animation", "anim") else "mobject"
+        typed = self._usage.get(bucket, {}) if isinstance(self._usage, dict) else {}
+        return sorted(typed.items(), key=lambda kv: kv[1], reverse=True)[:n]
+
+    def top_used(self, n: int = 5) -> list:
+        """Legacy: flat list of top-n class names across all types."""
+        combined = {}
+        if isinstance(self._usage, dict):
+            for bucket in ("mobject", "animation"):
+                for k, v in self._usage.get(bucket, {}).items():
+                    combined[k] = combined.get(k, 0) + v
+        return sorted(combined, key=lambda k: combined[k], reverse=True)[:n]
+
+    def get_keybinding(self, action: str, default: str = "") -> str:
+        return self._keybindings.get(action, default)
+
+    def set_keybinding(self, action: str, shortcut: str) -> None:
+        self._keybindings[action] = shortcut
+        self._save_json(self._KEYBINDINGS_FILE, self._keybindings)
+
+    def get_all_keybindings(self) -> dict:
+        return dict(self._keybindings)
+
+
+USER_DATA = UserDataManager()
 
 LOGGER = LogManager()
 
@@ -218,8 +377,10 @@ LOGGER = LogManager()
 # 3. SETTINGS MANAGER
 # ==============================================================================
 
+
 class SettingsManager(QObject):
     """Persistent Settings via QSettings."""
+
     settings_changed = Signal()
 
     def __init__(self):
@@ -231,11 +392,21 @@ class SettingsManager(QObject):
     def get(self, key, default=None, type=None):
         val = self._store.value(key, default)
         if type == bool:
-            return str(val).lower() == 'true'
+            return str(val).lower() == "true"
+        if type == int:
+            try:
+                return int(val)  # type: ignore[arg-type]
+            except (TypeError, ValueError):
+                return default
+        if type == float:
+            try:
+                return float(val)  # type: ignore[arg-type]
+            except (TypeError, ValueError):
+                return default
         return val
 
     def set(self, key, value):
-        self._store.setValue(key, value)
+        self._store.setValue(key, str(value) if value is not None else "")
         if key == "GEMINI_API_KEY":
             self.apply_env()
         self.settings_changed.emit()
@@ -243,7 +414,8 @@ class SettingsManager(QObject):
     def apply_env(self):
         key = self.get("GEMINI_API_KEY", "")
         if key:
-            os.environ["GEMINI_API_KEY"] = key
+            os.environ["GEMINI_API_KEY"] = str(key)
+
 
 SETTINGS = SettingsManager()
 
@@ -251,128 +423,139 @@ SETTINGS = SettingsManager()
 # 3.5 UNDO/REDO SYSTEM
 # ==============================================================================
 
+
 class UndoRedoAction:
     """Base class for undo/redo actions."""
+
     def __init__(self, description):
         self.description = description
-    
+
     def undo(self):
         raise NotImplementedError
-    
+
     def redo(self):
         raise NotImplementedError
 
+
 class NodeAddAction(UndoRedoAction):
     """Action for adding a node."""
+
     def __init__(self, window, node_item, node_data):
         super().__init__(f"Add {node_data.cls_name}")
         self.window = window
         self.node_item = node_item
         self.node_data = node_data
-    
+
     def undo(self):
         if self.node_data.id in self.window.nodes:
             self.window.remove_node(self.window.nodes[self.node_data.id])
-    
+
     def redo(self):
         if self.node_data.id not in self.window.nodes:
             self.window.scene.addItem(self.node_item)
             self.window.nodes[self.node_data.id] = self.node_item
 
+
 class NodeParamChangeAction(UndoRedoAction):
     """Action for changing node parameters."""
+
     def __init__(self, node_data, key, old_val, new_val):
         super().__init__(f"Change {key}")
         self.node_data = node_data
         self.key = key
         self.old_val = old_val
         self.new_val = new_val
-    
+
     def undo(self):
         self.node_data.params[self.key] = self.old_val
-    
+
     def redo(self):
         self.node_data.params[self.key] = self.new_val
 
+
 class UndoRedoManager:
     """Manages undo/redo history."""
+
     def __init__(self, max_history=50):
         self.history = []
         self.current_index = -1
         self.max_history = max_history
-    
+
     def push(self, action):
         """Add action and truncate redo stack."""
-        self.history = self.history[:self.current_index + 1]
+        self.history = self.history[: self.current_index + 1]
         self.history.append(action)
         self.current_index += 1
         if len(self.history) > self.max_history:
             self.history.pop(0)
             self.current_index -= 1
-    
+
     def undo(self):
         if self.current_index >= 0:
             self.history[self.current_index].undo()
             self.current_index -= 1
             return True
         return False
-    
+
     def redo(self):
         if self.current_index < len(self.history) - 1:
             self.current_index += 1
             self.history[self.current_index].redo()
             return True
         return False
-    
+
     def can_undo(self):
         return self.current_index >= 0
-    
+
     def can_redo(self):
         return self.current_index < len(self.history) - 1
+
 
 # ==============================================================================
 # 3.6 ENHANCED LOGGING WITH TIMESTAMPS
 # ==============================================================================
 
+
 class EnhancedLogManager(LogManager):
     """Enhanced logging with file persistence."""
-    
+
     def __init__(self):
         super().__init__()
         self.log_file = AppPaths.USER_DATA / "session.log"
         self.session_logs = []
-    
+
     def _write_log(self, level, msg):
         """Write to both memory and file."""
         timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S.%f")[:-3]
         log_entry = f"[{timestamp}] {level}: {msg}"
         self.session_logs.append(log_entry)
-        
+
         try:
             with open(self.log_file, "a") as f:
                 f.write(log_entry + "\n")
         except:
             pass
-    
+
     def info(self, msg):
         self._write_log("INFO", str(msg))
         self.log_signal.emit("INFO", str(msg))
-    
+
     def warn(self, msg):
         self._write_log("WARN", str(msg))
         self.log_signal.emit("WARN", str(msg))
-    
+
     def error(self, msg):
         self._write_log("ERROR", str(msg))
         self.log_signal.emit("ERROR", str(msg))
-    
+
     def manim(self, msg):
         self._write_log("MANIM", str(msg))
         self.log_signal.emit("MANIM", str(msg))
-    
+
     def ai(self, msg):
         self._write_log("AI", str(msg))
         self.log_signal.emit("AI", str(msg))
+
 
 # Update LOGGER to use enhanced version
 LOGGER = EnhancedLogManager()
@@ -381,65 +564,41 @@ LOGGER = EnhancedLogManager()
 # 3.7 THEME MANAGER
 # ==============================================================================
 
-class ThemeManager:
-    """Manages application themes."""
-    LIGHT_THEME = "light"
-    DARK_THEME = "dark"
-    
-    def __init__(self):
-        self.current_theme = SETTINGS.get("THEME", self.LIGHT_THEME)
-    
-    def get_stylesheet(self):
-        if self.current_theme == self.DARK_THEME:
-            return self.get_dark_stylesheet()
-        return Theme.STYLESHEET
-    
-    @staticmethod
-    def get_dark_stylesheet():
-        return """
-        QMainWindow { background-color: #1e1e1e; }
-        QWidget { font-family: "Geist", "Segoe UI", sans-serif; font-size: 13px; color: #e0e0e0; }
-        QSplitter::handle { background-color: #333333; width: 2px; }
-        QTabWidget::pane { border: 1px solid #333333; background: #2d2d2d; border-radius: 4px; }
-        QTabBar::tab { background: #1e1e1e; border: 1px solid #333333; padding: 6px 12px; margin-right: 2px; }
-        QTabBar::tab:selected { background: #2d2d2d; border-bottom: 2px solid #0d7377; color: #0d7377; font-weight: bold; }
-        QPushButton { background-color: #2d2d2d; border: 1px solid #404040; color: #e0e0e0; padding: 6px 12px; border-radius: 4px; }
-        QPushButton:hover { background-color: #3d3d3d; border-color: #0d7377; }
-        QPushButton:pressed { background-color: #1e1e1e; }
-        QLineEdit, QSpinBox, QDoubleSpinBox, QComboBox { padding: 4px; border: 1px solid #404040; border-radius: 4px; background: #2d2d2d; color: #e0e0e0; }
-        QTextEdit, QPlainTextEdit, QListWidget, QTreeWidget { border: 1px solid #404040; border-radius: 4px; background: #2d2d2d; color: #e0e0e0; }
-        QLabel#PreviewLabel { border: 2px dashed #404040; background-color: #1e1e1e; color: #606060; }
-        QScrollBar:vertical { background: #1e1e1e; width: 12px; }
-        QScrollBar::handle:vertical { background: #404040; border-radius: 6px; }
-        QScrollBar::handle:vertical:hover { background: #505050; }
-        """
-    
-    def set_theme(self, theme):
-        self.current_theme = theme
-        SETTINGS.set("THEME", theme)
-
-THEME_MANAGER = ThemeManager()
+# Import unified theme manager - Light mode only
+from themes import THEME_MANAGER
 
 # ==============================================================================
 # 3.8 KEYBOARD SHORTCUTS REGISTRY
 # ==============================================================================
 
+
 class KeyboardShortcuts:
     """Centralized keyboard shortcuts."""
+
     SHORTCUTS = {
         "Delete": (QKeySequence.StandardKey.Delete, "Delete selected nodes/wires"),
         "Undo": (QKeySequence.StandardKey.Undo, "Undo last action"),
         "Redo": (QKeySequence.StandardKey.Redo, "Redo last action"),
         "Save": (QKeySequence.StandardKey.Save, "Save project"),
         "Open": (QKeySequence.StandardKey.Open, "Open project"),
-        "Fit View": (QKeySequence(QKeyCombination(Qt.KeyboardModifier.ControlModifier, Qt.Key.Key_0)), "Fit scene to view"),
-        "Clear": (QKeySequence(QKeyCombination(Qt.KeyboardModifier.ControlModifier, Qt.Key.Key_Delete)), "Clear all nodes"),
+        "Fit View": (
+            QKeySequence(
+                QKeyCombination(Qt.KeyboardModifier.ControlModifier, Qt.Key.Key_0)
+            ),
+            "Fit scene to view",
+        ),
+        "Clear": (
+            QKeySequence(
+                QKeyCombination(Qt.KeyboardModifier.ControlModifier, Qt.Key.Key_Delete)
+            ),
+            "Clear all nodes",
+        ),
     }
-    
+
     @classmethod
     def get_shortcut(cls, action_name):
         return cls.SHORTCUTS.get(action_name, (None, ""))[0]
-    
+
     @classmethod
     def describe_shortcuts(cls):
         """Return formatted help text with human-readable key combinations."""
@@ -449,11 +608,12 @@ class KeyboardShortcuts:
                 ks = QKeySequence(seq)
             else:
                 ks = seq
-            key_str = ks.toString(QKeySequence.PortableText)
+            key_str = ks.toString()
             if not key_str:
                 key_str = "(platform default)"
             lines.append(f"  {key_str:<20}  {name:<15}  {desc}")
         return "\n".join(lines)
+
 
 # ==============================================================================
 # 3. SETTINGS MANAGER (continuation)
@@ -463,8 +623,10 @@ class KeyboardShortcuts:
 # 4a. WORKER THREADS
 # ==============================================================================
 
+
 class ImageLoaderWorker(QThread):
     """Loads and scales image in background to keep UI smooth."""
+
     image_loaded = Signal(QPixmap)
 
     def __init__(self, path, max_width):
@@ -475,14 +637,17 @@ class ImageLoaderWorker(QThread):
     def run(self):
         if not os.path.exists(self.path):
             return
-            
+
         image = QImage(self.path)
         if not image.isNull():
             # Scale here to save memory on main thread
             pixmap = QPixmap.fromImage(image)
             if pixmap.width() > self.max_width:
-                pixmap = pixmap.scaledToWidth(self.max_width, Qt.TransformationMode.SmoothTransformation)
+                pixmap = pixmap.scaledToWidth(
+                    self.max_width, Qt.TransformationMode.SmoothTransformation
+                )
             self.image_loaded.emit(pixmap)
+
 
 class AIWorker(QThread):
     chunk_received = Signal(str)
@@ -501,9 +666,11 @@ class AIWorker(QThread):
     def handle_chunk(self, text):
         self.chunk_received.emit(text)
 
+
 # 4b. LaTeX Worker Threads
 class LatexApiWorker(QThread):
     """Fetches rendered LaTeX PNG from external API in background."""
+
     success = Signal(bytes)
     error = Signal(str)
 
@@ -514,32 +681,35 @@ class LatexApiWorker(QThread):
     def run(self):
         if not self.latex_str.strip():
             return
-            
+
         try:
             # Using mathpad.ai as requested
             base = "https://mathpad.ai/api/v1/latex2image"
             params = {
                 "latex": self.latex_str,
                 "format": "png",
-                "scale": 4 # High quality
+                "scale": 4,  # High quality
             }
             url = f"{base}?{urllib.parse.urlencode(params)}"
-            
+
             # Timeout is important to prevent hanging
             response = requests.get(url, timeout=10)
             response.raise_for_status()
-            
+
             self.success.emit(response.content)
-            
+
         except Exception as e:
             self.error.emit(str(e))
+
 
 # ==============================================================================
 # 4c. TTS WORKER (NEW)
 # ==============================================================================
 
+
 def convert_to_wav(audio_data: bytes, mime_type: str) -> bytes:
     """Helper to generate WAV header for Gemini PCM output."""
+
     def parse_audio_mime_type(mime_type: str) -> dict:
         bits_per_sample = 16
         rate = 24000
@@ -549,11 +719,13 @@ def convert_to_wav(audio_data: bytes, mime_type: str) -> bytes:
             if param.lower().startswith("rate="):
                 try:
                     rate = int(param.split("=", 1)[1])
-                except: pass
+                except:
+                    pass
             elif param.startswith("audio/L"):
                 try:
                     bits_per_sample = int(param.split("L", 1)[1])
-                except: pass
+                except:
+                    pass
         return {"bits_per_sample": bits_per_sample, "rate": rate}
 
     parameters = parse_audio_mime_type(mime_type)
@@ -568,16 +740,27 @@ def convert_to_wav(audio_data: bytes, mime_type: str) -> bytes:
 
     header = struct.pack(
         "<4sI4s4sIHHIIHH4sI",
-        b"RIFF", chunk_size, b"WAVE", b"fmt ", 16, 1, num_channels,
-        sample_rate, byte_rate, block_align, bits_per_sample,
-        b"data", data_size
+        b"RIFF",
+        chunk_size,
+        b"WAVE",
+        b"fmt ",
+        16,
+        1,
+        num_channels,
+        sample_rate,
+        byte_rate,
+        block_align,
+        bits_per_sample,
+        b"data",
+        data_size,
     )
     return header + audio_data
 
+
 class TTSWorker(QThread):
-    finished_signal = Signal(str) # Path to saved file
+    finished_signal = Signal(str)  # Path to saved file
     error_signal = Signal(str)
-    
+
     def __init__(self, text, voice_name, model_name):
         super().__init__()
         self.text = text
@@ -592,10 +775,10 @@ class TTSWorker(QThread):
 
         try:
             client = genai.Client(api_key=self.api_key)
-            
+
             # Construct Prompt
-            contents = [types.Content(role="user", parts=[types.Part.from_text(text=self.text)])]
-            
+            contents = self.text  # Simple string prompt for TTS
+
             # Config
             generate_content_config = types.GenerateContentConfig(
                 response_modalities=["audio"],
@@ -610,19 +793,26 @@ class TTSWorker(QThread):
 
             # Stream & Collect
             full_audio = b""
-            mime_type = "audio/wav" # Default
+            mime_type = "audio/wav"  # Default
 
             for chunk in client.models.generate_content_stream(
                 model=self.model_name,
                 contents=contents,
                 config=generate_content_config,
             ):
-                if chunk.candidates and chunk.candidates[0].content.parts:
-                    part = chunk.candidates[0].content.parts[0]
-                    if part.inline_data:
-                        full_audio += part.inline_data.data
-                        if part.inline_data.mime_type:
-                            mime_type = part.inline_data.mime_type
+                try:
+                    if (
+                        chunk.candidates
+                        and chunk.candidates[0].content
+                        and chunk.candidates[0].content.parts
+                    ):
+                        part = chunk.candidates[0].content.parts[0]
+                        if part.inline_data and part.inline_data.data is not None:
+                            full_audio += bytes(part.inline_data.data)
+                            if part.inline_data.mime_type:
+                                mime_type = part.inline_data.mime_type
+                except Exception:
+                    pass
 
             if not full_audio:
                 self.error_signal.emit("No audio data received from Gemini.")
@@ -636,20 +826,22 @@ class TTSWorker(QThread):
             # Save to temp
             filename = f"tts_{uuid.uuid4().hex[:8]}.wav"
             save_path = AppPaths.TEMP_DIR / filename
-            
+
             with open(save_path, "wb") as f:
                 f.write(final_data)
-                
+
             self.finished_signal.emit(str(save_path))
 
         except Exception as e:
             self.error_signal.emit(str(e))
 
+
 class RenderWorker(QThread):
     """Fast, single-frame renderer for Node Previews."""
-    success = Signal(str, str) # node_id, absolute_path
+
+    success = Signal(str, str)  # node_id, absolute_path
     error = Signal(str)
-    
+
     def __init__(self, script_path, node_id, output_dir, fps, quality):
         super().__init__()
         self.script_path = script_path
@@ -660,30 +852,30 @@ class RenderWorker(QThread):
     def run(self):
         try:
             print(f"[Preview] Starting render for {self.node_id}...")
-            
+
             # Ensure output dir exists
             if not self.output_dir.exists():
                 self.output_dir.mkdir(parents=True)
 
             flags = ["-s", "--format=png", "--disable_caching", "-r", "400,300"]
             flags.append(f"-q{self.quality}")
-            
+
             cmd = ["manim"] + flags + [str(self.script_path), "PreviewScene"]
             print(f"[Preview] Command: {' '.join(cmd)}")
-            
+
             startupinfo = None
             if platform.system() == "Windows":
                 startupinfo = subprocess.STARTUPINFO()
                 startupinfo.dwFlags |= subprocess.STARTF_USESHOWWINDOW
-            
+
             process = subprocess.run(
                 cmd,
                 capture_output=True,
                 text=True,
                 cwd=str(self.output_dir),
-                startupinfo=startupinfo
+                startupinfo=startupinfo,
             )
-            
+
             if process.returncode != 0:
                 err = process.stderr if process.stderr else process.stdout
                 print(f"[Preview] FAILED. Error: {err}")
@@ -691,17 +883,17 @@ class RenderWorker(QThread):
                 return
 
             print("[Preview] Manim process finished.")
-            
+
             # Search for the output file
             # Manim structure: /media/images/PreviewScene/PreviewScene_ManimCE_v0.18.1.png
             # Or simplified: /media/images/PreviewScene.png
-            
+
             media_dir = self.output_dir / "media"
             print(f"[Preview] Searching in: {media_dir}")
-            
+
             pngs = list(media_dir.rglob("*.png"))
             print(f"[Preview] Found {len(pngs)} PNGs.")
-            
+
             if pngs:
                 latest = max(pngs, key=os.path.getmtime)
                 abs_path = str(latest.absolute())
@@ -715,26 +907,29 @@ class RenderWorker(QThread):
             print(f"[Preview] Exception: {e}")
             self.error.emit(str(e))
 
+
 class VideoRenderWorker(QThread):
     """Renders full scenes to MP4/WebM video using Manim."""
+
     progress = Signal(str)  # Status message
-    success = Signal(str)   # Output video path
-    error = Signal(str)     # Error message
-    
-    def __init__(self, script_path, output_dir, fps, resolution, quality):
+    success = Signal(str)  # Output video path
+    error = Signal(str)  # Error message
+
+    def __init__(self, script_path, output_dir, fps, resolution, quality, scene_class: str = "Scene"):
         super().__init__()
         self.script_path = script_path
         self.output_dir = output_dir
         self.fps = fps
         self.resolution = resolution  # (width, height)
         self.quality = quality  # l, m, h, k
+        self.scene_class = scene_class  # Scene class name to render
         self.is_running = True
 
     def stop_render(self):
         """Request graceful stop and force kill process."""
         self.is_running = False
         # Force kill the external process if it's stuck
-        if hasattr(self, 'process') and self.process:
+        if hasattr(self, "process") and self.process:
             try:
                 self.process.kill()
             except:
@@ -748,22 +943,22 @@ class VideoRenderWorker(QThread):
                 return
 
             self.progress.emit("Building Manim command...")
-            
+
             # Copy the flags construction lines from your original file:
             flags = ["--disable_caching", f"-q{self.quality}", f"--fps={self.fps}"]
             if self.resolution:
                 w, h = self.resolution
                 flags.append(f"--resolution={w},{h}")
-            cmd = ["manim"] + flags + [str(self.script_path), "EfficientScene"]
-            
-            self.progress.emit(f"Starting render...")
-            
+            cmd = ["manim"] + flags + [str(self.script_path), self.scene_class]
+
+            self.progress.emit("Starting render...")
+
             # Windows: hide console
             startupinfo = None
             if platform.system() == "Windows":
                 startupinfo = subprocess.STARTUPINFO()
                 startupinfo.dwFlags |= subprocess.STARTF_USESHOWWINDOW
-            
+
             # --- FIX: Assign to self.process so we can kill it later ---
             self.process = subprocess.Popen(
                 cmd,
@@ -771,47 +966,51 @@ class VideoRenderWorker(QThread):
                 stderr=subprocess.PIPE,
                 text=True,
                 cwd=str(self.output_dir),
-                startupinfo=startupinfo
+                startupinfo=startupinfo,
             )
-            
+
             # Monitor process
             stdout, stderr = self.process.communicate()
-            
+
             if not self.is_running:
                 self.error.emit("Render cancelled by user.")
                 return
-            
+
             if self.process.returncode != 0:
                 err_msg = stderr if stderr else stdout
                 self.error.emit(f"Manim render failed:\n{err_msg}")
                 return
-            
+
             self.progress.emit("Render complete. Locating output...")
             media_dir = self.output_dir / "media" / "videos"
             video_formats = ["*.mp4", "*.webm"]
             videos = []
             for fmt in video_formats:
                 videos.extend(media_dir.rglob(fmt))
-            
+
             if videos:
                 latest_video = max(videos, key=os.path.getmtime)
                 self.success.emit(str(latest_video))
             else:
                 self.error.emit("Render finished but no video file found.")
-        
+
         except Exception as e:
             self.error.emit(f"Render error: {str(e)}")
+
 
 # ==============================================================================
 # 5. DATA MODELS
 # ==============================================================================
 
+
 class NodeType(Enum):
     MOBJECT = auto()
     ANIMATION = auto()
 
+
 class NodeData:
     """Enhanced node data with type safety, parameter metadata, and AI support."""
+
     def __init__(self, name, n_type, cls_name):
         self.id = str(uuid.uuid4())
         self.name = name
@@ -823,11 +1022,11 @@ class NodeData:
         self.pos_y = 0
         self.preview_path = None
         # NEW: Voiceover support
-        self.audio_asset_id = None 
+        self.audio_asset_id = None
         # AI metadata
         self.is_ai_generated = False
-        self.ai_source = None  # Original Manim class name
-        self.ai_code_snippet = None  # Original code from AI
+        self.ai_source: str | None = None  # Original Manim class name
+        self.ai_code_snippet: str | None = None  # Original code from AI
 
     def to_dict(self):
         return {
@@ -839,10 +1038,10 @@ class NodeData:
             "param_metadata": self.param_metadata,
             "pos": (self.pos_x, self.pos_y),
             "preview_path": self.preview_path,
-            "audio_asset_id": self.audio_asset_id, # NEW
+            "audio_asset_id": self.audio_asset_id,  # NEW
             "is_ai_generated": self.is_ai_generated,
             "ai_source": self.ai_source,
-            "ai_code_snippet": self.ai_code_snippet
+            "ai_code_snippet": self.ai_code_snippet,
         }
 
     @staticmethod
@@ -853,42 +1052,43 @@ class NodeData:
         n.param_metadata = d.get("param_metadata", {})
         n.pos_x, n.pos_y = d["pos"]
         n.preview_path = d.get("preview_path")
-        n.audio_asset_id = d.get("audio_asset_id") # NEW
+        n.audio_asset_id = d.get("audio_asset_id")  # NEW
         n.is_ai_generated = d.get("is_ai_generated", False)
         n.ai_source = d.get("ai_source")
         n.ai_code_snippet = d.get("ai_code_snippet")
         return n
-    
+
     def is_param_enabled(self, param_name):
         """Check if parameter is enabled (default: True if not set)."""
         return self.param_metadata.get(param_name, {}).get("enabled", True)
-    
+
     def set_param_enabled(self, param_name, enabled):
         """Enable or disable parameter."""
         if param_name not in self.param_metadata:
             self.param_metadata[param_name] = {}
         self.param_metadata[param_name]["enabled"] = enabled
-    
+
     def should_escape_string(self, param_name):
         """Check if string should be escaped (default: False)."""
         return self.param_metadata.get(param_name, {}).get("escape", False)
-    
+
     def set_escape_string(self, param_name, escape):
         """Mark parameter to escape strings."""
         if param_name not in self.param_metadata:
             self.param_metadata[param_name] = {}
         self.param_metadata[param_name]["escape"] = escape
 
+
 class Asset:
     def __init__(self, name, path, kind):
         self.id = str(uuid.uuid4())
         self.name = name
         # original_path: Where it came from initially (for reference)
-        self.original_path = str(Path(path).as_posix()) 
+        self.original_path = str(Path(path).as_posix())
         # current_path: Where it exists NOW (could be original, or temp/extracted)
         self.current_path = str(Path(path).as_posix())
-        self.kind = kind # "image", "video", "audio"
-        self.local_file = "" # Filename in .efp assets/ folder
+        self.kind = kind  # "image", "video", "audio"
+        self.local_file = ""  # Filename in .efp assets/ folder
 
     def to_dict(self):
         return {
@@ -897,26 +1097,29 @@ class Asset:
             "original": self.original_path,
             # We don't save current_path, because on load we calculate a new one
             "kind": self.kind,
-            "local": self.local_file
+            "local": self.local_file,
         }
-    
+
+
 # ==============================================================================
 # 6. GRAPHICS SYSTEM
 # ==============================================================================
 
+
 class SocketItem(QGraphicsPathItem):
     """Port for connecting nodes."""
+
     def __init__(self, parent, is_output):
         super().__init__(parent)
         self.is_output = is_output
         self.radius = 6
         self.links = []
-        
+
         # Geometry
         path = QPainterPath()
-        path.addEllipse(-self.radius, -self.radius, self.radius*2, self.radius*2)
+        path.addEllipse(-self.radius, -self.radius, self.radius * 2, self.radius * 2)
         self.setPath(path)
-        
+
         # Style
         color = QColor("#2ecc71") if not is_output else QColor("#e74c3c")
         self.setBrush(QBrush(color))
@@ -925,17 +1128,19 @@ class SocketItem(QGraphicsPathItem):
     def get_scene_pos(self):
         return self.scenePos()
 
+
 class WireItem(QGraphicsPathItem):
     """Connection between sockets with robust path management."""
+
     def __init__(self, start_socket, end_socket):
         super().__init__()
         self.start_socket = start_socket
         self.end_socket = end_socket
         if not self.start_socket or not self.end_socket:
             raise ValueError("Both start_socket and end_socket must be valid")
-        
+
         self.setZValue(-1)
-        
+
         # Style: curved bezier path
         pen = QPen(QColor("#7f8c8d"), 2.5)
         pen.setCapStyle(Qt.PenCapStyle.RoundCap)
@@ -947,31 +1152,33 @@ class WireItem(QGraphicsPathItem):
         try:
             if not self.start_socket or not self.end_socket:
                 return
-            
+
             p1 = self.start_socket.get_scene_pos()
             p2 = self.end_socket.get_scene_pos()
-            
+
             # Validate positions are valid QPointF objects
             if not isinstance(p1, QPointF) or not isinstance(p2, QPointF):
                 LOGGER.warn("Invalid socket positions for wire update")
                 return
-            
+
             path = QPainterPath()
             path.moveTo(p1)
-            
+
             dx = p2.x() - p1.x()
-            
+
             # Create smooth bezier curve
             ctrl1 = QPointF(p1.x() + dx * 0.5, p1.y())
             ctrl2 = QPointF(p2.x() - dx * 0.5, p2.y())
-            
+
             path.cubicTo(ctrl1, ctrl2, p2)
             self.setPath(path)
         except Exception as e:
             LOGGER.warn(f"Error updating wire path: {e}")
 
+
 class NodeItem(QGraphicsItem):
     """Visual representation of NodeData."""
+
     def __init__(self, data: NodeData):
         super().__init__()
         self.node_data = data  # Internal storage
@@ -990,26 +1197,30 @@ class NodeItem(QGraphicsItem):
         """Initialize geometry, sockets, and flags (called at end of __init__)."""
         self.width = 180
         self.height = 90
-        
-        self.setFlags(QGraphicsItem.GraphicsItemFlag.ItemIsMovable | QGraphicsItem.GraphicsItemFlag.ItemIsSelectable | QGraphicsItem.GraphicsItemFlag.ItemSendsGeometryChanges)
+
+        self.setFlags(
+            QGraphicsItem.GraphicsItemFlag.ItemIsMovable
+            | QGraphicsItem.GraphicsItemFlag.ItemIsSelectable
+            | QGraphicsItem.GraphicsItemFlag.ItemSendsGeometryChanges
+        )
         self.setPos(self.node_data.pos_x, self.node_data.pos_y)
-        
+
         # Sockets
         self.in_socket = SocketItem(self, False)
-        self.in_socket.setPos(0, self.height/2)
-        
+        self.in_socket.setPos(0, self.height / 2)
+
         self.out_socket = SocketItem(self, True)
-        self.out_socket.setPos(self.width, self.height/2)
-        
+        self.out_socket.setPos(self.width, self.height / 2)
+
     def boundingRect(self):
         return QRectF(0, 0, self.width, self.height)
 
     def paint(self, painter, option, widget):
         # Shadow
         painter.setPen(Qt.PenStyle.NoPen)
-        painter.setBrush(QColor(0,0,0,30))
+        painter.setBrush(QColor(0, 0, 0, 30))
         painter.drawRoundedRect(4, 4, self.width, self.height, 8, 8)
-        
+
         # Body
         painter.setBrush(QColor("white"))
         pen = QPen(QColor("#bdc3c7"), 1.5)
@@ -1017,36 +1228,46 @@ class NodeItem(QGraphicsItem):
             pen = QPen(QColor("#3498db"), 2.5)
         painter.setPen(pen)
         painter.drawRoundedRect(0, 0, self.width, self.height, 8, 8)
-        
+
         # Header
         header_h = 28
-        header_color = QColor("#3498db") if self.node_data.type == NodeType.MOBJECT else QColor("#9b59b6")
-        
+        header_color = (
+            QColor("#3498db")
+            if self.node_data.type == NodeType.MOBJECT
+            else QColor("#9b59b6")
+        )
+
         path = QPainterPath()
         path.addRoundedRect(0, 0, self.width, header_h, 8, 8)
         # Clip
         painter.setClipPath(path)
         painter.fillPath(path, header_color)
         painter.setClipping(False)
-        
+
         # Text
         painter.setPen(Qt.GlobalColor.white)
         painter.setFont(QFont("Segoe UI", 10, QFont.Weight.Bold))
         name = self.node_data.name
-        painter.drawText(QRectF(8, 0, self.width-16, header_h), Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter, name)
-        
+        painter.drawText(
+            QRectF(8, 0, self.width - 16, header_h),
+            Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter,
+            name,
+        )
+
         # Class Name
         painter.setPen(QColor("#7f8c8d"))
         painter.setFont(QFont("Segoe UI", 9))
         cls_name = self.node_data.cls_name
-        painter.drawText(QRectF(8, 35, self.width-16, 20), Qt.AlignmentFlag.AlignLeft, cls_name)
-        
+        painter.drawText(
+            QRectF(8, 35, self.width - 16, 20), Qt.AlignmentFlag.AlignLeft, cls_name
+        )
+
         # Indicator
         preview_path = self.node_data.preview_path
         if preview_path:
             painter.setBrush(QColor("#2ecc71"))
             painter.setPen(Qt.PenStyle.NoPen)
-            painter.drawEllipse(self.width-16, self.height-16, 8, 8)
+            painter.drawEllipse(self.width - 16, self.height - 16, 8, 8)
 
     def itemChange(self, change, value):
         if change == QGraphicsItem.GraphicsItemChange.ItemPositionChange:
@@ -1056,14 +1277,17 @@ class NodeItem(QGraphicsItem):
                 for w in self.in_socket.links + self.out_socket.links:
                     w.update_path()
             if self.scene():
-                self.scene().notify_change()
+                s = self.scene()
+                s and hasattr(s, "notify_change") and s.notify_change()  # type: ignore[union-attr]
         return super().itemChange(change, value)
-    
+
+
 class GraphScene(QGraphicsScene):
     """Manages node connections and logic enforcement."""
+
     selection_changed_signal = Signal()
-    graph_changed_signal = Signal() # Structure changed
-    
+    graph_changed_signal = Signal()  # Structure changed
+
     def __init__(self):
         super().__init__()
         self.drag_wire = None
@@ -1075,14 +1299,14 @@ class GraphScene(QGraphicsScene):
 
     def mousePressEvent(self, event):
         item = self.itemAt(event.scenePos(), self.views()[0].transform())
-        
+
         if isinstance(item, SocketItem):
             self.start_socket = item
             self.drag_wire = QGraphicsPathItem()
             self.drag_wire.setPen(QPen(Qt.GlobalColor.black, 2, Qt.PenStyle.DashLine))
             self.addItem(self.drag_wire)
-            return 
-            
+            return
+
         super().mousePressEvent(event)
         self.selection_changed_signal.emit()
 
@@ -1100,98 +1324,129 @@ class GraphScene(QGraphicsScene):
         if self.drag_wire:
             self.removeItem(self.drag_wire)
             self.drag_wire = None
-            
+
             end_item = self.itemAt(event.scenePos(), self.views()[0].transform())
-            
+
             if isinstance(end_item, SocketItem) and end_item != self.start_socket:
                 self.try_connect(self.start_socket, end_item)
-            
+
             self.start_socket = None
-            
+
         super().mouseReleaseEvent(event)
 
     def try_connect(self, s1, s2):
         """Attempt to create a connection between two sockets with validation.
-        
+
         Args:
             s1: Source socket
             s2: Target socket
-            
+
         Returns:
             WireItem or None: Created wire if successful, None if validation failed
         """
         # Validation: Cannot connect socket to itself
         if s1 == s2:
-            self.show_warning("Invalid Connection", "Cannot connect a socket to itself.")
+            self.show_warning(
+                "Invalid Connection", "Cannot connect a socket to itself."
+            )
             return None
-        
+
         # Validation: Must connect output to input
         if s1.is_output == s2.is_output:
             direction = "both outputs" if s1.is_output else "both inputs"
-            self.show_warning("Invalid Connection", f"Cannot connect {direction}. Please connect output to input.")
+            self.show_warning(
+                "Invalid Connection",
+                f"Cannot connect {direction}. Please connect output to input.",
+            )
             return None
-        
-        if s1.is_output: out_sock, in_sock = s1, s2
-        else: out_sock, in_sock = s2, s1
-            
+
+        if s1.is_output:
+            out_sock, in_sock = s1, s2
+        else:
+            out_sock, in_sock = s2, s1
+
         node_src = out_sock.parentItem()
         node_dst = in_sock.parentItem()
-        
+
         # Validation: Check node types for valid connections
         # 1. Mobject -> Mobject (INVALID)
-        if node_src.node_data.type == NodeType.MOBJECT and node_dst.node_data.type == NodeType.MOBJECT:
-            self.show_warning("Invalid Connection", "Directly connecting Mobjects is not allowed.\nPlease insert an Animation node in between.")
+        if (
+            node_src.node_data.type == NodeType.MOBJECT
+            and node_dst.node_data.type == NodeType.MOBJECT
+        ):
+            self.show_warning(
+                "Invalid Connection",
+                "Directly connecting Mobjects is not allowed.\nPlease insert an Animation node in between.",
+            )
             return None
 
         # 2. Animation -> Animation (INVALID for now)
-        if node_src.node_data.type == NodeType.ANIMATION and node_dst.node_data.type == NodeType.ANIMATION:
-            self.show_warning("Invalid Connection", "Chaining animations directly is not supported.\nTarget a Mobject instead.")
+        if (
+            node_src.node_data.type == NodeType.ANIMATION
+            and node_dst.node_data.type == NodeType.ANIMATION
+        ):
+            self.show_warning(
+                "Invalid Connection",
+                "Chaining animations directly is not supported.\nTarget a Mobject instead.",
+            )
             return None
-        
+
         # Create Wire with error handling
         try:
             wire = WireItem(out_sock, in_sock)
             self.addItem(wire)
             out_sock.links.append(wire)
             in_sock.links.append(wire)
-            
+
             self.notify_change()
-            LOGGER.info(f"Connected {node_src.node_data.name} -> {node_dst.node_data.name}")
+            LOGGER.info(
+                f"Connected {node_src.node_data.name} -> {node_dst.node_data.name}"
+            )
             return wire
         except Exception as e:
             LOGGER.error(f"Failed to create connection: {e}")
-            self.show_warning("Connection Error", f"Failed to create connection: {str(e)}")
+            self.show_warning(
+                "Connection Error", f"Failed to create connection: {str(e)}"
+            )
             return None
 
     def show_warning(self, title, msg):
         views = self.views()
-        if views: QMessageBox.warning(views[0], title, msg)
+        if views:
+            QMessageBox.warning(views[0], title, msg)
+
 
 # ==============================================================================
 # 7. ASSET MANAGEMENT
 # ==============================================================================
 
+
 class AssetManager(QObject):
     assets_changed = Signal()
-    
+
     def __init__(self):
         super().__init__()
-        self.assets = {} # id -> Asset
+        self.assets = {}  # id -> Asset
 
     def add_asset(self, path):
         path_obj = Path(path)
-        if not path_obj.exists(): return
-        
+        if not path_obj.exists():
+            return
+
         # Normalize path for Manim (Forward Slashes)
         clean_path = path_obj.resolve().as_posix()
-        
+
         kind = "unknown"
         s = path_obj.suffix.lower()
-        if s in [".png", ".jpg", ".jpeg", ".bmp", ".webp"]: kind = "image"
-        elif s in [".svg"]: kind = "image" # SVG is treated as image/vector
-        elif s in [".mp4", ".mov", ".avi", ".webm"]: kind = "video"
-        elif s in [".mp3", ".wav", ".ogg"]: kind = "audio"
-        
+        if s in [".png", ".jpg", ".jpeg", ".bmp", ".webp"]:
+            kind = "image"
+        elif s in [".svg"]:
+            kind = "image"  # SVG is treated as image/vector
+        elif s in [".mp4", ".mov", ".avi", ".webm"]:
+            kind = "video"
+        elif s in [".mp3", ".wav", ".ogg"]:
+            kind = "audio"
+
         if kind == "unknown":
             LOGGER.error(f"Unsupported asset type: {s}")
             return
@@ -1208,12 +1463,13 @@ class AssetManager(QObject):
 
     def get_list(self):
         return list(self.assets.values())
-    
+
     def get_asset_path(self, asset_id):
         """Safely retrieve the absolute POSIX path for Manim."""
         if asset_id in self.assets:
             return self.assets[asset_id].current_path
         return None
+
 
 ASSETS = AssetManager()
 
@@ -1221,57 +1477,94 @@ ASSETS = AssetManager()
 # 8. PANELS & UI MODULES
 # ==============================================================================
 
+
 class TypeSafeParser:
     """Comprehensive type validation and safe parsing for Manim parameters."""
-    
+
     # Parameter category mapping
-    NUMERIC_KEYWORDS = {'radius', 'width', 'height', 'scale', 'factor', 'size', 'thickness', 
-                        'stroke_width', 'font_size', 'length', 'rate', 'opacity', 'alpha',
-                        'x', 'y', 'z', 'angle', 'degrees', 'radians'}
-    
-    COLOR_KEYWORDS = {'color', 'fill_color', 'stroke_color', 'background_color', 'fg_color', 'bg_color'}
-    
-    POINT_KEYWORDS = {'point', 'points', 'center', 'pos', 'position', 'start', 'end', 'direction'}
-    
+    NUMERIC_KEYWORDS = {
+        "radius",
+        "width",
+        "height",
+        "scale",
+        "factor",
+        "size",
+        "thickness",
+        "stroke_width",
+        "font_size",
+        "length",
+        "rate",
+        "opacity",
+        "alpha",
+        "x",
+        "y",
+        "z",
+        "angle",
+        "degrees",
+        "radians",
+    }
+
+    COLOR_KEYWORDS = {
+        "color",
+        "fill_color",
+        "stroke_color",
+        "background_color",
+        "fg_color",
+        "bg_color",
+    }
+
+    POINT_KEYWORDS = {
+        "point",
+        "points",
+        "center",
+        "pos",
+        "position",
+        "start",
+        "end",
+        "direction",
+    }
+
     @staticmethod
     def is_asset_param(param_name):
         """Check if parameter expects a file/asset."""
         n = param_name.lower()
         # Specific fix for ImageMobject
-        if "filename" in n: return True
-        
+        if "filename" in n:
+            return True
+
         # General file keywords
         if "file" in n or "image" in n or "sound" in n or "svg" in n:
-             # Exclude false positives like "fill_opacity" or "profile"
-             if "fill" in n or "profile" in n: return False
-             return True
+            # Exclude false positives like "fill_opacity" or "profile"
+            if "fill" in n or "profile" in n:
+                return False
+            return True
         return False
 
     @staticmethod
     def is_numeric_param(param_name):
         """Check if parameter should be numeric."""
-        if TypeSafeParser.is_asset_param(param_name): 
+        if TypeSafeParser.is_asset_param(param_name):
             return False
         return any(kw in param_name.lower() for kw in TypeSafeParser.NUMERIC_KEYWORDS)
-    
+
     @staticmethod
     def is_color_param(param_name):
         """Check if parameter should be a color."""
         return any(kw in param_name.lower() for kw in TypeSafeParser.COLOR_KEYWORDS)
-    
+
     @staticmethod
     def is_point_param(param_name):
         """Check if parameter should be points/coordinates."""
         return any(kw in param_name.lower() for kw in TypeSafeParser.POINT_KEYWORDS)
-    
+
     @staticmethod
     def parse_numeric(value, default=0.0):
         """Safely parse value as number with robust validation.
-        
+
         Args:
             value: Value to parse (int, float, str, or other)
             default: Default value if parsing fails
-            
+
         Returns:
             float: Parsed numeric value or default
         """
@@ -1285,48 +1578,58 @@ class TypeSafeParser:
                 val = float(value.strip())
                 if -1e10 < val < 1e10:  # Sanity check
                     return val
-                LOGGER.warn(f"Numeric value out of range: {value}, using default {default}")
+                LOGGER.warn(
+                    f"Numeric value out of range: {value}, using default {default}"
+                )
                 return default
             # Fallback
             return float(value) if value else default
         except (ValueError, TypeError) as e:
-            LOGGER.warn(f"Invalid numeric value '{value}': {type(e).__name__}, using default {default}")
+            LOGGER.warn(
+                f"Invalid numeric value '{value}': {type(e).__name__}, using default {default}"
+            )
             return default
-    
+
     @staticmethod
     def parse_color(value, default_hex="#FFFFFF"):
         """Safely parse value as ManimColor with comprehensive validation.
-        
+
         Supports: ManimColor objects, hex strings, Manim constants, RGB tuples, and QColor objects.
-        
+
         Args:
             value: Color value in various formats
             default_hex: Default hex color if parsing fails
-            
+
         Returns:
             str: Hex color string (#RRGGBB format)
         """
         try:
             if value is None:
                 return default_hex
-            
+
             # Already ManimColor
-            if isinstance(value, (ManimColor, ParsableManimColor)):
-                return value.to_hex() if hasattr(value, 'to_hex') else str(value)
-            
+            if hasattr(value, "to_hex") or (
+                hasattr(value, "__class__") and "ManimColor" in type(value).__name__
+            ):
+                return value.to_hex() if hasattr(value, "to_hex") else str(value)
+
             # String handling
             if isinstance(value, str):
                 value_clean = value.strip()
-                
+
                 # Try Manim color constants first (e.g., "BLUE", "RED", "CYAN")
                 try:
                     if hasattr(manim, value_clean.upper()):
                         manim_color = getattr(manim, value_clean.upper())
-                        if isinstance(manim_color, (ManimColor, ParsableManimColor)) or hasattr(manim_color, '_internal_value'):
+                        if (
+                            hasattr(manim_color, "to_hex")
+                            or hasattr(manim_color, "_internal_value")
+                            or "ManimColor" in type(manim_color).__name__
+                        ):
                             return str(manim_color)
                 except:
                     pass
-                
+
                 # Hex string
                 if value_clean.startswith("#") and len(value_clean) == 7:
                     try:
@@ -1334,57 +1637,57 @@ class TypeSafeParser:
                         return value_clean
                     except ValueError:
                         pass
-                
+
                 # Try QColor parsing
                 qc = QColor(value_clean)
                 if qc.isValid():
                     return qc.name()
-                
+
                 return default_hex
-            
+
             # RGB tuple/list
             if isinstance(value, (tuple, list)) and len(value) >= 3:
                 r, g, b = value[:3]
                 # Validate range
                 if isinstance(r, float) and 0 <= r <= 1:
-                    r, g, b = int(r*255), int(g*255), int(b*255)
+                    r, g, b = int(r * 255), int(g * 255), int(b * 255)
                 return f"#{int(r):02x}{int(g):02x}{int(b):02x}"
-            
+
             # QColor object
             if isinstance(value, QColor) and value.isValid():
                 return value.name()
-        
+
         except Exception as e:
             LOGGER.warn(f"Color parsing error for '{value}': {type(e).__name__}")
-        
+
         return default_hex
-    
+
     @staticmethod
     def to_manim_color(hex_color):
         """Convert hex color to ManimColor for rendering."""
         try:
-            if isinstance(hex_color, (ManimColor, ParsableManimColor)):
+            if hasattr(hex_color, "to_hex") or "ManimColor" in type(hex_color).__name__:
                 return hex_color
             if isinstance(hex_color, str):
                 return ManimColor(hex_color) if MANIM_AVAILABLE else hex_color
             return ManimColor("#FFFFFF") if MANIM_AVAILABLE else "#FFFFFF"
         except:
             return ManimColor("#FFFFFF") if MANIM_AVAILABLE else "#FFFFFF"
-    
+
     @staticmethod
     def validate_point_safe(point, default=None):
         """Validate point for safe multiplication."""
         if default is None:
             default = np.array([0.0, 0.0, 0.0])
-        
+
         try:
             if point is None:
                 return default
-            
+
             # If it's already ndarray, return
             if isinstance(point, np.ndarray):
                 return point.astype(float)
-            
+
             # Convert to numpy array
             arr = np.array(point, dtype=float)
             if arr.shape[0] in [2, 3]:
@@ -1395,33 +1698,36 @@ class TypeSafeParser:
         except:
             return default
 
+
 class ColorNormalizer:
     """Centralized color normalization utility."""
+
     @staticmethod
     def normalize_to_hex(value):
         """Convert any color representation to hex string."""
         return TypeSafeParser.parse_color(value)
 
+
 class SceneOutlinerPanel(QWidget):
     """Lists all nodes in the scene for easy selection and management."""
-    
+
     def __init__(self, main_window):
         super().__init__()
         self.main_window = main_window
         self.setup_ui()
-        
+
         # Connect to scene changes to auto-refresh
         self.main_window.scene.graph_changed_signal.connect(self.refresh_list)
 
     def setup_ui(self):
         layout = QVBoxLayout(self)
-        
+
         # Search Bar
         self.search = QLineEdit()
         self.search.setPlaceholderText("🔍 Filter nodes...")
         self.search.textChanged.connect(self.refresh_list)
         layout.addWidget(self.search)
-        
+
         # The List
         self.list_widget = QListWidget()
         self.list_widget.setSelectionMode(QListWidget.SelectionMode.ExtendedSelection)
@@ -1430,43 +1736,45 @@ class SceneOutlinerPanel(QWidget):
         self.list_widget.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
         self.list_widget.customContextMenuRequested.connect(self.show_context_menu)
         layout.addWidget(self.list_widget)
-        
+
         # Buttons
         btn_layout = QHBoxLayout()
         btn_del = QPushButton("🗑️ Delete")
         btn_del.clicked.connect(self.delete_selected)
         btn_layout.addWidget(btn_del)
-        
+
         btn_refresh = QPushButton("🔄 Refresh")
         btn_refresh.clicked.connect(self.refresh_list)
         btn_layout.addWidget(btn_refresh)
-        
+
         layout.addLayout(btn_layout)
 
     def refresh_list(self):
         """Rebuild the list based on current nodes."""
         self.list_widget.clear()
         filter_text = self.search.text().lower()
-        
+
         # Sort nodes by creation order (roughly) or name
         nodes = list(self.main_window.nodes.values())
-        
+
         for node in nodes:
             # Filter
             if filter_text and filter_text not in node.node_data.name.lower():
                 continue
-                
+
             # Create Item
             icon_char = "📦" if node.node_data.type == NodeType.MOBJECT else "🎬"
-            display_text = f"{icon_char} {node.node_data.name} ({node.node_data.cls_name})"
-            
+            display_text = (
+                f"{icon_char} {node.node_data.name} ({node.node_data.cls_name})"
+            )
+
             item = QListWidgetItem(display_text)
             item.setData(Qt.ItemDataRole.UserRole, node.node_data.id)
-            
+
             # Highlight if selected in scene
             if node.isSelected():
-                item.setBackground(QColor("#d6eaf8")) # Light blue
-                
+                item.setBackground(QColor("#d6eaf8"))  # Light blue
+
             self.list_widget.addItem(item)
 
     def on_item_clicked(self, item):
@@ -1476,24 +1784,30 @@ class SceneOutlinerPanel(QWidget):
             # Deselect all first
             for n in self.main_window.nodes.values():
                 n.setSelected(False)
-            
+
             # Select target
             node = self.main_window.nodes[node_id]
             node.setSelected(True)
-            
+
             # Focus view on node
             self.main_window.view.centerOn(node)
-            self.main_window.on_selection() # Trigger property panel update
+            self.main_window.on_selection()  # Trigger property panel update
 
     def delete_selected(self):
         """Delete nodes selected in the list."""
         ids_to_delete = []
         for item in self.list_widget.selectedItems():
             ids_to_delete.append(item.data(Qt.ItemDataRole.UserRole))
-            
-        if not ids_to_delete: return
-        
-        reply = QMessageBox.question(self, "Delete", f"Delete {len(ids_to_delete)} items?", QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No)
+
+        if not ids_to_delete:
+            return
+
+        reply = QMessageBox.question(
+            self,
+            "Delete",
+            f"Delete {len(ids_to_delete)} items?",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+        )
         if reply == QMessageBox.StandardButton.Yes:
             for nid in ids_to_delete:
                 if nid in self.main_window.nodes:
@@ -1508,33 +1822,34 @@ class SceneOutlinerPanel(QWidget):
         if action == del_act:
             self.delete_selected()
 
+
 class LatexEditorPanel(QWidget):
     """Panel for Live LaTeX editing via API."""
-    
+
     def __init__(self, main_window):
         super().__init__()
         self.main_window = main_window
         self.temp_preview_path = AppPaths.TEMP_DIR / "latex_preview.png"
-        
+
         # FIX: Keep track of all active threads to prevent Garbage Collection crashes
         self._active_workers = set()
-        
+
         self.setup_ui()
-        
+
         # Debouncer timer (Auto-update logic)
         self.debouncer = QTimer()
         self.debouncer.setSingleShot(True)
-        self.debouncer.setInterval(800) # Wait 800ms after typing stops
+        self.debouncer.setInterval(800)  # Wait 800ms after typing stops
         self.debouncer.timeout.connect(self.trigger_render)
 
     def setup_ui(self):
         layout = QVBoxLayout(self)
-        
+
         # Header
         header = QLabel("✒️ LaTeX Studio (Online)")
         header.setStyleSheet("font-weight: bold; font-size: 14px; color: #2c3e50;")
         layout.addWidget(header)
-        
+
         # Editor
         self.editor = QPlainTextEdit()
         self.editor.setPlaceholderText("Enter LaTeX here... e.g. E = mc^2")
@@ -1542,43 +1857,49 @@ class LatexEditorPanel(QWidget):
         self.editor.setMaximumHeight(100)
         self.editor.textChanged.connect(self.on_text_changed)
         layout.addWidget(self.editor)
-        
+
         # Preview Area
         self.preview_lbl = QLabel("Preview will appear here...")
-        self.preview_lbl.setAlignment(Qt.AlignCenter)
-        self.preview_lbl.setStyleSheet("background: white; border: 2px dashed #bdc3c7; border-radius: 4px;")
+        self.preview_lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.preview_lbl.setStyleSheet(
+            "background: white; border: 2px dashed #bdc3c7; border-radius: 4px;"
+        )
         self.preview_lbl.setMinimumHeight(150)
-        
+
         # Scroll area
         scroll = QScrollArea()
         scroll.setWidget(self.preview_lbl)
         scroll.setWidgetResizable(True)
         layout.addWidget(scroll)
-        
+
         # Controls Group
         ctrl_group = QFrame()
-        ctrl_group.setStyleSheet("background: #ecf0f1; border-radius: 4px; padding: 4px;")
+        ctrl_group.setStyleSheet(
+            "background: #ecf0f1; border-radius: 4px; padding: 4px;"
+        )
         ctrl_layout = QVBoxLayout(ctrl_group)
-        
+
         # Target Node Selector
         self.node_combo = QComboBox()
         self.node_combo.setPlaceholderText("Select Target Node...")
         ctrl_layout.addWidget(QLabel("Apply to Node:"))
         ctrl_layout.addWidget(self.node_combo)
-        
+
         # Refresh Button
         btn_refresh = QPushButton("🔄 Refresh Node List")
         btn_refresh.clicked.connect(self.refresh_nodes)
         ctrl_layout.addWidget(btn_refresh)
-        
+
         # Apply Button
         self.btn_apply = QPushButton("✅ Apply to Node")
-        self.btn_apply.setStyleSheet("background-color: #27ae60; color: white; font-weight: bold; padding: 6px;")
+        self.btn_apply.setStyleSheet(
+            "background-color: #27ae60; color: white; font-weight: bold; padding: 6px;"
+        )
         self.btn_apply.clicked.connect(self.apply_to_node)
         ctrl_layout.addWidget(self.btn_apply)
-        
+
         layout.addWidget(ctrl_group)
-        
+
         # Status
         self.status_lbl = QLabel("Ready")
         self.status_lbl.setStyleSheet("color: gray;")
@@ -1587,23 +1908,24 @@ class LatexEditorPanel(QWidget):
     def on_text_changed(self):
         """Called on every keystroke."""
         self.status_lbl.setText("Typing...")
-        self.debouncer.start() # Reset timer
+        self.debouncer.start()  # Reset timer
 
     def trigger_render(self):
         """Called by timer to start API call."""
         tex = self.editor.toPlainText().strip()
-        if not tex: return
-        
+        if not tex:
+            return
+
         self.status_lbl.setText("Fetching render from API...")
-        
+
         # FIX: Create a new worker and track it
         worker = LatexApiWorker(tex)
         worker.success.connect(self.on_render_success)
         worker.error.connect(self.on_render_error)
-        
+
         # FIX: Clean up reference when done
         worker.finished.connect(lambda: self._cleanup_worker(worker))
-        
+
         # Add to active set so Python doesn't delete it while it's running
         self._active_workers.add(worker)
         worker.start()
@@ -1616,7 +1938,7 @@ class LatexEditorPanel(QWidget):
 
     def on_render_success(self, image_data):
         self.status_lbl.setText("Render received.")
-        
+
         try:
             with open(self.temp_preview_path, "wb") as f:
                 f.write(image_data)
@@ -1625,10 +1947,13 @@ class LatexEditorPanel(QWidget):
 
         pixmap = QPixmap()
         pixmap.loadFromData(image_data)
-        
+
         if pixmap.width() > self.preview_lbl.width():
-            pixmap = pixmap.scaledToWidth(self.preview_lbl.width() - 20, Qt.SmoothTransformation)
-            
+            pixmap = pixmap.scaledToWidth(
+                self.preview_lbl.width() - 20,
+                Qt.TransformationMode.SmoothTransformation,
+            )
+
         self.preview_lbl.setPixmap(pixmap)
         self.preview_lbl.setText("")
 
@@ -1636,14 +1961,14 @@ class LatexEditorPanel(QWidget):
         self.status_lbl.setText("API Error.")
         # Only show error if it's not just a cancellation
         if "Network" in err_msg or "400" in err_msg:
-             self.preview_lbl.setText(f"❌ Error:\n{err_msg}")
-             self.preview_lbl.setPixmap(QPixmap())
+            self.preview_lbl.setText(f"❌ Error:\n{err_msg}")
+            self.preview_lbl.setPixmap(QPixmap())
 
     def refresh_nodes(self):
         """Populate combo with nodes that look like they accept text."""
         current = self.node_combo.currentData()
         self.node_combo.clear()
-        
+
         count = 0
         for nid, node in self.main_window.nodes.items():
             cname = node.data.cls_name.lower()
@@ -1653,11 +1978,12 @@ class LatexEditorPanel(QWidget):
                 display_text = f"{node.data.name} ({short_id})"
                 self.node_combo.addItem(display_text, nid)
                 count += 1
-                
+
         if current:
             idx = self.node_combo.findData(current)
-            if idx >= 0: self.node_combo.setCurrentIndex(idx)
-            
+            if idx >= 0:
+                self.node_combo.setCurrentIndex(idx)
+
         self.status_lbl.setText(f"Found {count} text-compatible nodes.")
 
     def apply_to_node(self):
@@ -1675,16 +2001,16 @@ class LatexEditorPanel(QWidget):
         open_count = 0
         balanced_tex = ""
         for char in tex_code:
-            if char == '(':
+            if char == "(":
                 open_count += 1
                 balanced_tex += char
-            elif char == ')':
+            elif char == ")":
                 if open_count > 0:
                     open_count -= 1
                     balanced_tex += char
             else:
                 balanced_tex += char
-        balanced_tex += ')' * open_count
+        balanced_tex += ")" * open_count
 
         node = self.main_window.nodes[node_id]
 
@@ -1693,8 +2019,8 @@ class LatexEditorPanel(QWidget):
             node.data.params.pop(k, None)
 
         # Escape backslashes
-        safe_tex = balanced_tex.replace('\\', '\\\\')
-        
+        safe_tex = balanced_tex.replace("\\", "\\\\")
+
         # Use raw string literal format
         formatted_code = f'r"""{safe_tex}"""'
 
@@ -1705,7 +2031,7 @@ class LatexEditorPanel(QWidget):
             target_param = "text"
 
         node.data.params[target_param] = formatted_code
-        
+
         # Configure Metadata
         node.data.set_escape_string(target_param, True)
         node.data.set_param_enabled(target_param, True)
@@ -1713,27 +2039,29 @@ class LatexEditorPanel(QWidget):
         node.update()
         self.main_window.compile_graph()
         self.status_lbl.setText(f"Applied to {node.data.name}!")
-        
+
         node.setSelected(True)
         self.main_window.on_selection()
-        
+
         # Trigger re-render
         self.main_window.queue_render(node)
 
+
 class VideoOutputPanel(QWidget):
     """Integrated Video Player with Seek and Play/Pause controls."""
+
     def __init__(self):
         super().__init__()
         self.setup_ui()
         self.duration = 0
-        
+
         # Init Player
         self.player = QMediaPlayer()
         self.audio_output = QAudioOutput()
         self.player.setAudioOutput(self.audio_output)
-        
+
         self.player.setVideoOutput(self.video_widget)
-        
+
         # Connections
         self.player.positionChanged.connect(self.on_position_changed)
         self.player.durationChanged.connect(self.on_duration_changed)
@@ -1743,58 +2071,60 @@ class VideoOutputPanel(QWidget):
         layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(0)
-        
+
         # Header
         header_bar = QFrame()
-        header_bar.setStyleSheet("background: #2c3e50; border-bottom: 1px solid #34495e;")
+        header_bar.setStyleSheet(
+            "background: #2c3e50; border-bottom: 1px solid #34495e;"
+        )
         header_layout = QHBoxLayout(header_bar)
         header_layout.setContentsMargins(10, 5, 10, 5)
-        
+
         lbl = QLabel("🎥 Output Monitor")
         lbl.setStyleSheet("color: white; font-weight: bold;")
         header_layout.addWidget(lbl)
         layout.addWidget(header_bar)
-        
+
         # Video Area
         self.video_widget = QVideoWidget()
         self.video_widget.setStyleSheet("background-color: black;")
-        layout.addWidget(self.video_widget, 1) # Expandable
-        
+        layout.addWidget(self.video_widget, 1)  # Expandable
+
         # Controls Area
         controls = QFrame()
         controls.setStyleSheet("background: #ecf0f1; border-top: 1px solid #bdc3c7;")
         ctrl_layout = QHBoxLayout(controls)
         ctrl_layout.setContentsMargins(10, 5, 10, 5)
-        
+
         # Play/Pause Button
         self.btn_play = QPushButton("▶")
         self.btn_play.setFixedSize(30, 30)
         self.btn_play.clicked.connect(self.toggle_play)
         ctrl_layout.addWidget(self.btn_play)
-        
+
         # Slider
-        self.slider = QSlider(Qt.Horizontal)
+        self.slider = QSlider(Qt.Orientation.Horizontal)
         self.slider.setRange(0, 0)
         self.slider.sliderMoved.connect(self.set_position)
         ctrl_layout.addWidget(self.slider)
-        
+
         # Time Label
         self.lbl_time = QLabel("00:00 / 00:00")
         self.lbl_time.setStyleSheet("font-family: monospace;")
         ctrl_layout.addWidget(self.lbl_time)
-        
+
         layout.addWidget(controls)
 
     def load_video(self, file_path, autoplay=True):
         """Load a video file and optionally start playing."""
         self.player.setSource(QUrl.fromLocalFile(file_path))
-        self.audio_output.setVolume(1.0) # 100% volume
+        self.audio_output.setVolume(1.0)  # 100% volume
         if autoplay:
             self.player.play()
             self.btn_play.setText("⏸")
 
     def toggle_play(self):
-        if self.player.playbackState() == QMediaPlayer.PlayingState:
+        if self.player.playbackState() == QMediaPlayer.PlaybackState.Playing:
             self.player.pause()
             self.btn_play.setText("▶")
         else:
@@ -1819,30 +2149,32 @@ class VideoOutputPanel(QWidget):
     def update_time_label(self, current_ms):
         def fmt(ms):
             seconds = (ms // 1000) % 60
-            minutes = (ms // 60000)
+            minutes = ms // 60000
             return f"{minutes:02}:{seconds:02}"
-        
+
         self.lbl_time.setText(f"{fmt(current_ms)} / {fmt(self.duration)}")
 
     def on_media_status_changed(self, status):
-        if status == QMediaPlayer.EndOfMedia:
+        if status == QMediaPlayer.MediaStatus.EndOfMedia:
             self.btn_play.setText("▶")
+
 
 class GraphView(QGraphicsView):
     """Custom View with Zoom (Ctrl+Wheel) and Pan (Middle Mouse) support."""
+
     def __init__(self, scene):
         super().__init__(scene)
-        self.setRenderHint(QPainter.Antialiasing)
-        self.setDragMode(QGraphicsView.RubberBandDrag)
-        self.setTransformationAnchor(QGraphicsView.AnchorUnderMouse)
-        self.setResizeAnchor(QGraphicsView.AnchorUnderMouse)
-        self.setVerticalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
-        self.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+        self.setRenderHint(QPainter.RenderHint.Antialiasing)
+        self.setDragMode(QGraphicsView.DragMode.RubberBandDrag)
+        self.setTransformationAnchor(QGraphicsView.ViewportAnchor.AnchorUnderMouse)
+        self.setResizeAnchor(QGraphicsView.ViewportAnchor.AnchorUnderMouse)
+        self.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        self.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
         self._is_panning = False
 
     def wheelEvent(self, event):
         """Handle Zoom with Ctrl + Scroll."""
-        if event.modifiers() & Qt.ControlModifier:
+        if event.modifiers() & Qt.KeyboardModifier.ControlModifier:
             zoom_factor = 1.15
             if event.angleDelta().y() > 0:
                 self.scale(zoom_factor, zoom_factor)
@@ -1853,9 +2185,9 @@ class GraphView(QGraphicsView):
 
     def mousePressEvent(self, event):
         """Handle Panning with Middle Mouse Button."""
-        if event.button() == Qt.MiddleButton:
+        if event.button() == Qt.MouseButton.MiddleButton:
             self._is_panning = True
-            self.setDragMode(QGraphicsView.ScrollHandDrag)
+            self.setDragMode(QGraphicsView.DragMode.ScrollHandDrag)
             # Create a dummy event to initiate the drag immediately
             dummy = type(event)(event)
             super().mousePressEvent(dummy)
@@ -1863,68 +2195,93 @@ class GraphView(QGraphicsView):
             super().mousePressEvent(event)
 
     def mouseReleaseEvent(self, event):
-        if event.button() == Qt.MiddleButton:
+        if event.button() == Qt.MouseButton.MiddleButton:
             self._is_panning = False
-            self.setDragMode(QGraphicsView.RubberBandDrag)
+            self.setDragMode(QGraphicsView.DragMode.RubberBandDrag)
         super().mouseReleaseEvent(event)
+
+    def keyPressEvent(self, event):
+        """Handle keyboard shortcuts including Ctrl+A for select all."""
+        if (
+            event.key() == Qt.Key.Key_A
+            and event.modifiers() & Qt.KeyboardModifier.ControlModifier
+        ):
+            # Select all nodes in the scene
+            if hasattr(self.scene(), "selectAllItems"):
+                self.scene().selectAllItems()
+            else:
+                # Fallback: manually select all items
+                for item in self.scene().items():
+                    if hasattr(item, "setSelected"):
+                        item.setSelected(True)
+            event.accept()
+        else:
+            super().keyPressEvent(event)
+
 
 class PropertiesPanel(QWidget):
     """Enhanced inspector with type safety, parameter validation, and metadata columns."""
+
     node_updated = Signal()
 
     def __init__(self):
         super().__init__()
         self.current_node = None
-        self.layout = QVBoxLayout(self)
-        
-        self.scroll = QScrollArea()
-        self.scroll.setWidgetResizable(True)
-        self.scroll.setFrameShape(QFrame.NoFrame)
+        self._vbox_layout = QVBoxLayout(self)
+
+        self._scroll_area = QScrollArea()
+        self._scroll_area.setWidgetResizable(True)
+        self._scroll_area.setFrameShape(QFrame.Shape.NoFrame)
         self.form_widget = QWidget()
         self.form = QFormLayout(self.form_widget)
-        self.scroll.setWidget(self.form_widget)
-        
-        self.layout.addWidget(self.scroll)
-        
+        self._scroll_area.setWidget(self.form_widget)
+
+        self._vbox_layout.addWidget(self._scroll_area)
+
         # Debouncer for update signals
         self.debouncer = QTimer()
         self.debouncer.setSingleShot(True)
         self.debouncer.setInterval(500)
         self.debouncer.timeout.connect(self.node_updated.emit)
-        
+
         # Track active widgets for safe cleanup
         self.active_widgets = {}
 
-    def set_node(self, node_item: NodeItem):
+    def set_node(self, node_item: "NodeItem | None"):
         """Load node properties into inspector with full type safety."""
         self.current_node = node_item
-        
+
         # Clean up previous widgets
         for widget in self.active_widgets.values():
-            try: widget.deleteLater()
-            except: pass
+            try:
+                widget.deleteLater()
+            except:
+                pass
         self.active_widgets.clear()
-        
+
         while self.form.count():
             child = self.form.takeAt(0)
-            if child.widget(): child.widget().deleteLater()
+            if child.widget():
+                child.widget().deleteLater()
 
-        if not node_item: return
+        if not node_item:
+            return
 
         # FIX: Validate types, but SKIP asset parameters to prevent UUID->0.0 corruption
         for k, v in list(node_item.node_data.params.items()):
             if TypeSafeParser.is_asset_param(k):
-                continue # Do not touch asset strings/UUIDs
+                continue  # Do not touch asset strings/UUIDs
             elif TypeSafeParser.is_color_param(k):
                 node_item.node_data.params[k] = TypeSafeParser.parse_color(v)
             elif TypeSafeParser.is_numeric_param(k):
                 node_item.node_data.params[k] = TypeSafeParser.parse_numeric(v)
-        
+
         # ===== AI GENERATED INDICATOR =====
         if node_item.node_data.is_ai_generated:
             ai_label = QLabel("✨ AI GENERATED NODE ✨")
-            ai_label_font = FontManager.create_title_font(size=10)
-            ai_label.setFont(ai_label_font)
+            font = QFont()
+            font.setPointSize(10)
+            ai_label.setFont(font)
             ai_label.setStyleSheet(
                 "background: linear-gradient(90deg, #e3f2fd, #f3e5f5); "
                 "color: #1565c0; padding: 6px; border-radius: 3px; "
@@ -1936,31 +2293,33 @@ class PropertiesPanel(QWidget):
                 f"All parameters are available for editing."
             )
             self.form.addRow(ai_label)
-            
+
         # Meta Information
         self.form.addRow(QLabel("<b>Properties</b>"))
         id_lbl = QLabel(node_item.node_data.id[:8])
         id_lbl.setStyleSheet("color: gray;")
         self.form.addRow("ID", id_lbl)
-        
+
         name_edit = QLineEdit(node_item.node_data.name)
         name_edit.textChanged.connect(lambda t: self.update_param("_name", t))
         self.form.addRow("Name", name_edit)
-        
+
         if not MANIM_AVAILABLE:
             self.form.addRow(QLabel("Manim not loaded."))
             return
 
         try:
             cls = getattr(manim, node_item.node_data.cls_name, None)
-            if not cls: return
-            
+            if not cls:
+                return
+
             sig = inspect.signature(cls.__init__)
-            
+
             # Auto-load missing parameters
             for param_name, param in sig.parameters.items():
-                if param_name in ('self', 'args', 'kwargs', 'mobject'): continue
-                
+                if param_name in ("self", "args", "kwargs", "mobject"):
+                    continue
+
                 if param_name not in node_item.node_data.params:
                     if param.default is inspect.Parameter.empty:
                         default_val = param.default
@@ -1969,26 +2328,28 @@ class PropertiesPanel(QWidget):
                         elif TypeSafeParser.is_numeric_param(param_name):
                             default_val = TypeSafeParser.parse_numeric(default_val)
                         node_item.node_data.params[param_name] = default_val
-            
+
             # Create Rows
             for name, param in sig.parameters.items():
-                if name in ['self', 'args', 'kwargs', 'mobject']: continue
-                
+                if name in ["self", "args", "kwargs", "mobject"]:
+                    continue
+
                 # Check default value
                 val = node_item.node_data.params.get(name, param.default)
-                if val is inspect.Parameter.empty: val = None
-                
+                if val is inspect.Parameter.empty:
+                    val = None
+
                 # FIX: Disable 'tex_strings' by default if not explicitly set
                 if name == "tex_strings":
                     # Only disable if it wasn't manually enabled by user previously
                     if name not in node_item.node_data.param_metadata:
-                         node_item.node_data.set_param_enabled(name, False)
-                
+                        node_item.node_data.set_param_enabled(name, False)
+
                 row_widget = self.create_parameter_row(name, val, param.annotation)
                 # FIX: Actually add the row to the form layout
                 if row_widget:
                     self.form.addRow(name, row_widget)
-                    
+
         except Exception as e:
             LOGGER.error(f"Inspector Error for {node_item.node_data.cls_name}: {e}")
             traceback.print_exc()
@@ -1999,44 +2360,56 @@ class PropertiesPanel(QWidget):
             row_widget = QWidget()
             row_layout = QHBoxLayout(row_widget)
             row_layout.setContentsMargins(0, 0, 0, 0)
-            
+
             # Main value widget
             value_widget = self.create_typed_widget(key, value, annotation)
             if not value_widget:
                 return None
-            
+
             row_layout.addWidget(value_widget, 3)
-            
+
             # State checkbox (Enable/Disable parameter)
             state_chk = QCheckBox("Enabled")
-            state_chk.setToolTip("Check to include in code generation (Ctrl+E to toggle)")
+            state_chk.setToolTip(
+                "Check to include in code generation (Ctrl+E to toggle)"
+            )
             is_enabled = self.current_node.node_data.is_param_enabled(key)
             state_chk.setChecked(is_enabled)
             state_chk.stateChanged.connect(
-                lambda s: self.current_node.node_data.set_param_enabled(key, s == 2) if self.current_node else None
+                lambda s: (
+                    self.current_node.node_data.set_param_enabled(key, s == 2)
+                    if self.current_node
+                    else None
+                )
             )
             row_layout.addWidget(state_chk, 1)
-            
+
             # Escape String checkbox
             escape_chk = QCheckBox("Escape")
             escape_chk.setToolTip("Check to escape strings (remove quotes)")
             should_escape = self.current_node.data.should_escape_string(key)
             escape_chk.setChecked(should_escape)
             escape_chk.stateChanged.connect(
-                lambda s: self.current_node.data.set_escape_string(key, s == 2) if self.current_node else None
+                lambda s: (
+                    self.current_node.data.set_escape_string(key, s == 2)
+                    if self.current_node
+                    else None
+                )
             )
             row_layout.addWidget(escape_chk, 1)
-            
+
             return row_widget
-        
+
         except Exception as e:
             LOGGER.error(f"Error creating parameter row for {key}: {e}")
             return None
 
     def create_typed_widget(self, key, value, annotation):
         """Create typed widget with safe type enforcement and validation."""
+
         def on_change(v):
-            if not self.current_node: return
+            if not self.current_node:
+                return
             try:
                 if key == "_name":
                     self.current_node.data.name = str(v)
@@ -2053,7 +2426,7 @@ class PropertiesPanel(QWidget):
                         self.current_node.data.params[key] = v
                     else:
                         self.current_node.data.params[key] = v
-                
+
                 self.current_node.update()
                 self.debouncer.start()
             except Exception as e:
@@ -2064,22 +2437,25 @@ class PropertiesPanel(QWidget):
             # Check for keys like "mobject", "vmobject", "mobjects"
             key_lower = key.lower()
             target_keywords = ["mobject", "vmobject", "target", "object"]
-            
+
             # Logic: If it's an Animation node AND key contains one of the keywords
             is_anim = self.current_node.data.type == NodeType.ANIMATION
             is_target_param = any(k in key_lower for k in target_keywords)
-            
+
             if is_anim and is_target_param:
                 combo = QComboBox()
                 combo.addItem("-- Select Target --", None)
-                
+
                 # Scan main window nodes for Mobjects
-                # Note: We need a way to access main_window nodes. 
+                # Note: We need a way to access main_window nodes.
                 # Ideally pass main_window to PropertiesPanel or access via scene items.
                 scene = self.current_node.scene()
                 if scene:
                     for item in scene.items():
-                        if isinstance(item, NodeItem) and item.data.type == NodeType.MOBJECT:
+                        if (
+                            isinstance(item, NodeItem)
+                            and item.data.type == NodeType.MOBJECT
+                        ):
                             # Add Mobject to dropdown
                             display_name = f"📦 {item.data.name} ({item.data.id[:4]})"
                             combo.addItem(display_name, item.data.id)
@@ -2087,14 +2463,16 @@ class PropertiesPanel(QWidget):
                 # Set current value
                 if value:
                     idx = combo.findData(value)
-                    if idx >= 0: 
+                    if idx >= 0:
                         combo.setCurrentIndex(idx)
-                
+
                 # AUTO-CONFIGURE: Enable and Escape by default
                 self.current_node.data.set_param_enabled(key, True)
-                self.current_node.data.set_escape_string(key, True) 
-                
-                combo.currentIndexChanged.connect(lambda i: on_change(combo.itemData(i)))
+                self.current_node.data.set_escape_string(key, True)
+
+                combo.currentIndexChanged.connect(
+                    lambda i: on_change(combo.itemData(i))
+                )
                 return combo
 
             # 2. ASSET PATHS
@@ -2104,32 +2482,41 @@ class PropertiesPanel(QWidget):
                 for asset in ASSETS.get_list():
                     # Show Emoji + Name
                     combo.addItem(f"📄 {asset.name}", asset.id)
-                
+
                 if value:
                     idx = combo.findData(value)
-                    if idx >= 0: combo.setCurrentIndex(idx)
-                
-                combo.currentIndexChanged.connect(lambda i: on_change(combo.itemData(i)))
+                    if idx >= 0:
+                        combo.setCurrentIndex(idx)
+
+                combo.currentIndexChanged.connect(
+                    lambda i: on_change(combo.itemData(i))
+                )
                 return combo
 
             # 3. COLORS
             if TypeSafeParser.is_color_param(key):
-                # ... (Keep existing color logic) ...
                 btn = QPushButton("Pick Color")
-                hex_val = TypeSafeParser.parse_color(value)
-                btn.setStyleSheet(f"background-color: {hex_val}; color: white;")
-                
-                def pick_color():
-                    col = QColorDialog.getColor(QColor(hex_val), None, "Select Color")
-                    if col.isValid():
-                        new_hex = col.name()
-                        btn.setStyleSheet(f"background-color: {new_hex}; color: white;")
-                        on_change(new_hex)
+                _hex_val = str(TypeSafeParser.parse_color(value))
+                btn.setStyleSheet(f"background-color: {_hex_val}; color: white;")
 
-                btn.clicked.connect(pick_color)
+                def _make_color_picker(_btn, _initial_hex):
+                    def pick_color():
+                        col = QColorDialog.getColor(
+                            QColor(_initial_hex), None, "Select Color"
+                        )
+                        if col.isValid():
+                            new_hex = col.name()
+                            _btn.setStyleSheet(
+                                f"background-color: {new_hex}; color: white;"
+                            )
+                            on_change(new_hex)
+
+                    return pick_color
+
+                btn.clicked.connect(_make_color_picker(btn, _hex_val))
                 return btn
 
-             # 4. NUMERIC
+            # 4. NUMERIC
             if TypeSafeParser.is_numeric_param(key) or annotation in (float, int):
                 # ... (Keep existing numeric logic) ...
                 if annotation == float or isinstance(value, float):
@@ -2173,8 +2560,9 @@ class PropertiesPanel(QWidget):
             except Exception as e:
                 LOGGER.warn(f"update_param error: {e}")
 
+
 class ElementsPanel(QWidget):
-    add_requested = Signal(str, str) # Type, Class
+    add_requested = Signal(str, str)  # Type, Class
 
     def __init__(self):
         super().__init__()
@@ -2183,7 +2571,7 @@ class ElementsPanel(QWidget):
         self.search.setPlaceholderText("Search...")
         self.search.textChanged.connect(self.filter)
         layout.addWidget(self.search)
-        
+
         self.tree = QTreeWidget()
         self.tree.setHeaderHidden(True)
         self.tree.itemDoubleClicked.connect(self.on_dbl_click)
@@ -2191,21 +2579,26 @@ class ElementsPanel(QWidget):
         self.populate()
 
     def populate(self):
-        if not MANIM_AVAILABLE: return
+        if not MANIM_AVAILABLE:
+            return
         self.tree.clear()
         mob_root = QTreeWidgetItem(self.tree, ["Mobjects"])
         anim_root = QTreeWidgetItem(self.tree, ["Animations"])
-        
+
         for name in dir(manim):
-            if name.startswith("_"): continue
+            if name.startswith("_"):
+                continue
             obj = getattr(manim, name)
             if inspect.isclass(obj):
                 try:
                     if issubclass(obj, manim.Mobject) and obj is not manim.Mobject:
                         QTreeWidgetItem(mob_root, [name])
-                    elif issubclass(obj, manim.Animation) and obj is not manim.Animation:
+                    elif (
+                        issubclass(obj, manim.Animation) and obj is not manim.Animation
+                    ):
                         QTreeWidgetItem(anim_root, [name])
-                except: pass
+                except:
+                    pass
         mob_root.setExpanded(True)
 
     def filter(self, txt):
@@ -2219,7 +2612,8 @@ class ElementsPanel(QWidget):
                 if txt in item.text(0).lower():
                     item.setHidden(False)
                     hide = False
-                else: item.setHidden(True)
+                else:
+                    item.setHidden(True)
             cat.setHidden(hide)
 
     def on_dbl_click(self, item, col):
@@ -2228,108 +2622,10 @@ class ElementsPanel(QWidget):
             t = "Mobject" if p.text(0) == "Mobjects" else "Animation"
             self.add_requested.emit(t, item.text(0))
 
-class VideoOutputPanel(QWidget):
-    """Integrated Video Player with Seek and Play/Pause controls."""
-    def __init__(self):
-        super().__init__()
-        self.duration = 0
-        self.player = QMediaPlayer()
-        self.audio_output = QAudioOutput()
-        self.player.setAudioOutput(self.audio_output)
-        
-        # Create Video Widget
-        self.video_widget = QVideoWidget()
-        self.player.setVideoOutput(self.video_widget)
-        
-        # Connections
-        self.player.positionChanged.connect(self.on_position_changed)
-        self.player.durationChanged.connect(self.on_duration_changed)
-        self.player.mediaStatusChanged.connect(self.on_media_status_changed)
-        
-        self.setup_ui()
-
-    def setup_ui(self):
-        # NOTE: This uses addWidget, NOT setCentralWidget
-        layout = QVBoxLayout(self)
-        layout.setContentsMargins(0, 0, 0, 0)
-        layout.setSpacing(0)
-        
-        # Header
-        header_bar = QFrame()
-        header_bar.setStyleSheet("background: #2c3e50; border-bottom: 1px solid #34495e;")
-        header_layout = QHBoxLayout(header_bar)
-        header_layout.setContentsMargins(10, 5, 10, 5)
-        lbl = QLabel("🎥 Output Monitor")
-        lbl.setStyleSheet("color: white; font-weight: bold;")
-        header_layout.addWidget(lbl)
-        layout.addWidget(header_bar)
-        
-        # Video Area
-        self.video_widget.setStyleSheet("background-color: black;")
-        layout.addWidget(self.video_widget, 1)
-        
-        # Controls
-        controls = QFrame()
-        controls.setStyleSheet("background: #ecf0f1; border-top: 1px solid #bdc3c7;")
-        ctrl_layout = QHBoxLayout(controls)
-        ctrl_layout.setContentsMargins(10, 5, 10, 5)
-        
-        self.btn_play = QPushButton("▶")
-        self.btn_play.setFixedSize(30, 30)
-        self.btn_play.clicked.connect(self.toggle_play)
-        ctrl_layout.addWidget(self.btn_play)
-        
-        self.slider = QSlider(Qt.Horizontal)
-        self.slider.setRange(0, 0)
-        self.slider.sliderMoved.connect(self.set_position)
-        ctrl_layout.addWidget(self.slider)
-        
-        self.lbl_time = QLabel("00:00 / 00:00")
-        self.lbl_time.setStyleSheet("font-family: monospace;")
-        ctrl_layout.addWidget(self.lbl_time)
-        
-        layout.addWidget(controls)
-
-    def load_video(self, file_path, autoplay=True):
-        self.player.setSource(QUrl.fromLocalFile(file_path))
-        self.audio_output.setVolume(1.0)
-        if autoplay:
-            self.player.play()
-            self.btn_play.setText("⏸")
-
-    def toggle_play(self):
-        if self.player.playbackState() == QMediaPlayer.PlayingState:
-            self.player.pause()
-            self.btn_play.setText("▶")
-        else:
-            self.player.play()
-            self.btn_play.setText("⏸")
-
-    def on_position_changed(self, position):
-        if not self.slider.isSliderDown():
-            self.slider.setValue(position)
-        self.update_time_label(position)
-
-    def on_duration_changed(self, duration):
-        self.duration = duration
-        self.slider.setRange(0, duration)
-
-    def set_position(self, position):
-        self.player.setPosition(position)
-
-    def update_time_label(self, current_ms):
-        def fmt(ms):
-            seconds = (ms // 1000) % 60
-            minutes = (ms // 60000)
-            return f"{minutes:02}:{seconds:02}"
-        self.lbl_time.setText(f"{fmt(current_ms)} / {fmt(self.duration)}")
-
-    def on_media_status_changed(self, status):
-        if status == QMediaPlayer.EndOfMedia:
-            self.btn_play.setText("▶")
 
 class VideoRenderPanel(QWidget):
     """Panel for rendering scenes to video."""
+
     render_requested = Signal(dict)
 
     def __init__(self):
@@ -2340,21 +2636,21 @@ class VideoRenderPanel(QWidget):
     def setup_ui(self):
         # NOTE: This is a QWidget. It uses addLayout/addWidget.
         layout = QVBoxLayout(self)
-        
+
         title = QLabel("🎬 Video Render")
-        title_font = title.font()
-        title_font.setPointSize(12)
-        title_font.setBold(True)
-        title.setFont(title_font)
+        font = QFont()
+        font.setPointSize(12)
+        font.setBold(True)
+        title.setFont(font)
         layout.addWidget(title)
-        
+
         form = QFormLayout()
-        
+
         self.fps_spin = QSpinBox()
         self.fps_spin.setRange(15, 60)
         self.fps_spin.setValue(30)
         form.addRow("Frame Rate:", self.fps_spin)
-        
+
         res_layout = QHBoxLayout()
         self.width_spin = QSpinBox()
         self.width_spin.setRange(320, 3840)
@@ -2362,7 +2658,7 @@ class VideoRenderPanel(QWidget):
         self.width_spin.setSingleStep(160)
         res_layout.addWidget(QLabel("Width:"))
         res_layout.addWidget(self.width_spin)
-        
+
         self.height_spin = QSpinBox()
         self.height_spin.setRange(180, 2160)
         self.height_spin.setValue(720)
@@ -2370,67 +2666,78 @@ class VideoRenderPanel(QWidget):
         res_layout.addWidget(QLabel("Height:"))
         res_layout.addWidget(self.height_spin)
         form.addRow("Resolution:", res_layout)
-        
+
         self.quality_combo = QComboBox()
-        self.quality_combo.addItems(["Low (ql)", "Medium (qm)", "High (qh)", "Ultra (qk)"])
+        self.quality_combo.addItems(
+            ["Low (ql)", "Medium (qm)", "High (qh)", "Ultra (qk)"]
+        )
         self.quality_combo.setCurrentIndex(1)
         form.addRow("Quality:", self.quality_combo)
-        
+
         layout.addLayout(form)
-        
+
         path_layout = QHBoxLayout()
         self.output_path_lbl = QLineEdit()
         self.output_path_lbl.setReadOnly(True)
         self.output_path_lbl.setText(str(AppPaths.TEMP_DIR))
         path_layout.addWidget(QLabel("Output:"))
         path_layout.addWidget(self.output_path_lbl)
-        
+
         self.browse_btn = QPushButton("Browse...")
         self.browse_btn.clicked.connect(self.browse_output)
         path_layout.addWidget(self.browse_btn)
         layout.addLayout(path_layout)
-        
+
         ctrl_layout = QHBoxLayout()
         self.render_scene_btn = QPushButton("📽 Render Full Scene")
-        self.render_scene_btn.setStyleSheet("background-color: #27ae60; color: white; padding: 8px;")
+        self.render_scene_btn.setStyleSheet(
+            "background-color: #27ae60; color: white; padding: 8px;"
+        )
         self.render_scene_btn.clicked.connect(self.render_full_scene)
         ctrl_layout.addWidget(self.render_scene_btn)
-        
+
         self.cancel_btn = QPushButton("⏹ Cancel")
         self.cancel_btn.setEnabled(False)
-        self.cancel_btn.setStyleSheet("background-color: #e74c3c; color: white; padding: 8px;")
+        self.cancel_btn.setStyleSheet(
+            "background-color: #e74c3c; color: white; padding: 8px;"
+        )
         self.cancel_btn.clicked.connect(self.cancel_render)
         ctrl_layout.addWidget(self.cancel_btn)
-        
+
         layout.addLayout(ctrl_layout)
-        
+
         self.status_display = QTextEdit()
         self.status_display.setReadOnly(True)
         self.status_display.setMaximumHeight(120)
         layout.addWidget(QLabel("Status:"))
         layout.addWidget(self.status_display)
-        
+
         layout.addStretch()
 
     # ... (Keep existing browse_output, render_full_scene, update_status, etc.) ...
     def browse_output(self):
-        path = QFileDialog.getExistingDirectory(self, "Select Output", str(AppPaths.TEMP_DIR))
-        if path: self.output_path_lbl.setText(path)
+        path = QFileDialog.getExistingDirectory(
+            self, "Select Output", str(AppPaths.TEMP_DIR)
+        )
+        if path:
+            self.output_path_lbl.setText(path)
 
     def render_full_scene(self):
         output_path = Path(self.output_path_lbl.text())
-        if not output_path.exists(): return
-        qual = ["l","m","h","k"][self.quality_combo.currentIndex()]
+        if not output_path.exists():
+            return
+        qual = ["l", "m", "h", "k"][self.quality_combo.currentIndex()]
         config = {
             "fps": self.fps_spin.value(),
             "resolution": (self.width_spin.value(), self.height_spin.value()),
             "quality": qual,
-            "output_path": str(output_path)
+            "output_path": str(output_path),
         }
         self.render_requested.emit(config)
 
     def cancel_render(self):
-        if self.render_worker: self.render_worker.stop_render()
+        if self.render_worker:
+            self.render_worker.stop_render()
 
     def start_rendering(self, worker):
         self.render_worker = worker
@@ -2453,8 +2760,10 @@ class VideoRenderPanel(QWidget):
     def update_status(self, msg, col):
         self.status_display.append(f"<span style='color:{col}'>{msg}</span>")
 
+
 class AIPanel(QWidget):
     """Enhanced AI Panel with visual distinction and node generation."""
+
     merge_requested = Signal(str)
     nodes_generated = Signal(dict)  # Emits dict of generated node info
 
@@ -2463,47 +2772,47 @@ class AIPanel(QWidget):
         self.worker = None
         self.last_code = None
         self.extracted_nodes = []  # Track AI-generated nodes
-        
+
         # Create main layout with visual distinction
         main_layout = QVBoxLayout(self)
         main_layout.setContentsMargins(0, 0, 0, 0)
-        
+
         # ===== HEADER =====
         header = self._create_header()
         main_layout.addWidget(header)
-        
+
         # ===== CONTENT AREA =====
-        content_splitter = QSplitter(Qt.Horizontal)
-        
+        content_splitter = QSplitter(Qt.Orientation.Horizontal)
+
         # Left side: Prompt + Response
         left_panel = QWidget()
         left_layout = QVBoxLayout(left_panel)
         left_layout.setContentsMargins(8, 8, 8, 8)
-        
+
         # Prompt section
         prompt_group = self._create_prompt_section()
         left_layout.addWidget(prompt_group)
-        
+
         # Response section (scrollable)
         response_group = self._create_response_section()
         left_layout.addWidget(response_group)
-        
+
         # Control buttons
         button_layout = self._create_button_layout()
         left_layout.addLayout(button_layout)
-        
+
         content_splitter.addWidget(left_panel)
         content_splitter.setCollapsible(0, False)
-        
+
         # Right side: Generated Nodes Preview
         right_panel = self._create_nodes_preview()
         content_splitter.addWidget(right_panel)
-        
+
         content_splitter.setSizes([600, 300])
         content_splitter.setCollapsible(1, True)
-        
+
         main_layout.addWidget(content_splitter)
-        
+
     def _create_header(self) -> QWidget:
         """Create visually distinct header."""
         header = QFrame()
@@ -2512,29 +2821,31 @@ class AIPanel(QWidget):
             "border-bottom: 2px solid #0d47a1; }"
         )
         header.setMaximumHeight(50)
-        
+
         layout = QHBoxLayout(header)
         layout.setContentsMargins(12, 8, 12, 8)
-        
+
         title = QLabel("🤖 AI Code Generator")
-        title_font = FontManager.create_title_font(size=11, bold=True)
-        title.setFont(title_font)
+        font = QFont()
+        font.setPointSize(11)
+        font.setBold(True)
+        title.setFont(font)
         title.setStyleSheet("color: white; font-weight: bold;")
-        
+
         subtitle = QLabel("Generate Manim code with Gemini AI")
         subtitle.setStyleSheet("color: rgba(255,255,255,0.7); font-size: 9pt;")
-        
+
         layout.addWidget(title)
         layout.addWidget(subtitle)
         layout.addStretch()
-        
+
         status_label = QLabel("Status: Ready")
         status_label.setStyleSheet("color: rgba(255,255,255,0.8);")
         self.status_label = status_label
         layout.addWidget(status_label)
-        
+
         return header
-        
+
     def _create_prompt_section(self) -> QFrame:
         """Create prompt input section with styling."""
         frame = QFrame()
@@ -2544,24 +2855,28 @@ class AIPanel(QWidget):
         )
         layout = QVBoxLayout(frame)
         layout.setContentsMargins(8, 8, 8, 8)
-        
+
         label = QLabel("📝 Your Prompt")
-        label_font = FontManager.create_title_font(size=10, bold=True)
-        label.setFont(label_font)
+        font = QFont()
+        font.setPointSize(10)
+        font.setBold(True)
+        label.setFont(font)
         label.setStyleSheet("color: #1565c0;")
         layout.addWidget(label)
-        
+
         self.input = QPlainTextEdit()
-        self.input.setPlaceholderText("Describe your animation...\n\nExample: Create a blue rectangle that smoothly rotates 100 degrees.")
+        self.input.setPlaceholderText(
+            "Describe your animation...\n\nExample: Create a blue rectangle that smoothly rotates 100 degrees."
+        )
         self.input.setMaximumHeight(90)
         self.input.setStyleSheet(
             "QPlainTextEdit { border: 1px solid #bdbdbd; border-radius: 3px; "
             "background: white; padding: 6px; }"
         )
         layout.addWidget(self.input)
-        
+
         return frame
-        
+
     def _create_response_section(self) -> QFrame:
         """Create response display section with scrolling."""
         frame = QFrame()
@@ -2571,13 +2886,15 @@ class AIPanel(QWidget):
         )
         layout = QVBoxLayout(frame)
         layout.setContentsMargins(8, 8, 8, 8)
-        
+
         label = QLabel("💬 AI Response")
-        label_font = FontManager.create_title_font(size=10, bold=True)
-        label.setFont(label_font)
+        font = QFont()
+        font.setPointSize(10)
+        font.setBold(True)
+        label.setFont(font)
         label.setStyleSheet("color: #1565c0;")
         layout.addWidget(label)
-        
+
         # Scrollable output area
         self.output = QTextEdit()
         self.output.setReadOnly(True)
@@ -2586,13 +2903,13 @@ class AIPanel(QWidget):
             "background: white; padding: 6px; }"
         )
         layout.addWidget(self.output)
-        
+
         return frame
-        
+
     def _create_button_layout(self) -> QHBoxLayout:
         """Create control buttons with visual distinction."""
         layout = QHBoxLayout()
-        
+
         # Generate button (primary)
         self.btn_gen = QPushButton("⚡ Generate Code")
         self.btn_gen.setStyleSheet(
@@ -2603,7 +2920,7 @@ class AIPanel(QWidget):
         )
         self.btn_gen.clicked.connect(self.generate)
         layout.addWidget(self.btn_gen, 1)
-        
+
         # Merge button (success)
         self.btn_merge = QPushButton("✅ Merge to Scene")
         self.btn_merge.setEnabled(False)
@@ -2615,7 +2932,7 @@ class AIPanel(QWidget):
         )
         self.btn_merge.clicked.connect(self.merge)
         layout.addWidget(self.btn_merge, 1)
-        
+
         # Reject button (danger)
         self.btn_reject = QPushButton("❌ Reject")
         self.btn_reject.setEnabled(False)
@@ -2627,7 +2944,7 @@ class AIPanel(QWidget):
         )
         self.btn_reject.clicked.connect(self.reject)
         layout.addWidget(self.btn_reject, 1)
-        
+
         # Clear button (secondary)
         self.btn_clear = QPushButton("🗑️ Clear")
         self.btn_clear.setStyleSheet(
@@ -2637,9 +2954,9 @@ class AIPanel(QWidget):
         )
         self.btn_clear.clicked.connect(lambda: self.output.clear())
         layout.addWidget(self.btn_clear, 1)
-        
+
         return layout
-        
+
     def _create_nodes_preview(self) -> QFrame:
         """Create preview panel for generated nodes."""
         frame = QFrame()
@@ -2648,13 +2965,15 @@ class AIPanel(QWidget):
         )
         layout = QVBoxLayout(frame)
         layout.setContentsMargins(8, 8, 8, 8)
-        
+
         title = QLabel("🎬 Generated Nodes")
-        title_font = FontManager.create_title_font(size=10, bold=True)
-        title.setFont(title_font)
+        font = QFont()
+        font.setPointSize(10)
+        font.setBold(True)
+        title.setFont(font)
         title.setStyleSheet("color: #1565c0;")
         layout.addWidget(title)
-        
+
         # Nodes list (scrollable)
         self.nodes_list = QListWidget()
         self.nodes_list.setStyleSheet(
@@ -2664,31 +2983,34 @@ class AIPanel(QWidget):
             "QListWidget::item:hover { background: #e3f2fd; }"
         )
         layout.addWidget(self.nodes_list)
-        
+
         self.extracted_nodes = []
-        
+
         return frame
-        
+
     def generate(self):
         """Generate AI code."""
         txt = self.input.toPlainText().strip()
         if not txt:
             self.status_label.setText("Status: Empty prompt")
             return
-            
+
         self.output.clear()
         self.nodes_list.clear()
         self.extracted_nodes = []
-        
+
         self.output.append(f"<b style='color: #1565c0;'>👤 USER:</b> {txt}\n")
         self.btn_gen.setEnabled(False)
         self.status_label.setText("Status: Generating...")
         self.input.clear()
-        
+
         # Get selected model from settings
-        selected_model = SETTINGS.get("GEMINI_MODEL", "gemini-3-flash-preview")
+        selected_model = str(
+            SETTINGS.get("GEMINI_MODEL", "gemini-3-flash-preview")
+            or "gemini-3-flash-preview"
+        )
         self.output.append(f"<b style='color: #666;'>🤖 Model:</b> {selected_model}\n")
-        
+
         sys_prompt = (
             f"You are a Manim expert. Generate production-ready Python Manim code following these STRICT rules:\n\n"
             f"USER REQUEST: {txt}\n\n"
@@ -2706,7 +3028,7 @@ class AIPanel(QWidget):
             f"OUTPUT FORMAT:\n"
             f"```python\n"
             f"from manim import *\n\n"
-            f"class EfficientScene(Scene):\n"
+            f"class MyScene(Scene):\n"
             f"    def construct(self):\n"
             f"        # Create objects with exact properties\n"
             f"        obj_1 = ClassName(property=value, ...)\n"
@@ -2719,82 +3041,94 @@ class AIPanel(QWidget):
             f"```\n\n"
             f"Generate ONLY the code block. No text before or after.\n"
         )
-        
+
         # Get selected model and create worker
-        selected_model = SETTINGS.get("GEMINI_MODEL", "gemini-3-flash-preview")
+        selected_model = str(SETTINGS.get("GEMINI_MODEL", "gemini-2.5-flash-preview"))
         self.worker = AIWorker(sys_prompt, model=selected_model)
         self.worker.chunk_received.connect(self.on_chunk)
         self.worker.finished_signal.connect(self.on_finish)
         self.worker.start()
-        
+
     def on_chunk(self, txt):
         """Handle streamed AI response."""
-        self.output.moveCursor(QTextCursor.End)
+        self.output.moveCursor(QTextCursor.MoveOperation.End)
         self.output.insertPlainText(txt)
-        
+
     def on_finish(self):
         """Parse generated code and extract nodes."""
         self.btn_gen.setEnabled(True)
         full = self.output.toPlainText()
         match = re.findall(r"```python(.*?)```", full, re.DOTALL)
-        
+
         if match:
             self.last_code = match[-1].strip()
             self._extract_nodes_from_code(self.last_code)
-            
+
             if self.extracted_nodes:
                 self.btn_merge.setEnabled(True)
                 self.btn_reject.setEnabled(True)
-                self.status_label.setText(f"Status: Ready to merge ({len(self.extracted_nodes)} nodes)")
-                LOGGER.ai(f"Code block ready. Extracted {len(self.extracted_nodes)} nodes.")
+                self.status_label.setText(
+                    f"Status: Ready to merge ({len(self.extracted_nodes)} nodes)"
+                )
+                LOGGER.ai(
+                    f"Code block ready. Extracted {len(self.extracted_nodes)} nodes."
+                )
             else:
                 self.status_label.setText("Status: Code ready (no nodes detected)")
         else:
             self.status_label.setText("Status: No code block found")
-            
+
     def _extract_nodes_from_code(self, code: str):
         """Extract BOTH mobjects and animations from AI-generated code."""
         self.extracted_nodes = []
         self.nodes_list.clear()
-        
+
         # Extract all object definitions
-        pattern = r'(\w+)\s*=\s*([A-Z][a-zA-Z0-9]*)\s*\((.*?)\)(?:\s|$)'
+        pattern = r"(\w+)\s*=\s*([A-Z][a-zA-Z0-9]*)\s*\((.*?)\)(?:\s|$)"
         matches = re.finditer(pattern, code, re.DOTALL)
-        
+
         for match in matches:
             var_name, class_name, params_str = match.groups()
-            
+
             # Skip if not a Manim class
             if not hasattr(manim, class_name):
                 continue
-            
+
             # Extract and parse ALL parameters
             params = self._parse_node_parameters(params_str)
             param_count = len(params)
-            
+
             # Determine if it's an animation
             is_animation = False
             try:
                 if hasattr(manim, class_name):
                     cls = getattr(manim, class_name)
-                    is_animation = issubclass(cls, manim.Animation) if hasattr(manim, 'Animation') else 'Animation' in class_name
+                    is_animation = (
+                        issubclass(cls, manim.Animation)
+                        if hasattr(manim, "Animation")
+                        else "Animation" in class_name
+                    )
             except:
                 pass
-                
-            self.extracted_nodes.append({
-                'var_name': var_name,
-                'class_name': class_name,
-                'params': params,
-                'params_str': params_str,
-                'source': 'ai',
-                'type': 'animation' if is_animation else 'mobject'
-            })
-            
+
+            self.extracted_nodes.append(
+                {
+                    "var_name": var_name,
+                    "class_name": class_name,
+                    "params": params,
+                    "params_str": params_str,
+                    "source": "ai",
+                    "type": "animation" if is_animation else "mobject",
+                }
+            )
+
             # Add to list with icon indicating type
             node_icon = "🎬" if is_animation else "📦"
             node_type_label = "Animation" if is_animation else "Mobject"
-            item = QListWidgetItem(f"{node_icon} {var_name}: {class_name} ({param_count} params) [{node_type_label}]")
-            
+            item = QListWidgetItem(
+                f"{node_icon} {var_name}: {class_name} ({param_count} params) [{node_type_label}]"
+            )
+
             # Color code: blue for mobjects, purple for animations
             if is_animation:
                 item.setBackground(QColor("#f3e5f5"))
@@ -2802,12 +3136,14 @@ class AIPanel(QWidget):
             else:
                 item.setBackground(QColor("#e3f2fd"))
                 item.setForeground(QColor("#1565c0"))
-            
+
             # Build detailed tooltip with parameter list
-            param_list = "\n".join([f"  • {k}={v[:40]}" for k, v in list(params.items())[:5]])
+            param_list = "\n".join(
+                [f"  • {k}={v[:40]}" for k, v in list(params.items())[:5]]
+            )
             if len(params) > 5:
-                param_list += f"\n  ... and {len(params)-5} more"
-            
+                param_list += f"\n  ... and {len(params) - 5} more"
+
             item.setToolTip(
                 f"AI Generated {node_type_label}\n"
                 f"Variable: {var_name}\n"
@@ -2816,62 +3152,75 @@ class AIPanel(QWidget):
                 f"All parameters are captured and ready to use."
             )
             self.nodes_list.addItem(item)
-        
+
         # Also show animations from self.play() calls
-        pattern_play = r'self\.play\((.*?)\)(?=\s|$)'
+        pattern_play = r"self\.play\((.*?)\)(?=\s|$)"
         for match in re.finditer(pattern_play, code, re.DOTALL):
             play_content = match.group(1)
-            anim_pattern = r'([A-Z][a-zA-Z0-9]*)\((.*?)\)'
-            
+            anim_pattern = r"([A-Z][a-zA-Z0-9]*)\((.*?)\)"
+
             for anim_match in re.finditer(anim_pattern, play_content):
                 anim_class = anim_match.group(1)
-                
+
                 # Skip if not a Manim animation class
                 if not hasattr(manim, anim_class):
                     continue
-                
+
                 try:
                     cls = getattr(manim, anim_class)
-                    is_anim = issubclass(cls, manim.Animation) if hasattr(manim, 'Animation') else 'Animation' in anim_class
-                    
-                    if is_anim and not any(n['class_name'] == anim_class and n['type'] == 'animation' for n in self.extracted_nodes):
+                    is_anim = (
+                        issubclass(cls, manim.Animation)
+                        if hasattr(manim, "Animation")
+                        else "Animation" in anim_class
+                    )
+
+                    if is_anim and not any(
+                        n["class_name"] == anim_class and n["type"] == "animation"
+                        for n in self.extracted_nodes
+                    ):
                         # Add this animation if not already added
-                        self.extracted_nodes.append({
-                            'var_name': f"{anim_class.lower()}_1",
-                            'class_name': anim_class,
-                            'params': {},
-                            'source': 'ai',
-                            'type': 'animation'
-                        })
-                        
-                        item = QListWidgetItem(f"🎬 {anim_class.lower()}_1: {anim_class} (from self.play)")
+                        self.extracted_nodes.append(
+                            {
+                                "var_name": f"{anim_class.lower()}_1",
+                                "class_name": anim_class,
+                                "params": {},
+                                "source": "ai",
+                                "type": "animation",
+                            }
+                        )
+
+                        item = QListWidgetItem(
+                            f"🎬 {anim_class.lower()}_1: {anim_class} (from self.play)"
+                        )
                         item.setBackground(QColor("#f3e5f5"))
                         item.setForeground(QColor("#7b1fa2"))
-                        item.setToolTip(f"Animation: {anim_class}\nExtracted from self.play() call")
+                        item.setToolTip(
+                            f"Animation: {anim_class}\nExtracted from self.play() call"
+                        )
                         self.nodes_list.addItem(item)
                 except:
                     pass
-    
+
     def _parse_node_parameters(self, params_str: str) -> dict:
         """Parse parameters from node definition string, handling nested structures."""
         params = {}
-        
+
         # Split by comma, but respect parentheses/brackets nesting
         depth = 0
         current_item = ""
-        
+
         for char in params_str:
-            if char in '([{':
+            if char in "([{":
                 depth += 1
                 current_item += char
-            elif char in ')]}':
+            elif char in ")]}":
                 depth -= 1
                 current_item += char
-            elif char == ',' and depth == 0:
+            elif char == "," and depth == 0:
                 # End of parameter
-                if '=' in current_item:
+                if "=" in current_item:
                     try:
-                        key, value = current_item.split('=', 1)
+                        key, value = current_item.split("=", 1)
                         key = key.strip()
                         value = value.strip()
                         # Store raw value (will be cleaned during merge)
@@ -2881,30 +3230,29 @@ class AIPanel(QWidget):
                 current_item = ""
             else:
                 current_item += char
-        
+
         # Don't forget last item
-        if current_item and '=' in current_item:
+        if current_item and "=" in current_item:
             try:
-                key, value = current_item.split('=', 1)
+                key, value = current_item.split("=", 1)
                 key = key.strip()
                 value = value.strip()
                 params[key] = value
             except ValueError:
                 pass
-        
+
         return params
-            
+
     def merge(self):
         """Emit merge signal with code."""
         if self.last_code:
             self.merge_requested.emit(self.last_code)
             # Signal node generation for UI update
             if self.extracted_nodes:
-                self.nodes_generated.emit({
-                    'code': self.last_code,
-                    'nodes': self.extracted_nodes
-                })
-                
+                self.nodes_generated.emit(
+                    {"code": self.last_code, "nodes": self.extracted_nodes}
+                )
+
     def reject(self):
         """Reject AI code and reset."""
         self.last_code = None
@@ -2916,13 +3264,15 @@ class AIPanel(QWidget):
         self.status_label.setText("Status: Code rejected")
         LOGGER.ai("AI Code rejected.")
 
+
 # ==============================================================================
 # 8B. AI NODE INTEGRATION
 # ==============================================================================
 
+
 class AINodeIntegrator:
     """Handles integration of AI-generated nodes into the scene graph."""
-    
+
     @staticmethod
     def parse_ai_code(code: str) -> tuple:
         """
@@ -2938,14 +3288,30 @@ class AINodeIntegrator:
         mobjects = []
         animations = []
         play_sequence = []
-        mobject_vars = {}   # var_name -> class_name
+        mobject_vars = {}  # var_name -> class_name
 
         KNOWN_ANIMS = {
-            'FadeIn','FadeOut','Write','DrawBorderThenFill','Create',
-            'Transform','ReplacementTransform','Rotate','Scale',
-            'ScaleInPlace','MoveTo','ApplyMethod','Indicate',
-            'FocusOn','Circumscribe','ShowCreation','Uncreate',
-            'GrowFromCenter','ShrinkToCenter','Succession','AnimationGroup',
+            "FadeIn",
+            "FadeOut",
+            "Write",
+            "DrawBorderThenFill",
+            "Create",
+            "Transform",
+            "ReplacementTransform",
+            "Rotate",
+            "Scale",
+            "ScaleInPlace",
+            "MoveTo",
+            "ApplyMethod",
+            "Indicate",
+            "FocusOn",
+            "Circumscribe",
+            "ShowCreation",
+            "Uncreate",
+            "GrowFromCenter",
+            "ShrinkToCenter",
+            "Succession",
+            "AnimationGroup",
         }
 
         def _balanced_paren_end(s, start):
@@ -2953,8 +3319,10 @@ class AINodeIntegrator:
             depth = 1
             i = start
             while i < len(s) and depth > 0:
-                if s[i] == '(': depth += 1
-                elif s[i] == ')': depth -= 1
+                if s[i] == "(":
+                    depth += 1
+                elif s[i] == ")":
+                    depth -= 1
                 i += 1
             return i
 
@@ -2970,21 +3338,23 @@ class AINodeIntegrator:
                 return False
 
         # ── Step 1: Variable assignments ──────────────────────────────────
-        for m in re.finditer(r'^[ \t]*(\w+)\s*=\s*([A-Z][a-zA-Z0-9]*)\s*\(', code, re.MULTILINE):
+        for m in re.finditer(
+            r"^[ \t]*(\w+)\s*=\s*([A-Z][a-zA-Z0-9]*)\s*\(", code, re.MULTILINE
+        ):
             var_name, class_name = m.groups()
             if not hasattr(manim, class_name):
                 continue
             end_idx = _balanced_paren_end(code, m.end())
-            params_str = code[m.end():end_idx-1]
+            params_str = code[m.end() : end_idx - 1]
             params = AINodeIntegrator._parse_params(params_str)
 
             is_anim = _is_animation_class(class_name)
             entry = {
-                'var_name': var_name,
-                'class_name': class_name,
-                'params': params,
-                'source': 'ai',
-                'code_snippet': code[m.start():end_idx],
+                "var_name": var_name,
+                "class_name": class_name,
+                "params": params,
+                "source": "ai",
+                "code_snippet": code[m.start() : end_idx],
             }
             if is_anim:
                 animations.append(entry)
@@ -2993,26 +3363,30 @@ class AINodeIntegrator:
                 mobject_vars[var_name] = class_name
 
         # ── Step 2: self.play() calls in order ────────────────────────────
-        for m in re.finditer(r'self\.play\(', code):
+        for m in re.finditer(r"self\.play\(", code):
             end_idx = _balanced_paren_end(code, m.end())
-            raw_play = code[m.end():end_idx-1].strip()
+            raw_play = code[m.end() : end_idx - 1].strip()
 
             # .animate chain: var.animate.method(args)
-            animate_m = re.match(r'(\w+)\.animate\.([\w]+)\((.*)\)$', raw_play, re.DOTALL)
+            animate_m = re.match(
+                r"(\w+)\.animate\.([\w]+)\((.*)\)$", raw_play, re.DOTALL
+            )
             if animate_m:
                 target_var, method, method_args = animate_m.groups()
-                play_sequence.append({
-                    'anim_class': f'animate.{method}',
-                    'anim_var': f'{target_var}_animate_{method}_{len(play_sequence)+1}',
-                    'target_var': target_var,
-                    'params': AINodeIntegrator._parse_params(method_args),
-                    'raw': raw_play,
-                    'is_animate_chain': True,
-                })
+                play_sequence.append(
+                    {
+                        "anim_class": f"animate.{method}",
+                        "anim_var": f"{target_var}_animate_{method}_{len(play_sequence) + 1}",
+                        "target_var": target_var,
+                        "params": AINodeIntegrator._parse_params(method_args),
+                        "raw": raw_play,
+                        "is_animate_chain": True,
+                    }
+                )
                 continue
 
             # Standard AnimClass(args)
-            inner_m = re.match(r'([A-Z][a-zA-Z0-9]*)\s*\((.*)\)$', raw_play, re.DOTALL)
+            inner_m = re.match(r"([A-Z][a-zA-Z0-9]*)\s*\((.*)\)$", raw_play, re.DOTALL)
             if inner_m:
                 anim_class, anim_args = inner_m.groups()
                 if not hasattr(manim, anim_class):
@@ -3022,7 +3396,7 @@ class AINodeIntegrator:
 
                 target_var = None
                 for mob_var in mobject_vars:
-                    if re.search(r'\b' + re.escape(mob_var) + r'\b', anim_args):
+                    if re.search(r"\b" + re.escape(mob_var) + r"\b", anim_args):
                         target_var = mob_var
                         break
 
@@ -3030,14 +3404,16 @@ class AINodeIntegrator:
                 if target_var and target_var in params:
                     del params[target_var]
 
-                play_sequence.append({
-                    'anim_class': anim_class,
-                    'anim_var': f'{anim_class.lower()}_{len(play_sequence)+1}',
-                    'target_var': target_var,
-                    'params': params,
-                    'raw': raw_play,
-                    'is_animate_chain': False,
-                })
+                play_sequence.append(
+                    {
+                        "anim_class": anim_class,
+                        "anim_var": f"{anim_class.lower()}_{len(play_sequence) + 1}",
+                        "target_var": target_var,
+                        "params": params,
+                        "raw": raw_play,
+                        "is_animate_chain": False,
+                    }
+                )
 
         return mobjects, animations, play_sequence
 
@@ -3045,32 +3421,39 @@ class AINodeIntegrator:
     def _parse_params(params_str: str) -> dict:
         """Parse parameter string into dict with proper quote/constant handling."""
         params = {}
-        
+
         # Enhanced key=value extraction
-        for item in params_str.split(','):
+        for item in params_str.split(","):
             item = item.strip()
-            if '=' in item:
+            if "=" in item:
                 try:
-                    key, value = item.split('=', 1)
+                    key, value = item.split("=", 1)
                     key = key.strip()
                     value = value.strip()
-                    
+
                     # Clean quotes from strings
-                    if (value.startswith('"') and value.endswith('"')) or (value.startswith("'") and value.endswith("'")):
+                    if (value.startswith('"') and value.endswith('"')) or (
+                        value.startswith("'") and value.endswith("'")
+                    ):
                         value = value[1:-1]
-                    
+
                     # Store cleaned value
                     params[key] = value
                 except ValueError:
                     pass
-                    
+
         return params
-        
+
     @staticmethod
-    def create_node_from_ai(var_name: str, class_name: str,
-                            params: dict, scene_graph, node_type=NodeType.MOBJECT,
-                            pos: tuple = (50, 50),
-                            override_cls_name: str = None) -> 'NodeItem':
+    def create_node_from_ai(
+        var_name: str,
+        class_name: str,
+        params: dict,
+        scene_graph,
+        node_type=NodeType.MOBJECT,
+        pos: "tuple[int, int]" = (50, 50),
+        override_cls_name: str = None,
+    ) -> "NodeItem":
         """
         Create a node in the scene graph from AI definition.
 
@@ -3120,61 +3503,73 @@ class AINodeIntegrator:
             AINodeIntegrator._load_class_parameters(node_data, class_name)
 
         return item
-        
+
     @staticmethod
-    def _load_class_parameters(node_data: 'NodeData', class_name: str):
+    def _load_class_parameters(node_data: "NodeData", class_name: str):
         """
-        Auto-detect all parameters from Manim class and load into node_data.
+        Only validate explicitly provided parameters.
+        Do NOT auto-load unused function parameters or defaults.
+        This prevents inspect._empty and unused parameter injection.
         """
         try:
             cls = getattr(manim, class_name, None)
             if not cls:
                 return
-                
+
             sig = inspect.signature(cls.__init__)
-            
-            for param_name, param in sig.parameters.items():
-                # Skip self and special parameters
-                if param_name in ('self', 'args', 'kwargs', 'mobject'):
+
+            # Track which parameters were explicitly provided by AI
+            for param_name in list(node_data.params.keys()):
+                param = sig.parameters.get(param_name)
+                if not param:
+                    # Parameter doesn't exist in class, remove it
+                    del node_data.params[param_name]
                     continue
-                    
-                # Skip if already in params
-                if param_name in node_data.params:
+
+                # Skip special parameters
+                if param_name in ("self", "args", "kwargs", "mobject"):
+                    del node_data.params[param_name]
                     continue
-                    
-                # Set default value
-                if param.default != inspect.Parameter.empty:
-                    default_value = param.default
-                    
-                    # Apply type safety to defaults
-                    if TypeSafeParser.is_color_param(param_name):
-                        default_value = TypeSafeParser.parse_color(default_value)
-                    elif TypeSafeParser.is_numeric_param(param_name):
-                        default_value = TypeSafeParser.parse_numeric(default_value)
-                        
-                    node_data.params[param_name] = default_value
-                    
+
+                # Validate and clean the value
+                value = node_data.params[param_name]
+
+                # Remove None and empty values
+                if value is None or str(value) == "<class 'inspect._empty'>":
+                    del node_data.params[param_name]
+                    continue
+
+                # Check for string representations of inspect._empty
+                if isinstance(value, str):
+                    if value.strip() in (
+                        "inspect._empty",
+                        "<class 'inspect._empty'>",
+                        "_empty",
+                    ):
+                        del node_data.params[param_name]
+                        continue
+
         except Exception as e:
-            LOGGER.error(f"Failed to load parameters for {class_name}: {e}")
-            
+            LOGGER.error(f"Failed to validate parameters for {class_name}: {e}")
+
     @staticmethod
     def validate_ai_nodes(nodes: list) -> tuple:
         """
         Validate AI-generated nodes.
-        
+
         Returns: (valid_nodes, errors)
         """
         valid = []
         errors = []
-        
+
         for node in nodes:
-            if not hasattr(manim, node['class_name']):
+            if not hasattr(manim, node["class_name"]):
                 errors.append(f"Invalid class: {node['class_name']}")
                 continue
             valid.append(node)
-            
+
         return valid, errors
-        
+
     @staticmethod
     def merge_ai_code_to_scene(code: str, scene_graph) -> dict:
         """
@@ -3207,31 +3602,35 @@ class AINodeIntegrator:
             for row_idx, node_def in enumerate(valid_mobjects):
                 try:
                     item = AINodeIntegrator.create_node_from_ai(
-                        node_def['var_name'],
-                        node_def['class_name'],
-                        node_def['params'],
+                        node_def["var_name"],
+                        node_def["class_name"],
+                        node_def["params"],
                         scene_graph,
                         node_type=NodeType.MOBJECT,
                         pos=(START_X, START_Y + row_idx * ROW_HEIGHT),
                     )
                     created_nodes.append(item)
-                    mobject_items[node_def['var_name']] = item
+                    mobject_items[node_def["var_name"]] = item
                 except Exception as e:
-                    errors.append(f"Failed to create mobject {node_def['var_name']}: {e}")
+                    errors.append(
+                        f"Failed to create mobject {node_def['var_name']}: {e}"
+                    )
 
             # ── Create Animation Nodes (per play_sequence entry) ──────────
             anim_col = 1
             prev_anim_item = None
 
             for seq_idx, play_entry in enumerate(play_sequence):
-                anim_class = play_entry['anim_class']
-                anim_var = play_entry['anim_var']
-                target_var = play_entry['target_var']
-                params = play_entry.get('params', {})
-                is_chain = play_entry.get('is_animate_chain', False)
+                anim_class = play_entry["anim_class"]
+                anim_var = play_entry["anim_var"]
+                target_var = play_entry["target_var"]
+                params = play_entry.get("params", {})
+                is_chain = play_entry.get("is_animate_chain", False)
 
                 # For .animate chains use a generic label
-                display_class = anim_class.split('.')[-1] if '.' in anim_class else anim_class
+                display_class = (
+                    anim_class.split(".")[-1] if "." in anim_class else anim_class
+                )
                 if is_chain:
                     display_class = f"animate.{display_class}"
 
@@ -3242,7 +3641,7 @@ class AINodeIntegrator:
                 try:
                     item = AINodeIntegrator.create_node_from_ai(
                         anim_var,
-                        anim_class if not is_chain else 'ApplyMethod',
+                        anim_class if not is_chain else "ApplyMethod",
                         params,
                         scene_graph,
                         node_type=NodeType.ANIMATION,
@@ -3260,12 +3659,16 @@ class AINodeIntegrator:
                             mob_item.out_socket.links.append(wire)
                             item.in_socket.links.append(wire)
                         except Exception as we:
-                            LOGGER.warn(f"Wire creation failed ({target_var} -> {anim_var}): {we}")
+                            LOGGER.warn(
+                                f"Wire creation failed ({target_var} -> {anim_var}): {we}"
+                            )
 
                     # Chain animations sequentially via out -> in
                     if prev_anim_item is not None:
                         try:
-                            chain_wire = WireItem(prev_anim_item.out_socket, item.in_socket)
+                            chain_wire = WireItem(
+                                prev_anim_item.out_socket, item.in_socket
+                            )
                             scene_graph.scene.addItem(chain_wire)
                             prev_anim_item.out_socket.links.append(chain_wire)
                             item.in_socket.links.append(chain_wire)
@@ -3280,20 +3683,20 @@ class AINodeIntegrator:
             scene_graph.scene.notify_change()
 
             return {
-                'success': len(created_nodes) > 0,
-                'nodes_added': len(created_nodes),
-                'nodes': created_nodes,
-                'errors': errors,
+                "success": len(created_nodes) > 0,
+                "nodes_added": len(created_nodes),
+                "nodes": created_nodes,
+                "errors": errors,
             }
 
         except Exception as e:
             LOGGER.error(f"merge_ai_code_to_scene error: {e}")
             traceback.print_exc()
             return {
-                'success': False,
-                'nodes_added': 0,
-                'nodes': [],
-                'errors': [f"Fatal error: {str(e)}"],
+                "success": False,
+                "nodes_added": 0,
+                "nodes": [],
+                "errors": [f"Fatal error: {str(e)}"],
             }
 
 
@@ -3306,7 +3709,7 @@ class AssetsPanel(QWidget):
         btn_imp.clicked.connect(self.do_import)
         bar.addWidget(btn_imp)
         layout.addLayout(bar)
-        
+
         self.list = QListWidget()
         self.list.setIconSize(QSize(48, 48))
         self.list.setDragEnabled(True)
@@ -3314,93 +3717,104 @@ class AssetsPanel(QWidget):
         ASSETS.assets_changed.connect(self.refresh)
 
     def do_import(self):
-        paths, _ = QFileDialog.getOpenFileNames(self, "Import", "", "Media (*.png *.jpg *.mp4 *.mp3)")
-        for p in paths: ASSETS.add_asset(p)
+        paths, _ = QFileDialog.getOpenFileNames(
+            self, "Import", "", "Media (*.png *.jpg *.mp4 *.mp3)"
+        )
+        for p in paths:
+            ASSETS.add_asset(p)
 
     def refresh(self):
         self.list.clear()
         for asset in ASSETS.get_list():
             item = QListWidgetItem(asset.name)
-            if asset.kind == "image": item.setIcon(QIcon(asset.original_path))
-            else: item.setIcon(self.style().standardIcon(QStyle.SP_FileIcon))
-            item.setData(Qt.UserRole, asset.id)
+            if asset.kind == "image":
+                item.setIcon(QIcon(asset.original_path))
+            else:
+                item.setIcon(
+                    self.style().standardIcon(QStyle.StandardPixmap.SP_FileIcon)
+                )
+            item.setData(Qt.ItemDataRole.UserRole, asset.id)
             self.list.addItem(item)
-            
+
     def startDrag(self, actions):
         item = self.list.currentItem()
-        if not item: return
+        if not item:
+            return
         mime = QMimeData()
-        mime.setText(f"ASSET:{item.data(Qt.UserRole)}")
+        mime.setText(f"ASSET:{item.data(Qt.ItemDataRole.UserRole)}")
         drag = QDrag(self)
         drag.setMimeData(mime)
-        drag.exec(Qt.CopyAction)
+        drag.exec(Qt.DropAction.CopyAction)
+
 
 class VoiceoverPanel(QWidget):
     """Panel for AI TTS generation and Node synchronization."""
-    
+
     def __init__(self, main_window):
         super().__init__()
-        self.main_window = main_window # Reference to access nodes
+        self.main_window = main_window  # Reference to access nodes
         self.tts_worker = None
         self.setup_ui()
-        
+
     def setup_ui(self):
         layout = QVBoxLayout(self)
-        
+
         # Header
         header = QLabel("🎙️ AI Voiceover Studio")
         header.setStyleSheet("font-size: 14px; font-weight: bold; color: #2c3e50;")
         layout.addWidget(header)
-        
+
         # Settings Grid
         form = QFormLayout()
-        
+
         # Voice Selector
         self.voice_combo = QComboBox()
         # Gemini Voices (Standard set)
-        voices = ["Puck", "Charon", "Kore", "Fenrir", "Aoede", "Zephyr"] 
+        voices = ["Puck", "Charon", "Kore", "Fenrir", "Aoede", "Zephyr"]
         self.voice_combo.addItems(voices)
         self.voice_combo.setCurrentText("Zephyr")
         form.addRow("Voice:", self.voice_combo)
-        
+
         layout.addLayout(form)
-        
+
         # Text Input
         layout.addWidget(QLabel("Script:"))
         self.text_input = QPlainTextEdit()
         self.text_input.setPlaceholderText("Enter text to speak here...")
         layout.addWidget(self.text_input)
-        
+
         # Generate Button
         self.btn_gen = QPushButton("⚡ Generate Audio")
-        self.btn_gen.setStyleSheet("background-color: #8e44ad; color: white; padding: 8px; font-weight: bold;")
+        self.btn_gen.setStyleSheet(
+            "background-color: #8e44ad; color: white; padding: 8px; font-weight: bold;"
+        )
         self.btn_gen.clicked.connect(self.generate_audio)
         layout.addWidget(self.btn_gen)
-        
+
         # Separator
         line = QFrame()
-        line.setFrameShape(QFrame.HLine)
+        line.setFrameShape(QFrame.Shape.HLine)
         line.setStyleSheet("color: #bdc3c7;")
         layout.addWidget(line)
-        
+
         # Node Sync Section
         sync_lbl = QLabel("🔗 Sync to Animation")
         sync_lbl.setStyleSheet("font-weight: bold;")
         layout.addWidget(sync_lbl)
-        
+
         self.node_combo = QComboBox()
         self.node_combo.setPlaceholderText("Select an Animation Node...")
         layout.addWidget(self.node_combo)
-        
+
         # Refresh Nodes Button (in case new ones added)
         btn_refresh = QPushButton("🔄 Refresh Node List")
         btn_refresh.clicked.connect(self.refresh_nodes)
         layout.addWidget(btn_refresh)
-        
+
         self.status_lbl = QLabel("Ready")
         self.status_lbl.setStyleSheet("color: gray;")
         layout.addWidget(self.status_lbl)
-        
+
         # Initial refresh
         QTimer.singleShot(1000, self.refresh_nodes)
 
@@ -3408,26 +3822,26 @@ class VoiceoverPanel(QWidget):
         """Populate combo with nodes that look like they accept text."""
         current = self.node_combo.currentData()
         self.node_combo.clear()
-        
+
         count = 0
         for nid, node in self.main_window.nodes.items():
             # Filter for Text/Tex/MathTex nodes
             cname = node.data.cls_name.lower()
             if "tex" in cname or "text" in cname or "label" in cname:
-                
                 # --- FIX: Format as "Name (First 6 chars of ID)" ---
                 # This ensures it looks like: "MathTex (f3d875)"
                 short_id = nid[:6]
                 display_text = f"{node.data.name} ({short_id})"
                 # ---------------------------------------------------
-                
+
                 self.node_combo.addItem(display_text, nid)
                 count += 1
-                
+
         if current:
             idx = self.node_combo.findData(current)
-            if idx >= 0: self.node_combo.setCurrentIndex(idx)
-            
+            if idx >= 0:
+                self.node_combo.setCurrentIndex(idx)
+
         self.status_lbl.setText(f"Found {count} text-compatible nodes.")
 
     def generate_audio(self):
@@ -3435,15 +3849,15 @@ class VoiceoverPanel(QWidget):
         if not text:
             QMessageBox.warning(self, "Input Error", "Please enter some text.")
             return
-            
+
         self.btn_gen.setEnabled(False)
         self.status_lbl.setText("Generating audio via Gemini...")
-        
+
         voice = self.voice_combo.currentText()
-        
+
         # FIX: Read model from Global Settings
         model = SETTINGS.get("TTS_MODEL", "gemini-2.5-flash-preview-tts")
-        
+
         self.tts_worker = TTSWorker(text, voice, model)
         self.tts_worker.finished_signal.connect(self.on_tts_success)
         self.tts_worker.error_signal.connect(self.on_tts_error)
@@ -3452,7 +3866,7 @@ class VoiceoverPanel(QWidget):
     def on_tts_success(self, file_path):
         self.btn_gen.setEnabled(True)
         self.status_lbl.setText("Audio generated!")
-        
+
         # 1. Register as Asset
         asset = ASSETS.add_asset(file_path)
         if not asset:
@@ -3464,15 +3878,23 @@ class VoiceoverPanel(QWidget):
         if node_id and node_id in self.main_window.nodes:
             node = self.main_window.nodes[node_id]
             node.data.audio_asset_id = asset.id
-            node.update() # Refresh graph
+            node.update()  # Refresh graph
             self.status_lbl.setText(f"Saved & Synced to '{node.data.name}'")
-            
+
             # Trigger graph re-compile to add the duration logic
             self.main_window.compile_graph()
-            
-            QMessageBox.information(self, "Success", f"Audio generated and attached to {node.data.name}.\nRun Time will auto-fit.")
+
+            QMessageBox.information(
+                self,
+                "Success",
+                f"Audio generated and attached to {node.data.name}.\nRun Time will auto-fit.",
+            )
         else:
-             QMessageBox.information(self, "Success", "Audio generated and added to Assets.\n(No node selected for sync)")
+            QMessageBox.information(
+                self,
+                "Success",
+                "Audio generated and added to Assets.\n(No node selected for sync)",
+            )
 
     def on_tts_error(self, err):
         self.btn_gen.setEnabled(True)
@@ -3480,95 +3902,110 @@ class VoiceoverPanel(QWidget):
         LOGGER.error(f"TTS Error: {err}")
         QMessageBox.critical(self, "TTS Error", err)
 
+
 class KeyboardShortcutsDialog(QDialog):
     """Display keyboard shortcuts and help."""
+
     def __init__(self, parent=None):
         super().__init__(parent)
         self.setWindowTitle("Keyboard Shortcuts")
         self.resize(500, 400)
         layout = QVBoxLayout(self)
-        
+
         text_display = QTextEdit()
         text_display.setReadOnly(True)
         text_display.setPlainText(KeyboardShortcuts.describe_shortcuts())
         layout.addWidget(text_display)
-        
+
         close_btn = QPushButton("Close")
         close_btn.clicked.connect(self.accept)
         layout.addWidget(close_btn)
 
+
 class SettingsDialog(QDialog):
     theme_changed = Signal(str)
-    
+
     def __init__(self, parent=None):
         super().__init__(parent)
         self.setWindowTitle("Settings")
         self.resize(500, 450)
         layout = QVBoxLayout(self)
-        
+
         # --- Group 1: General & Performance ---
         grp_gen = QGroupBox("General & Performance")
         form_gen = QFormLayout(grp_gen)
-        
-        # Theme
-        self.theme = QComboBox()
-        self.theme.addItems([ThemeManager.LIGHT_THEME.capitalize(), ThemeManager.DARK_THEME.capitalize()])
-        self.theme.setCurrentText(THEME_MANAGER.current_theme.capitalize())
-        form_gen.addRow("Theme:", self.theme)
-        
+
+        # Theme - Light mode only
+        theme_label = QLabel("Light Mode Only")
+        form_gen.addRow("Theme:", theme_label)
+
         # Live Preview Toggle
         self.chk_preview = QCheckBox("Enable Live Mobject Preview")
-        self.chk_preview.setToolTip("Renders a small PNG preview when properties change.")
+        self.chk_preview.setToolTip(
+            "Renders a small PNG preview when properties change."
+        )
         # Default to True (enabled)
-        self.chk_preview.setChecked(SETTINGS.get("ENABLE_PREVIEW", True, type=bool))
+        self.chk_preview.setChecked(
+            bool(SETTINGS.get("ENABLE_PREVIEW", True, type=bool))
+        )
         form_gen.addRow("Live Preview:", self.chk_preview)
-        
+
         # FPS
         self.fps = QSpinBox()
         self.fps.setRange(15, 60)
-        self.fps.setValue(int(SETTINGS.get("FPS", 15)))
+        self.fps.setValue(int(SETTINGS.get("FPS", 15) or 15))
         form_gen.addRow("Preview FPS:", self.fps)
-        
+
         # Quality
         self.quality = QComboBox()
         self.quality.addItems(["Low (ql)", "Medium (qm)", "High (qh)"])
-        self.quality.setCurrentText(SETTINGS.get("QUALITY", "Low (ql)"))
+        self.quality.setCurrentText(
+            str(SETTINGS.get("QUALITY", "Low (ql)") or "Low (ql)")
+        )
         form_gen.addRow("Quality:", self.quality)
-        
+
         layout.addWidget(grp_gen)
-        
+
         # --- Group 2: AI Configuration ---
         grp_ai = QGroupBox("Google Gemini AI")
         form_ai = QFormLayout(grp_ai)
-        
-        self.api_key = QLineEdit(SETTINGS.get("GEMINI_API_KEY", ""))
-        self.api_key.setEchoMode(QLineEdit.Password)
+
+        self.api_key = QLineEdit(str(SETTINGS.get("GEMINI_API_KEY", "") or ""))
+        self.api_key.setEchoMode(QLineEdit.EchoMode.Password)
         self.api_key.setPlaceholderText("Paste API Key Here")
         form_ai.addRow("API Key:", self.api_key)
-        
+
         # Code Gen Model
         self.gemini_model = QComboBox()
         self.gemini_model.addItems(["gemini-3-flash-preview", "gemini-3-pro-preview"])
-        self.gemini_model.setCurrentText(SETTINGS.get("GEMINI_MODEL", "gemini-3-flash-preview"))
+        self.gemini_model.setCurrentText(
+            str(SETTINGS.get("GEMINI_MODEL", "gemini-3-flash-preview") or "")
+        )
         form_ai.addRow("Code Model:", self.gemini_model)
 
         # TTS Model
         self.tts_model = QComboBox()
-        self.tts_model.addItems(["gemini-2.5-flash-preview-tts", "gemini-2.5-pro-preview-tts"])
-        self.tts_model.setCurrentText(SETTINGS.get("GEMINI_MODEL", "gemini-2.5-flash-preview-tts"))
+        self.tts_model.addItems(
+            ["gemini-2.5-flash-preview-tts", "gemini-2.5-pro-preview-tts"]
+        )
+        self.tts_model.setCurrentText(
+            str(SETTINGS.get("GEMINI_MODEL", "gemini-2.5-flash-preview-tts") or "")
+        )
         form_ai.addRow("TTS Model:", self.tts_model)
-        
+
         layout.addWidget(grp_ai)
-        
+
         # --- Buttons ---
         btns = QHBoxLayout()
         b_save = QPushButton("Save and Close")
-        b_save.setStyleSheet("background-color: #2ecc71; color: white; font-weight: bold;")
+        b_save.setStyleSheet(
+            "background-color: #2ecc71; color: white; font-weight: bold;"
+        )
         b_save.clicked.connect(self.save)
-        
+
         b_cancel = QPushButton("Cancel")
         b_cancel.clicked.connect(self.reject)
-        
+
         btns.addStretch()
         btns.addWidget(b_save)
         btns.addWidget(b_cancel)
@@ -3581,59 +4018,106 @@ class SettingsDialog(QDialog):
         SETTINGS.set("GEMINI_MODEL", self.gemini_model.currentText())
         SETTINGS.set("TTS_MODEL", self.tts_model.currentText())
         SETTINGS.set("ENABLE_PREVIEW", self.chk_preview.isChecked())
-        
-        selected_theme = self.theme.currentText().lower()
-        if selected_theme != THEME_MANAGER.current_theme:
-            THEME_MANAGER.set_theme(selected_theme)
-            self.theme_changed.emit(selected_theme)
-        
+
+        # Light mode only - no theme switching
+
         self.accept()
+
 
 # ==============================================================================
 # 8C. POWERFUL NEW PANELS & FEATURES
 # ==============================================================================
 
+
 # ── Manim Class Browser ───────────────────────────────────────────────────────
 class ManimClassBrowser(QWidget):
     """Searchable palette of all Manim mobjects and animations."""
+
     node_requested = Signal(str, str)  # class_name, node_type
 
     CATEGORIES = {
         "📐 Geometry": [
-            "Square", "Rectangle", "Circle", "Ellipse", "Triangle",
-            "Arrow", "Line", "DashedLine", "DoubleArrow", "Polygon",
-            "RegularPolygon", "Dot", "Cross", "Star", "Arc",
+            "Square",
+            "Rectangle",
+            "Circle",
+            "Ellipse",
+            "Triangle",
+            "Arrow",
+            "Line",
+            "DashedLine",
+            "DoubleArrow",
+            "Polygon",
+            "RegularPolygon",
+            "Dot",
+            "Cross",
+            "Star",
+            "Arc",
         ],
         "📝 Text": [
-            "Text", "Tex", "MathTex", "MarkupText",
-            "Title", "Paragraph", "BulletedList",
+            "Text",
+            "Tex",
+            "MathTex",
+            "MarkupText",
+            "Title",
+            "Paragraph",
+            "BulletedList",
         ],
         "📊 Graphs & Plots": [
-            "Axes", "NumberPlane", "PolarPlane",
-            "NumberLine", "CoordinateSystem",
-            "BarChart", "LineGraph",
+            "Axes",
+            "NumberPlane",
+            "PolarPlane",
+            "NumberLine",
+            "CoordinateSystem",
+            "BarChart",
+            "LineGraph",
         ],
         "🎭 3D Objects": [
-            "Sphere", "Cube", "Cylinder", "Cone", "Torus",
-            "Surface", "ParametricSurface",
+            "Sphere",
+            "Cube",
+            "Cylinder",
+            "Cone",
+            "Torus",
+            "Surface",
+            "ParametricSurface",
         ],
         "🎬 Animations (In)": [
-            "FadeIn", "Write", "DrawBorderThenFill", "Create",
-            "GrowFromCenter", "GrowArrow", "SpinInFromNothing",
-            "FadeInFromEdge", "Succession",
+            "FadeIn",
+            "Write",
+            "DrawBorderThenFill",
+            "Create",
+            "GrowFromCenter",
+            "GrowArrow",
+            "SpinInFromNothing",
+            "FadeInFromEdge",
+            "Succession",
         ],
         "🎬 Animations (Out)": [
-            "FadeOut", "Unwrite", "Uncreate", "ShrinkToCenter",
+            "FadeOut",
+            "Unwrite",
+            "Uncreate",
+            "ShrinkToCenter",
             "FadeOutToEdge",
         ],
         "🔄 Transforms": [
-            "Transform", "ReplacementTransform", "TransformFromCopy",
-            "MoveToTarget", "ApplyMethod", "ApplyMatrix",
-            "Rotate", "Scale", "ScaleInPlace",
+            "Transform",
+            "ReplacementTransform",
+            "TransformFromCopy",
+            "MoveToTarget",
+            "ApplyMethod",
+            "ApplyMatrix",
+            "Rotate",
+            "Scale",
+            "ScaleInPlace",
         ],
         "✨ Emphasis": [
-            "Indicate", "FocusOn", "Circumscribe", "ShowPassingFlash",
-            "Flash", "Wiggle", "ApplyWave", "Homotopy",
+            "Indicate",
+            "FocusOn",
+            "Circumscribe",
+            "ShowPassingFlash",
+            "Flash",
+            "Wiggle",
+            "ApplyWave",
+            "Homotopy",
         ],
     }
 
@@ -3690,7 +4174,12 @@ class ManimClassBrowser(QWidget):
             # Determine type
             node_type = "animation"
             for cat, items in self.CATEGORIES.items():
-                if cls_name in items and "Animation" in cat or "Transform" in cat or "Emphasis" in cat:
+                if (
+                    cls_name in items
+                    and "Animation" in cat
+                    or "Transform" in cat
+                    or "Emphasis" in cat
+                ):
                     node_type = "animation"
                 elif cls_name in items:
                     node_type = "mobject"
@@ -3700,13 +4189,14 @@ class ManimClassBrowser(QWidget):
 # ── Code Snippet Library ──────────────────────────────────────────────────────
 class SnippetLibrary(QWidget):
     """Reusable Manim code snippet templates."""
+
     snippet_requested = Signal(str)
 
     SNIPPETS = {
         "🎯 FadeIn + FadeOut": """\
 from manim import *
 
-class EfficientScene(Scene):
+class MyScene(Scene):
     def construct(self):
         circle = Circle(color=BLUE, fill_opacity=1.0)
         self.play(FadeIn(circle))
@@ -3716,7 +4206,7 @@ class EfficientScene(Scene):
         "🔄 Transform Shape": """\
 from manim import *
 
-class EfficientScene(Scene):
+class MyScene(Scene):
     def construct(self):
         square = Square(color=RED, fill_opacity=1.0)
         circle = Circle(color=BLUE, fill_opacity=1.0)
@@ -3727,7 +4217,7 @@ class EfficientScene(Scene):
         "📝 Animated Text": """\
 from manim import *
 
-class EfficientScene(Scene):
+class MyScene(Scene):
     def construct(self):
         title = Text("Hello, Manim!", font_size=48)
         subtitle = Text("Visual Mathematics", font_size=32, color=BLUE)
@@ -3740,7 +4230,7 @@ class EfficientScene(Scene):
         "📐 Geometry Showcase": """\
 from manim import *
 
-class EfficientScene(Scene):
+class MyScene(Scene):
     def construct(self):
         shapes = VGroup(
             Square(color=RED),
@@ -3755,7 +4245,7 @@ class EfficientScene(Scene):
         "📊 Number Line": """\
 from manim import *
 
-class EfficientScene(Scene):
+class MyScene(Scene):
     def construct(self):
         nl = NumberLine(x_range=[-5, 5, 1], include_numbers=True)
         dot = Dot(color=YELLOW).move_to(nl.n2p(0))
@@ -3768,7 +4258,7 @@ class EfficientScene(Scene):
         "✨ Emphasis & Highlight": """\
 from manim import *
 
-class EfficientScene(Scene):
+class MyScene(Scene):
     def construct(self):
         eq = MathTex(r"E = mc^2", font_size=64)
         self.play(Write(eq))
@@ -3780,7 +4270,7 @@ class EfficientScene(Scene):
         "🔢 Axes & Plot": """\
 from manim import *
 
-class EfficientScene(Scene):
+class MyScene(Scene):
     def construct(self):
         axes = Axes(x_range=[-3, 3], y_range=[-2, 2])
         curve = axes.plot(lambda x: x**2, color=YELLOW)
@@ -3802,7 +4292,9 @@ class EfficientScene(Scene):
         layout.setSpacing(4)
 
         title = QLabel("📚 Code Snippets")
-        title.setFont(FontManager.create_title_font(10))
+        font = QFont()
+        font.setPointSize(10)
+        title.setFont(font)
         layout.addWidget(title)
 
         self.list = QListWidget()
@@ -3828,6 +4320,7 @@ class EfficientScene(Scene):
 # ── Node Search / Filter Bar ──────────────────────────────────────────────────
 class NodeSearchBar(QWidget):
     """Toolbar for searching and filtering nodes on the canvas."""
+
     filter_changed = Signal(str)
 
     def __init__(self, parent=None):
@@ -3851,6 +4344,7 @@ class NodeSearchBar(QWidget):
 # ── Quick Export Toolbar ───────────────────────────────────────────────────────
 class QuickExportBar(QWidget):
     """One-click export actions."""
+
     export_requested = Signal(str)  # format
 
     def __init__(self, parent=None):
@@ -3859,7 +4353,11 @@ class QuickExportBar(QWidget):
         layout.setContentsMargins(4, 2, 4, 2)
         layout.setSpacing(6)
 
-        for label, fmt in [("📄 .py", "py"), ("📋 Copy", "copy"), ("🎬 Render MP4", "mp4")]:
+        for label, fmt in [
+            ("📄 .py", "py"),
+            ("📋 Copy", "copy"),
+            ("🎬 Render MP4", "mp4"),
+        ]:
             btn = QPushButton(label)
             btn.setFixedHeight(28)
             btn.clicked.connect(lambda _=False, f=fmt: self.export_requested.emit(f))
@@ -3868,8 +4366,953 @@ class QuickExportBar(QWidget):
 
 
 # ==============================================================================
+# 8. PANELS & WIDGETS (WITHOUT SCENES TAB)
+# ==============================================================================
+
+
+class VGroupPanel(QWidget):
+    """Panel for creating, viewing, and managing VGroups from all sources.
+
+    Supports canvas-created groups (with live NodeItem references) and
+    code-origin groups parsed from AI output, local snippets, and GitHub
+    snippets. All groups show their members in the tree.
+    """
+
+    vgroup_created = Signal(str, list)
+
+    # Source labels and icons
+    _SOURCE_ICON = {"canvas": "🎨", "ai": "🤖", "snippet": "📄", "github": "🐙"}
+    _SOURCE_COLOR = {
+        "canvas": "#4f46e5",
+        "ai": "#7c3aed",
+        "snippet": "#0891b2",
+        "github": "#059669",
+    }
+
+    def __init__(self, main_window, parent=None):
+        super().__init__(parent)
+        self.main_window = main_window
+        # name → list of node IDs (canvas) or [] (code-origin)
+        self._groups: dict[str, list] = {}
+        # name → {"source": str, "members": [str]}
+        self._meta: dict[str, dict] = {}
+        self._build()
+
+    # ── UI construction ──────────────────────────────────────────────────────
+
+    def _build(self):
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(6, 6, 6, 6)
+        layout.setSpacing(6)
+
+        # ── Create section ──────────────────────────────────────────────────
+        create_box = QGroupBox("Create VGroup")
+        create_box.setStyleSheet(
+            "QGroupBox { font-weight: bold; border: 1px solid #d1d5db; "
+            "border-radius: 6px; margin-top: 8px; padding-top: 4px; }"
+            "QGroupBox::title { subcontrol-origin: margin; left: 8px; }"
+        )
+        create_layout = QVBoxLayout(create_box)
+        create_layout.setSpacing(4)
+
+        name_row = QHBoxLayout()
+        self.name_edit = QLineEdit()
+        self.name_edit.setPlaceholderText("Name (e.g. my_group)")
+        self.name_edit.setToolTip("Valid Python identifier for this VGroup")
+        name_row.addWidget(self.name_edit)
+        create_layout.addLayout(name_row)
+
+        btn_create = QPushButton("📦  Create from Canvas Selection")
+        btn_create.clicked.connect(self._create_vgroup)
+        btn_create.setToolTip("Select Mobject nodes on the canvas first, then click")
+        btn_create.setStyleSheet(
+            "QPushButton { background-color: #4f46e5; color: white; font-weight: bold;"
+            " border-radius: 5px; padding: 7px 10px; }"
+            "QPushButton:hover { background-color: #4338ca; }"
+            "QPushButton:pressed { background-color: #3730a3; }"
+        )
+        create_layout.addWidget(btn_create)
+
+        hint = QLabel("Select Mobject nodes on the canvas first.")
+        hint.setStyleSheet("color: #9ca3af; font-size: 10px;")
+        create_layout.addWidget(hint)
+        layout.addWidget(create_box)
+
+        # ── Search ──────────────────────────────────────────────────────────
+        self.search_edit = QLineEdit()
+        self.search_edit.setPlaceholderText("🔍  Filter groups…")
+        self.search_edit.textChanged.connect(self._filter_tree)
+        self.search_edit.setStyleSheet(
+            "QLineEdit { border: 1px solid #d1d5db; border-radius: 5px; padding: 5px; }"
+        )
+        layout.addWidget(self.search_edit)
+
+        # ── Group count label ────────────────────────────────────────────────
+        self.count_lbl = QLabel("No groups yet")
+        self.count_lbl.setStyleSheet("color: #6b7280; font-size: 10px;")
+        layout.addWidget(self.count_lbl)
+
+        # ── Tree ────────────────────────────────────────────────────────────
+        self.tree = QTreeWidget()
+        self.tree.setHeaderHidden(True)
+        self.tree.setSelectionMode(QTreeWidget.SelectionMode.SingleSelection)
+        self.tree.setAlternatingRowColors(True)
+        self.tree.setStyleSheet(
+            "QTreeWidget { border: 1px solid #e5e7eb; border-radius: 5px; }"
+            "QTreeWidget::item { padding: 3px 2px; }"
+            "QTreeWidget::item:selected { background: #ede9fe; color: #4f46e5; }"
+        )
+        self.tree.itemSelectionChanged.connect(self._on_selection_changed)
+        layout.addWidget(self.tree, stretch=1)
+
+        # ── Action toolbar ──────────────────────────────────────────────────
+        toolbar_box = QGroupBox("Actions")
+        toolbar_box.setStyleSheet(
+            "QGroupBox { font-weight: bold; border: 1px solid #d1d5db; "
+            "border-radius: 6px; margin-top: 8px; padding-top: 4px; }"
+            "QGroupBox::title { subcontrol-origin: margin; left: 8px; }"
+        )
+        tb_layout = QVBoxLayout(toolbar_box)
+        tb_layout.setSpacing(4)
+
+        # Row 1: group-level actions
+        row1 = QHBoxLayout()
+        row1.setSpacing(4)
+
+        self.btn_rename = self._make_btn("✏️ Rename", "#0891b2", self._rename_vgroup,
+                                         "Rename the selected VGroup")
+        self.btn_duplicate = self._make_btn("⧉ Duplicate", "#0891b2", self._duplicate_vgroup,
+                                             "Create a copy of this VGroup with a new name")
+        self.btn_copy_code = self._make_btn("📋 Copy Code", "#059669", self._copy_code,
+                                             "Copy  name = VGroup(members…)  to clipboard")
+        row1.addWidget(self.btn_rename)
+        row1.addWidget(self.btn_duplicate)
+        row1.addWidget(self.btn_copy_code)
+        tb_layout.addLayout(row1)
+
+        # Row 2: canvas-interaction actions
+        row2 = QHBoxLayout()
+        row2.setSpacing(4)
+
+        self.btn_highlight = self._make_btn("🎯 Highlight", "#7c3aed", self._highlight_on_canvas,
+                                             "Select all member nodes on the canvas")
+        self.btn_add_members = self._make_btn("＋ Add Nodes", "#059669", self._add_members,
+                                               "Add currently selected canvas nodes to this group")
+        self.btn_remove_member = self._make_btn("－ Remove Member", "#f59e0b", self._remove_member,
+                                                 "Remove the selected member from this group")
+        row2.addWidget(self.btn_highlight)
+        row2.addWidget(self.btn_add_members)
+        row2.addWidget(self.btn_remove_member)
+        tb_layout.addLayout(row2)
+
+        # Row 3: destructive
+        row3 = QHBoxLayout()
+        row3.addStretch()
+        self.btn_delete = self._make_btn("🗑 Delete Group", "#dc2626", self._delete_vgroup,
+                                          "Permanently remove this VGroup (does not delete nodes)")
+        self.btn_delete.setMinimumWidth(130)
+        row3.addWidget(self.btn_delete)
+        tb_layout.addLayout(row3)
+
+        layout.addWidget(toolbar_box)
+
+        # Initial button state
+        self._set_buttons_enabled(False)
+
+    @staticmethod
+    def _make_btn(label: str, color: str, slot, tooltip: str) -> QPushButton:
+        btn = QPushButton(label)
+        btn.setToolTip(tooltip)
+        btn.clicked.connect(slot)
+        btn.setStyleSheet(
+            f"QPushButton {{ background-color: {color}; color: white; font-size: 11px;"
+            f" border-radius: 4px; padding: 5px 6px; }}"
+            f"QPushButton:hover {{ opacity: 0.85; }}"
+            f"QPushButton:disabled {{ background-color: #d1d5db; color: #9ca3af; }}"
+        )
+        return btn
+
+    # ── Button state management ──────────────────────────────────────────────
+
+    def _set_buttons_enabled(self, group_selected: bool, member_selected: bool = False):
+        for btn in (self.btn_rename, self.btn_duplicate, self.btn_copy_code,
+                    self.btn_highlight, self.btn_add_members, self.btn_delete):
+            btn.setEnabled(group_selected)
+        self.btn_remove_member.setEnabled(member_selected)
+
+    def _on_selection_changed(self):
+        item = self.tree.currentItem()
+        if item is None:
+            self._set_buttons_enabled(False)
+        elif item.parent() is None:
+            # Top-level = group row
+            self._set_buttons_enabled(True, False)
+        else:
+            # Child = member row
+            self._set_buttons_enabled(True, True)
+
+    # ── Group resolution helpers ─────────────────────────────────────────────
+
+    def _current_group_name(self) -> str | None:
+        """Return the group name from the currently selected tree item."""
+        item = self.tree.currentItem()
+        if item is None:
+            return None
+        if item.parent() is None:
+            return item.data(0, Qt.ItemDataRole.UserRole)
+        return item.parent().data(0, Qt.ItemDataRole.UserRole)
+
+    def _member_display_names(self, name: str) -> list[str]:
+        """Return the display names for members of group `name`."""
+        ids = self._groups.get(name, [])
+        meta = self._meta.get(name, {})
+        # Canvas group: resolve node names from live NodeItems
+        if ids:
+            names = []
+            for nid in ids:
+                node = self.main_window.nodes.get(nid)
+                names.append(node.data.name if node else f"<missing:{nid[:6]}>")
+            return names
+        # Code-origin group: use parsed member names
+        return meta.get("members", [])
+
+    # ── Tree refresh ─────────────────────────────────────────────────────────
+
+    def _refresh_tree(self):
+        filter_txt = self.search_edit.text().lower() if hasattr(self, "search_edit") else ""
+        self.tree.clear()
+        for gname, ids in self._groups.items():
+            if filter_txt and filter_txt not in gname.lower():
+                continue
+            meta = self._meta.get(gname, {})
+            source = meta.get("source", "canvas")
+            icon = self._SOURCE_ICON.get(source, "📦")
+            color = self._SOURCE_COLOR.get(source, "#4f46e5")
+            members = self._member_display_names(gname)
+            count_str = f"{len(members)} member{'s' if len(members) != 1 else ''}"
+            root = QTreeWidgetItem(self.tree)
+            root.setData(0, Qt.ItemDataRole.UserRole, gname)
+            # Header text: icon + name + source badge + count
+            root.setText(0, f"{icon}  {gname}  ·  {source}  ·  {count_str}")
+            root.setForeground(0, QBrush(QColor(color)))
+            root.setFont(0, QFont("", -1, QFont.Weight.Bold))
+            root.setToolTip(0, f"Source: {source}\nMembers: {', '.join(members) if members else 'none'}")
+
+            if members:
+                for mname in members:
+                    child = QTreeWidgetItem(root)
+                    child.setText(0, f"    └  {mname}")
+                    child.setForeground(0, QBrush(QColor("#374151")))
+                    child.setData(0, Qt.ItemDataRole.UserRole + 1, mname)
+            else:
+                empty = QTreeWidgetItem(root)
+                empty.setText(0, "    (no members resolved)")
+                empty.setForeground(0, QBrush(QColor("#9ca3af")))
+                f = empty.font(0)
+                f.setItalic(True)
+                empty.setFont(0, f)
+
+            root.setExpanded(True)
+
+        n = len(self._groups)
+        self.count_lbl.setText(
+            f"{n} group{'s' if n != 1 else ''}" if n else "No groups yet"
+        )
+        self._set_buttons_enabled(False)
+
+    def _filter_tree(self, _txt: str):
+        self._refresh_tree()
+
+    # ── Create ───────────────────────────────────────────────────────────────
+
+    def _create_vgroup(self):
+        sel = self.main_window.scene.selectedItems()
+        members = [
+            item for item in sel
+            if isinstance(item, NodeItem) and item.data.type == NodeType.MOBJECT
+        ]
+        if not members:
+            QMessageBox.warning(self, "No Selection",
+                                "Select at least one Mobject node on the canvas first.")
+            return
+        name = self.name_edit.text().strip() or f"vgroup_{len(self._groups) + 1}"
+        if not name.isidentifier():
+            QMessageBox.warning(self, "Invalid Name",
+                                "VGroup name must be a valid Python identifier.")
+            return
+        if name in self._groups:
+            QMessageBox.warning(self, "Duplicate Name",
+                                f"A VGroup named '{name}' already exists.")
+            return
+        ids = [m.data.id for m in members]
+        self._groups[name] = ids
+        self._meta[name] = {"source": "canvas", "members": [m.data.name for m in members]}
+        self.vgroup_created.emit(name, ids)
+        self._refresh_tree()
+        self.name_edit.clear()
+        # Select the new group in tree
+        for i in range(self.tree.topLevelItemCount()):
+            it = self.tree.topLevelItem(i)
+            if it.data(0, Qt.ItemDataRole.UserRole) == name:
+                self.tree.setCurrentItem(it)
+                break
+
+    # ── Rename ───────────────────────────────────────────────────────────────
+
+    def _rename_vgroup(self):
+        name = self._current_group_name()
+        if not name:
+            return
+        new_name, ok = QInputDialog.getText(
+            self, "Rename VGroup", "New name:", QLineEdit.EchoMode.Normal, name
+        )
+        if not ok:
+            return
+        new_name = new_name.strip()
+        if not new_name or new_name == name:
+            return
+        if not new_name.isidentifier():
+            QMessageBox.warning(self, "Invalid Name",
+                                "VGroup name must be a valid Python identifier.")
+            return
+        if new_name in self._groups:
+            QMessageBox.warning(self, "Duplicate Name",
+                                f"A VGroup named '{new_name}' already exists.")
+            return
+        # Re-insert preserving order
+        self._groups = {(new_name if k == name else k): v for k, v in self._groups.items()}
+        self._meta = {(new_name if k == name else k): v for k, v in self._meta.items()}
+        self._refresh_tree()
+
+    # ── Duplicate ────────────────────────────────────────────────────────────
+
+    def _duplicate_vgroup(self):
+        name = self._current_group_name()
+        if not name:
+            return
+        base = f"{name}_copy"
+        candidate = base
+        i = 2
+        while candidate in self._groups:
+            candidate = f"{base}_{i}"
+            i += 1
+        self._groups[candidate] = list(self._groups[name])
+        self._meta[candidate] = dict(self._meta.get(name, {}))
+        self._meta[candidate]["source"] = self._meta.get(name, {}).get("source", "canvas")
+        self._refresh_tree()
+
+    # ── Copy Code ────────────────────────────────────────────────────────────
+
+    def _copy_code(self):
+        name = self._current_group_name()
+        if not name:
+            return
+        members = self._member_display_names(name)
+        args = ", ".join(members) if members else "# no members"
+        code = f"{name} = VGroup({args})"
+        QApplication.clipboard().setText(code)
+        # Brief visual feedback via tooltip on button
+        self.btn_copy_code.setToolTip(f"Copied: {code}")
+        QTimer.singleShot(2500, lambda: self.btn_copy_code.setToolTip(
+            "Copy  name = VGroup(members…)  to clipboard"))
+
+    # ── Highlight on Canvas ───────────────────────────────────────────────────
+
+    def _highlight_on_canvas(self):
+        name = self._current_group_name()
+        if not name:
+            return
+        ids = self._groups.get(name, [])
+        if not ids:
+            QMessageBox.information(self, "Canvas Highlight",
+                                    "This group was created from code — member nodes are not "
+                                    "tracked on the canvas.\nAdd them manually to enable highlighting.")
+            return
+        # Deselect all, then select members
+        self.main_window.scene.clearSelection()
+        found = 0
+        for nid in ids:
+            node = self.main_window.nodes.get(nid)
+            if node:
+                node.setSelected(True)
+                found += 1
+        if found == 0:
+            QMessageBox.information(self, "Canvas Highlight",
+                                    "None of the member nodes were found on the canvas.")
+
+    # ── Add Members from Selection ────────────────────────────────────────────
+
+    def _add_members(self):
+        name = self._current_group_name()
+        if not name:
+            return
+        sel = self.main_window.scene.selectedItems()
+        new_nodes = [
+            item for item in sel
+            if isinstance(item, NodeItem)
+            and item.data.type == NodeType.MOBJECT
+            and item.data.id not in self._groups.get(name, [])
+        ]
+        if not new_nodes:
+            QMessageBox.information(self, "Add Members",
+                                    "Select new Mobject nodes on the canvas first.\n"
+                                    "(Already-added nodes are ignored.)")
+            return
+        for node in new_nodes:
+            self._groups.setdefault(name, []).append(node.data.id)
+            meta = self._meta.setdefault(name, {"source": "canvas", "members": []})
+            if node.data.name not in meta.get("members", []):
+                meta.setdefault("members", []).append(node.data.name)
+        self._refresh_tree()
+
+    # ── Remove Member ─────────────────────────────────────────────────────────
+
+    def _remove_member(self):
+        item = self.tree.currentItem()
+        if item is None or item.parent() is None:
+            return
+        group_name = item.parent().data(0, Qt.ItemDataRole.UserRole)
+        member_name = item.data(0, Qt.ItemDataRole.UserRole + 1)
+        if not group_name or not member_name:
+            return
+        # Remove from ID list (canvas groups)
+        ids = self._groups.get(group_name, [])
+        new_ids = []
+        for nid in ids:
+            node = self.main_window.nodes.get(nid)
+            if node and node.data.name == member_name:
+                continue  # skip this one
+            new_ids.append(nid)
+        self._groups[group_name] = new_ids
+        # Remove from meta members list (code-origin groups)
+        meta_members = self._meta.get(group_name, {}).get("members", [])
+        if member_name in meta_members:
+            meta_members.remove(member_name)
+        self._refresh_tree()
+
+    # ── Delete Group ─────────────────────────────────────────────────────────
+
+    def _delete_vgroup(self):
+        name = self._current_group_name()
+        if not name:
+            return
+        if QMessageBox.question(
+            self, "Delete VGroup",
+            f"Delete VGroup '{name}'?\n\nThis does NOT delete the canvas nodes.",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.Cancel,
+        ) != QMessageBox.StandardButton.Yes:
+            return
+        self._groups.pop(name, None)
+        self._meta.pop(name, None)
+        self._refresh_tree()
+
+    # ── Public API ────────────────────────────────────────────────────────────
+
+    def get_groups(self) -> dict:
+        return dict(self._groups)
+
+    def set_groups(self, groups: dict) -> None:
+        self._groups = dict(groups)
+        # Rebuild meta for any groups that don't have it
+        for name in self._groups:
+            if name not in self._meta:
+                self._meta[name] = {"source": "canvas", "members": []}
+        self._refresh_tree()
+
+    def register_snippet_vgroups(self, code: str, source: str = "snippet") -> int:
+        """Parse code for VGroup assignments and register any new ones.
+
+        Parses patterns like:  my_group = VGroup(circle, square, text)
+        Extracts member variable names so they appear in the tree.
+        Returns the count of newly registered VGroups.
+        """
+        import re
+        # Capture name and the full argument list (handles multi-line with re.DOTALL)
+        pattern = re.compile(
+            r'^[ \t]*([a-zA-Z_][a-zA-Z0-9_]*)\s*=\s*VGroup\s*\(([^)]*)\)',
+            re.MULTILINE,
+        )
+        _SKIP = frozenset(('self', 'cls', 'None', 'True', 'False', 'return'))
+        new_count = 0
+        for match in pattern.finditer(code):
+            name = match.group(1)
+            if name.startswith('__') or name in _SKIP:
+                continue
+            if name in self._groups:
+                continue
+            # Parse member names from argument list
+            raw_args = match.group(2)
+            members = []
+            for arg in raw_args.split(','):
+                arg = arg.strip()
+                # Accept simple identifiers only (skip *args, keyword=val, literals)
+                if re.fullmatch(r'[a-zA-Z_][a-zA-Z0-9_]*', arg) and arg not in _SKIP:
+                    members.append(arg)
+            self._groups[name] = []          # no node IDs for code-origin groups
+            self._meta[name] = {"source": source, "members": members}
+            new_count += 1
+        if new_count:
+            self._refresh_tree()
+        return new_count
+
+
+# ── Keybindings Panel ─────────────────────────────────────────────────────────
+class KeybindingsPanel(QDialog):
+    DEFAULT_BINDINGS = {
+        "New Project": "Ctrl+N",
+        "Open Project": "Ctrl+O",
+        "Save Project": "Ctrl+S",
+        "Save As": "Ctrl+Shift+S",
+        "Exit": "Ctrl+Q",
+        "Undo": "Ctrl+Z",
+        "Redo": "Ctrl+Y",
+        "Delete Selected": "Del",
+        "Zoom In": "Ctrl+=",
+        "Zoom Out": "Ctrl+-",
+        "Fit View": "Ctrl+0",
+        "Clear All": "Ctrl+Alt+Del",
+        "Auto-Layout": "Ctrl+L",
+        "Export Code": "Ctrl+E",
+        "Copy Code": "Ctrl+Shift+C",
+        "Keybindings": "Ctrl+K",
+        "Settings": "Ctrl+,",
+        "AI Generate": "Ctrl+G",
+        "Render Video": "Ctrl+R",
+    }
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setWindowTitle("⌨️ Keybindings")
+        self.resize(480, 520)
+        self._bindings = self._load()
+        self._build()
+
+    def _load(self):
+        result = dict(self.DEFAULT_BINDINGS)
+        for action in self.DEFAULT_BINDINGS:
+            saved = SETTINGS.get(f"keybind_{action}", None)
+            if saved:
+                result[action] = str(saved)
+        return result
+
+    def _save(self):
+        for action, key in self._bindings.items():
+            SETTINGS.set(f"keybind_{action}", key)
+
+    def get_binding(self, action):
+        return self._bindings.get(action, self.DEFAULT_BINDINGS.get(action, ""))
+
+    def _build(self):
+        layout = QVBoxLayout(self)
+        info = QLabel("Double-click a shortcut to edit it.")
+        info.setStyleSheet("color: #6b7280; font-size: 11px;")
+        layout.addWidget(info)
+        self.table = QTableWidget(len(self._bindings), 2)
+        self.table.setHorizontalHeaderLabels(["Action", "Shortcut"])
+        self.table.horizontalHeader().setStretchLastSection(True)
+        self.table.setSelectionBehavior(QTableWidget.SelectionBehavior.SelectRows)
+        self.table.setEditTriggers(QTableWidget.EditTrigger.DoubleClicked)
+        self.table.verticalHeader().setVisible(False)
+        for row, (action, key) in enumerate(self._bindings.items()):
+            ai = QTableWidgetItem(action)
+            ai.setFlags(ai.flags() & ~Qt.ItemFlag.ItemIsEditable)
+            self.table.setItem(row, 0, ai)
+            self.table.setItem(row, 1, QTableWidgetItem(key))
+        layout.addWidget(self.table)
+        btn_row = QHBoxLayout()
+        btn_reset = QPushButton("↩ Defaults")
+        btn_reset.clicked.connect(self._reset)
+        btn_save = QPushButton("💾 Save")
+        btn_save.setStyleSheet(
+            "background-color: #2ecc71; color: white; font-weight: bold;"
+        )
+        btn_save.clicked.connect(self._apply)
+        btn_cancel = QPushButton("Cancel")
+        btn_cancel.clicked.connect(self.reject)
+        btn_row.addWidget(btn_reset)
+        btn_row.addStretch()
+        btn_row.addWidget(btn_cancel)
+        btn_row.addWidget(btn_save)
+        layout.addLayout(btn_row)
+
+    def _reset(self) -> None:
+        self._bindings = dict(self.DEFAULT_BINDINGS)
+        for row, (action, key) in enumerate(self._bindings.items()):
+            item = self.table.item(row, 1)
+            if item is not None:
+                item.setText(key)
+
+    def _apply(self) -> None:
+        for row in range(self.table.rowCount()):
+            action_item = self.table.item(row, 0)
+            key_item = self.table.item(row, 1)
+            if action_item is not None and key_item is not None:
+                action = action_item.text()
+                key = key_item.text()
+                self._bindings[action] = key
+        vals = list(self._bindings.values())
+        dups = [v for v in vals if vals.count(v) > 1 and v]
+        if dups:
+            QMessageBox.warning(
+                self,
+                "Duplicate Shortcuts",
+                f"Duplicates: {', '.join(set(dups))}\nFix before saving.",
+            )
+            return
+        self._save()
+        self.accept()
+
+
+# ── Recents & Usage helpers (thin wrappers around UserDataManager) ─────────────
+
+
+def _add_to_recents(path: str) -> None:
+    """Register a project path in the recents list."""
+    USER_DATA.add_recent(path)
+
+
+class _UsageTracker(QObject):
+    """Central usage tracker — counts Mobject/Animation insertions per class.
+
+    Emits `updated` after every record() call so subscribed panels
+    can refresh without polling or manual refresh buttons.
+    """
+
+    updated = Signal()
+
+    def __init__(self):
+        super().__init__()
+
+    def record(self, class_name: str, node_type: str = "mobject") -> None:
+        """Record one insertion of class_name (pass type_str from the caller)."""
+        USER_DATA.record_use(class_name, node_type)
+        self.updated.emit()
+
+    def top_mobjects(self, n: int = 5) -> list:
+        """[(name, count), ...] for the top-n most-used Mobjects."""
+        return USER_DATA.top_by_type("mobject", n)
+
+    def top_animations(self, n: int = 5) -> list:
+        """[(name, count), ...] for the top-n most-used Animations."""
+        return USER_DATA.top_by_type("animation", n)
+
+    def top(self, n: int = 5) -> list:
+        """Legacy flat list."""
+        return USER_DATA.top_used(n)
+
+
+USAGE_TRACKER = _UsageTracker()
+
+
+class RecentsPanel(QWidget):
+    """⭐ Recents — shows the top 5 Mobjects and top 5 Animations by actual
+    insertion frequency.  Double-click any item to insert it on the canvas.
+
+    Updates live: no manual refresh required.
+    """
+
+    add_requested = Signal(str, str)   # (type_str, class_name)
+
+    # How many to show per category
+    TOP_N = 5
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self._build()
+        # Auto-refresh whenever a node is inserted anywhere
+        USAGE_TRACKER.updated.connect(self._refresh)
+        self._refresh()
+
+    def _build(self):
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(6, 6, 6, 6)
+        layout.setSpacing(6)
+
+        # Header
+        hdr = QLabel("⭐  Most-Used Elements")
+        hdr.setStyleSheet("font-weight: bold; font-size: 13px; color: #1f2937;")
+        layout.addWidget(hdr)
+
+        sub = QLabel(
+            f"Top {self.TOP_N} Mobjects and Animations ranked by how often "
+            "you insert them.  Double-click to add to canvas."
+        )
+        sub.setWordWrap(True)
+        sub.setStyleSheet("color: #6b7280; font-size: 10px;")
+        layout.addWidget(sub)
+
+        # Tree
+        self.tree = QTreeWidget()
+        self.tree.setHeaderHidden(True)
+        self.tree.setAlternatingRowColors(True)
+        self.tree.setSelectionMode(QTreeWidget.SelectionMode.SingleSelection)
+        self.tree.setStyleSheet(
+            "QTreeWidget { border: 1px solid #e5e7eb; border-radius: 5px; }"
+            "QTreeWidget::item { padding: 4px 2px; }"
+            "QTreeWidget::item:selected { background: #fef9c3; color: #92400e; }"
+        )
+        self.tree.itemDoubleClicked.connect(self._on_double_click)
+        layout.addWidget(self.tree, stretch=1)
+
+        # Footer hint
+        footer = QLabel("💡 Insert nodes from Elements or Classes tab to populate.")
+        footer.setWordWrap(True)
+        footer.setStyleSheet("color: #9ca3af; font-size: 10px; font-style: italic;")
+        self.footer_lbl = footer
+        layout.addWidget(footer)
+
+    def _refresh(self):
+        """Rebuild the tree from live usage statistics."""
+        self.tree.clear()
+
+        mob_data  = USAGE_TRACKER.top_mobjects(self.TOP_N)
+        anim_data = USAGE_TRACKER.top_animations(self.TOP_N)
+
+        self._populate_section("📦  Mobjects",   mob_data,  "#4f46e5", "mobject")
+        self._populate_section("🎬  Animations", anim_data, "#7c3aed", "animation")
+
+        # Show/hide hint depending on whether there is any data
+        has_data = bool(mob_data or anim_data)
+        self.footer_lbl.setVisible(not has_data)
+
+    def _populate_section(
+        self,
+        label: str,
+        data: list,          # [(class_name, count), ...]
+        color: str,
+        type_str: str,
+    ):
+        section = QTreeWidgetItem(self.tree)
+        section.setText(0, label)
+        section.setForeground(0, QBrush(QColor(color)))
+        section.setFont(0, _bold_font())
+        section.setFlags(section.flags() & ~Qt.ItemFlag.ItemIsSelectable)
+        section.setToolTip(0, f"Double-click a {type_str} below to add it to the canvas")
+
+        if not data:
+            empty = QTreeWidgetItem(section)
+            empty.setText(0, "   (none yet)")
+            empty.setForeground(0, QBrush(QColor("#9ca3af")))
+            f = empty.font(0)
+            f.setItalic(True)
+            empty.setFont(0, f)
+            empty.setFlags(empty.flags() & ~Qt.ItemFlag.ItemIsSelectable)
+        else:
+            max_count = data[0][1] if data else 1
+            for rank, (cls_name, count) in enumerate(data, 1):
+                child = QTreeWidgetItem(section)
+                # Bar width proportional to usage (1–10 chars)
+                bar_len = max(1, round(count / max_count * 10))
+                bar = "█" * bar_len
+                child.setText(0, f"  {rank}. {cls_name}")
+                plural = "s" if count != 1 else ""
+                tip = f"{cls_name}\nInserted {count} time{plural}\nDouble-click to add to canvas"
+                child.setToolTip(0, tip)
+                # Store metadata for insertion
+                child.setData(0, Qt.ItemDataRole.UserRole, cls_name)
+                child.setData(0, Qt.ItemDataRole.UserRole + 1, type_str)
+                # Usage bar as second column label embedded in text
+                count_badge = QLabel(f"<span style='color:{color};font-size:10px'>"
+                                     f"{bar} {count}×</span>")
+                count_badge.setContentsMargins(0, 0, 4, 0)
+                self.tree.setItemWidget(child, 0, None)  # ensure text side is used
+                child.setText(0, f"  {rank}.  {cls_name}  ·  {count}×  {bar}")
+                child.setForeground(0, QBrush(QColor("#374151")))
+
+        section.setExpanded(True)
+
+    def _on_double_click(self, item: QTreeWidgetItem, _col: int):
+        cls_name = item.data(0, Qt.ItemDataRole.UserRole)
+        type_str = item.data(0, Qt.ItemDataRole.UserRole + 1)
+        if cls_name and type_str:
+            self.add_requested.emit(type_str, cls_name)
+
+
+def _bold_font() -> QFont:
+    f = QFont()
+    f.setBold(True)
+    return f
+
+
+# ── GitHub Snippet Loader ─────────────────────────────────────────────────────
+_SNIPPETS_DIR: Path = AppPaths.USER_DATA / "github_snippets"
+
+
+class GitHubSnippetLoader(QWidget):
+    snippet_selected = Signal(str)
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self._build()
+        self._scan_existing()
+
+    def _build(self):
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(4, 4, 4, 4)
+        hdr = QLabel("🐙 GitHub Snippets")
+        hdr.setStyleSheet("font-weight: bold; font-size: 12px;")
+        layout.addWidget(hdr)
+        url_row = QHBoxLayout()
+        self.url_edit = QLineEdit()
+        self.url_edit.setPlaceholderText("https://github.com/user/repo")
+        url_row.addWidget(self.url_edit)
+        btn_clone = QPushButton("⬇ Clone")
+        btn_clone.clicked.connect(self._clone)
+        btn_clone.setStyleSheet(
+            "background-color: #1a7f37; color: white; padding: 4px 8px;"
+        )
+        url_row.addWidget(btn_clone)
+        layout.addLayout(url_row)
+        self.status_lbl = QLabel("")
+        self.status_lbl.setStyleSheet("color: #9ca3af; font-size: 11px;")
+        layout.addWidget(self.status_lbl)
+        self.tree = QTreeWidget()
+        self.tree.setHeaderHidden(True)
+        self.tree.itemDoubleClicked.connect(self._on_select)
+        layout.addWidget(self.tree)
+        btn_del = QPushButton("🗑 Remove Repo")
+        btn_del.clicked.connect(self._remove_repo)
+        layout.addWidget(btn_del)
+
+    def _clone(self):
+        url = self.url_edit.text().strip()
+        if not url:
+            return
+        try:
+            if "github.com" in url:
+                idx = url.find("github.com") + len("github.com/")
+                rest = url[idx:].rstrip("/").replace(".git", "").split("/")
+                dev_name, repo_name = rest[0], rest[1]
+            else:
+                parts = url.rstrip("/").split("/")
+                dev_name, repo_name = parts[-2], parts[-1].replace(".git", "")
+        except Exception:
+            self.status_lbl.setText("❌ Invalid GitHub URL")
+            return
+        dest = _SNIPPETS_DIR / dev_name / repo_name
+        if dest.exists():
+            self.status_lbl.setText(f"⚠️ Already cloned: {dev_name}/{repo_name}")
+            return
+        self.status_lbl.setText(f"⏳ Cloning {dev_name}/{repo_name}…")
+        QApplication.processEvents()
+        dest.parent.mkdir(parents=True, exist_ok=True)
+        try:
+            result = subprocess.run(
+                ["git", "clone", "--depth", "1", url, str(dest)],
+                capture_output=True,
+                text=True,
+                timeout=60,
+            )
+            if result.returncode == 0:
+                self.status_lbl.setText(f"✅ Cloned {dev_name}/{repo_name}")
+                self._add_repo_to_tree(dev_name, repo_name, dest)
+            else:
+                self.status_lbl.setText(f"❌ {result.stderr[:150]}")
+        except FileNotFoundError:
+            self.status_lbl.setText("❌ 'git' not found — install Git and add to PATH")
+        except Exception as e:
+            self.status_lbl.setText(f"❌ {str(e)[:100]}")
+
+    def _scan_existing(self):
+        self.tree.clear()
+        if not _SNIPPETS_DIR.exists():
+            return
+        for dev_dir in sorted(_SNIPPETS_DIR.iterdir()):
+            if not dev_dir.is_dir():
+                continue
+            for repo_dir in sorted(dev_dir.iterdir()):
+                if not repo_dir.is_dir():
+                    continue
+                self._add_repo_to_tree(dev_dir.name, repo_dir.name, repo_dir)
+
+    def _add_repo_to_tree(self, dev, repo, path):
+        root = QTreeWidgetItem(self.tree, [f"{dev}/{repo}"])
+        root.setData(0, Qt.ItemDataRole.UserRole, str(path))
+        for pf in sorted(path.rglob("*.py")):
+            rel = str(pf.relative_to(path))
+            child = QTreeWidgetItem(root, [rel])
+            child.setData(0, Qt.ItemDataRole.UserRole, str(pf))
+        root.setExpanded(True)
+
+    def _on_select(self, item, _col):
+        if not item.parent():
+            return
+        fp = item.data(0, Qt.ItemDataRole.UserRole)
+        if fp and Path(fp).exists():
+            try:
+                self.snippet_selected.emit(Path(fp).read_text(encoding="utf-8"))
+                self.status_lbl.setText(f"✅ {Path(fp).name}")
+            except Exception as e:
+                self.status_lbl.setText(f"❌ {e}")
+
+    def _remove_repo(self):
+        item = self.tree.currentItem()
+        if not item:
+            return
+        root = item if not item.parent() else item.parent()
+        path = root.data(0, Qt.ItemDataRole.UserRole)
+        if not path:
+            return
+        r = QMessageBox.question(
+            self,
+            "Remove Repo",
+            f"Delete '{root.text(0)}' from disk?",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+        )
+        if r == QMessageBox.StandardButton.Yes:
+            import shutil
+
+            try:
+                shutil.rmtree(path)
+                idx = self.tree.indexOfTopLevelItem(root)
+                self.tree.takeTopLevelItem(idx)
+            except Exception as e:
+                QMessageBox.warning(self, "Error", str(e))
+
+
+# ── Editable Project Name Widget ──────────────────────────────────────────────
+class ProjectNameWidget(QWidget):
+    name_changed = Signal(str)
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        layout = QHBoxLayout(self)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(4)
+        lbl = QLabel("📁")
+        lbl.setStyleSheet("font-size: 14px;")
+        layout.addWidget(lbl)
+        self.edit = QLineEdit("Untitled")
+        self.edit.setFixedWidth(160)
+        self.edit.setPlaceholderText("Project name…")
+        self.edit.setToolTip(
+            "Editable project name. Press Enter to rename the .efp file."
+        )
+        self.edit.returnPressed.connect(self._on_commit)
+        self.edit.editingFinished.connect(self._on_commit)
+        layout.addWidget(self.edit)
+        sfx = QLabel(".efp")
+        sfx.setStyleSheet("color: #6b7280;")
+        layout.addWidget(sfx)
+
+    def _on_commit(self):
+        name = self.edit.text().strip()
+        if name:
+            self.name_changed.emit(name)
+
+    def set_name(self, stem: str):
+        self.edit.blockSignals(True)
+        self.edit.setText(stem)
+        self.edit.blockSignals(False)
+
+    def get_name(self) -> str:
+        return self.edit.text().strip() or "Untitled"
+
+
+# ==============================================================================
 # 9. MAIN WINDOW
 # ==============================================================================
+
 
 class EfficientManimWindow(QMainWindow):
     def __init__(self):
@@ -3877,7 +5320,7 @@ class EfficientManimWindow(QMainWindow):
         self.setWindowTitle(f"{APP_NAME} v{APP_VERSION}")
         self.resize(1600, 1000)
         self.setStyleSheet(THEME_MANAGER.get_stylesheet())
-        
+
         # CRITICAL FIX: Set icon with absolute path before showing window
         icon_path = Path(__file__).parent / "icon" / "icon.ico"
         if icon_path.exists():
@@ -3885,48 +5328,56 @@ class EfficientManimWindow(QMainWindow):
         else:
             # Fallback to relative path if absolute doesn't work
             self.setWindowIcon(QIcon("icon/icon.ico"))
-        
-        self.nodes = {} 
+
+        self.nodes = {}
         self.project_path = None
         self.undo_manager = UndoRedoManager()
         self.project_modified = False
         self.is_ai_generated_code = False
-        
+
+        # Multi-scene storage: scene_name -> {nodes_serialized, wires_serialized}
+        self._all_scenes: dict = {"Scene 1": {"nodes": {}, "wires": []}}
+        self._current_scene_name = "Scene 1"
+
+        # Keybindings (shared instance)
+        self._keybindings = KeybindingsPanel(self)
+
         AppPaths.ensure_dirs()
         self.init_font()
+
+        # Connect theme change signal for dynamic switching
+
         self.setup_ui()
         self.setup_menu()
         self.apply_theme()
-        
+
         self.render_queue = []
         self.render_timer = QTimer()
         self.render_timer.timeout.connect(self.process_render_queue)
         self.render_timer.start(500)
-        
+
         LOGGER.info("System Ready.")
 
     def init_font(self):
-        font_path = AppPaths.FONTS_DIR / "Geist-Regular.ttf"
-        if font_path.exists():
-            fid = QFontDatabase.addApplicationFont(str(font_path.absolute()))
-            if fid != -1:
-                fam = QFontDatabase.applicationFontFamilies(fid)[0]
-                self.setFont(QFont(fam, 10))
+        """Initialize system fonts cleanup."""
+        default_font = QFont()
+        default_font.setPointSize(10)
+        self.setFont(default_font)
 
     def setup_ui(self):
         # NOTE: This is QMainWindow. It MUST use setCentralWidget.
-        main = QSplitter(Qt.Horizontal)
+        main = QSplitter(Qt.Orientation.Horizontal)
         self.setCentralWidget(main)
-        
+
         # --- LEFT SIDE (Graph + Video Splitter) ---
-        left_splitter = QSplitter(Qt.Vertical)
-        
+        left_splitter = QSplitter(Qt.Orientation.Vertical)
+
         # 1. Top: Graph Scene
         self.scene = GraphScene()
         self.scene.selection_changed_signal.connect(self.on_selection)
-        self.scene.graph_changed_signal.connect(self.mark_modified) 
+        self.scene.graph_changed_signal.connect(self.mark_modified)
         self.scene.graph_changed_signal.connect(self.compile_graph)
-        
+
         # Node search/filter bar + canvas
         canvas_widget = QWidget()
         canvas_layout = QVBoxLayout(canvas_widget)
@@ -3945,117 +5396,141 @@ class EfficientManimWindow(QMainWindow):
         canvas_layout.addWidget(self.quick_export_bar)
 
         left_splitter.addWidget(canvas_widget)
-        
+
         # 2. Bottom: Video Output Panel (NEW)
         self.panel_output = VideoOutputPanel()
         left_splitter.addWidget(self.panel_output)
-        
+
         left_splitter.setSizes([700, 300])
         main.addWidget(left_splitter)
-        
+
         # --- RIGHT SIDE (Tabs) ---
-        right = QSplitter(Qt.Vertical)
+        right = QSplitter(Qt.Orientation.Vertical)
         self.tabs_top = QTabWidget()
-        
+
         # Initialize Panels
         self.panel_props = PropertiesPanel()
         self.panel_props.node_updated.connect(self.mark_modified)
         self.panel_props.node_updated.connect(self.on_node_changed)
 
         self.panel_outliner = SceneOutlinerPanel(self)
-        
+
         self.panel_elems = ElementsPanel()
         self.panel_elems.add_requested.connect(self.add_node_center)
 
         # NEW: Manim Class Browser
         self.panel_class_browser = ManimClassBrowser()
-        self.panel_class_browser.node_requested.connect(self._add_node_from_class_browser)
-        
+        self.panel_class_browser.node_requested.connect(
+            self._add_node_from_class_browser
+        )
+
         self.panel_assets = AssetsPanel()
-        
+
         self.panel_video = VideoRenderPanel()
         self.panel_video.render_requested.connect(self.render_to_video)
-        
+
         self.panel_ai = AIPanel()
         self.panel_ai.merge_requested.connect(self.merge_ai_code)
 
         # NEW: Snippet Library
         self.panel_snippets = SnippetLibrary()
         self.panel_snippets.snippet_requested.connect(self._load_snippet_to_ai)
-        
+
         self.panel_voice = VoiceoverPanel(self)
-        
+
         # NEW: Initialize LaTeX Panel
         self.panel_latex = LatexEditorPanel(self)
-        
+
         # Add Tabs
+        # New panels: Scene Manager, VGroup, GitHub Snippets, Recents
+        self.panel_vgroup = VGroupPanel(self)
+        self.panel_vgroup.vgroup_created.connect(self.mark_modified)
+
+        self.panel_github = GitHubSnippetLoader()
+        self.panel_github.snippet_selected.connect(self._load_github_snippet_to_ai)
+
+        # Recents panel — top-5 Mobjects and Animations by insertion frequency
+        self.panel_recents = RecentsPanel(self)
+        self.panel_recents.add_requested.connect(self.add_node_center)
+
         self.tabs_top.addTab(self.panel_elems, "📦 Elements")
-        self.tabs_top.addTab(self.panel_class_browser, "🎨 Classes")  # NEW
+        self.tabs_top.addTab(self.panel_recents, "⭐ Recents")
+        self.tabs_top.addTab(self.panel_class_browser, "🎨 Classes")
+        self.tabs_top.addTab(self.panel_vgroup, "🔗 VGroups")
         self.tabs_top.addTab(self.panel_outliner, "📑 Outliner")
         self.tabs_top.addTab(self.panel_props, "🧩 Properties")
         self.tabs_top.addTab(self.panel_assets, "🗂 Assets")
         self.tabs_top.addTab(self.panel_latex, "✒️ LaTeX")
         self.tabs_top.addTab(self.panel_ai, "🤖 AI")
-        self.tabs_top.addTab(self.panel_snippets, "📚 Snippets")  # NEW
+        self.tabs_top.addTab(self.panel_snippets, "📚 Snippets")
+        self.tabs_top.addTab(self.panel_github, "🐙 GitHub")
         self.tabs_top.addTab(self.panel_voice, "🎙️ Voiceover")
         self.tabs_top.addTab(self.panel_video, "🎬 Video")
         right.addWidget(self.tabs_top)
-        
+
         self.tabs_bot = QTabWidget()
-        
+
         # Preview Area
         prev_widget = QWidget()
         prev_layout = QVBoxLayout(prev_widget)
         self.preview_lbl = QLabel("Select a node to preview")
         self.preview_lbl.setObjectName("PreviewLabel")
-        self.preview_lbl.setAlignment(Qt.AlignCenter)
+        self.preview_lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
         prev_layout.addWidget(self.preview_lbl)
-        
+
         self.code_view = QTextEdit()
         self.code_view.setReadOnly(True)
         self.code_view.setStyleSheet("font-family: Consolas;")
-        
+
         self.logs = QTextEdit()
         self.logs.setReadOnly(True)
         LOGGER.log_signal.connect(self.append_log)
-        
+
         self.tabs_bot.addTab(prev_widget, "🖼 Preview")
         self.tabs_bot.addTab(self.code_view, "🧠 Code")
         self.tabs_bot.addTab(self.logs, "📜 Logs")
         right.addWidget(self.tabs_bot)
-        
+
         main.addWidget(right)
         main.setSizes([1000, 600])
 
     def setup_menu(self):
         """Setup menu bar with all actions."""
         bar = self.menuBar()
-        
+
         # --- FIX: Use self.corner_container to prevent Garbage Collection crash ---
         self.corner_container = QWidget()
         corner_layout = QHBoxLayout(self.corner_container)
-        corner_layout.setContentsMargins(0, 0, 15, 0) # 15px right margin
-        
-        self.theme_btn = QPushButton()
-        self.theme_btn.setCursor(Qt.PointingHandCursor)
-        # REMOVED: self.theme_btn.setFixedSize(30, 30) <--- Allow it to expand
-        self.theme_btn.clicked.connect(self.toggle_theme)
-        
-        corner_layout.addWidget(self.theme_btn)
-        bar.setCornerWidget(self.corner_container, Qt.TopRightCorner)
-        # -------------------------------------------------------------------------
+        corner_layout.setContentsMargins(0, 0, 15, 0)  # 15px right margin
+
+        # Editable project name field in toolbar
+        self.project_name_edit = QLineEdit("Untitled Project")
+        self.project_name_edit.setFixedWidth(200)
+        self.project_name_edit.setPlaceholderText("Project name…")
+        self.project_name_edit.setToolTip("Edit project name (renames the .efp file)")
+        self.project_name_edit.returnPressed.connect(self._rename_project)
+        self.project_name_edit.editingFinished.connect(self._rename_project)
+        corner_layout.addWidget(self.project_name_edit)
+
+        bar.setCornerWidget(self.corner_container, Qt.Corner.TopRightCorner)
 
         # File Menu
         file_menu = bar.addMenu("File")
-        file_menu.addAction("New Project", self.new_project, QKeySequence.New)
-        file_menu.addAction("Open Project", self.open_project, QKeySequence.Open)
-        file_menu.addAction("Save Project", self.save_project, QKeySequence.Save)
+        file_menu.addAction(
+            "New Project", self.new_project, QKeySequence.StandardKey.New
+        )
+        file_menu.addAction(
+            "Open Project", self.open_project, QKeySequence.StandardKey.Open
+        )
+        file_menu.addAction(
+            "Save Project", self.save_project, QKeySequence.StandardKey.Save
+        )
         file_menu.addAction("Save As...", self.save_project_as)
         file_menu.addSeparator()
         file_menu.addAction("Settings", self.open_settings)
         file_menu.addSeparator()
-        file_menu.addAction("Exit", self.close, QKeySequence.Quit)
-        
+        file_menu.addAction("Exit", self.close, QKeySequence.StandardKey.Quit)
+
         quit_act = QAction("Exit", self)
         quit_act.setShortcut(QKeySequence("Ctrl+Q"))
         quit_act.triggered.connect(self.close)
@@ -4064,52 +5539,79 @@ class EfficientManimWindow(QMainWindow):
         # Edit Menu
         edit_menu = bar.addMenu("Edit")
         undo_action = QAction("Undo", self)
-        undo_action.setShortcut(QKeySequence.Undo)
+        undo_action.setShortcut(QKeySequence.StandardKey.Undo)
         undo_action.triggered.connect(self.undo_action)
         edit_menu.addAction(undo_action)
-        
+
         redo_action = QAction("Redo", self)
-        redo_action.setShortcut(QKeySequence.Redo)
+        redo_action.setShortcut(QKeySequence.StandardKey.Redo)
         redo_action.triggered.connect(self.redo_action)
         edit_menu.addAction(redo_action)
-        
+
         edit_menu.addSeparator()
         delete_action = QAction("Delete Selected", self)
-        delete_action.setShortcut(QKeySequence.Delete)
+        delete_action.setShortcut(QKeySequence.StandardKey.Delete)
         delete_action.triggered.connect(self.delete_selected)
         edit_menu.addAction(delete_action)
-        
+
         # View Menu
         view_menu = bar.addMenu("View")
         view_menu.addAction("Fit to View", self.fit_view, QKeySequence("Ctrl+0"))
-        
+
         # Zoom Shortcuts
         view_menu.addSeparator()
         zoom_in_act = QAction("Zoom In", self)
         zoom_in_act.setShortcut(QKeySequence("Ctrl+="))
         zoom_in_act.triggered.connect(lambda: self.view.scale(1.15, 1.15))
         view_menu.addAction(zoom_in_act)
-        
+
         zoom_out_act = QAction("Zoom Out", self)
         zoom_out_act.setShortcut(QKeySequence("Ctrl+-"))
-        zoom_out_act.triggered.connect(lambda: self.view.scale(1/1.15, 1/1.15))
+        zoom_out_act.triggered.connect(lambda: self.view.scale(1 / 1.15, 1 / 1.15))
         view_menu.addAction(zoom_out_act)
-        
+
         view_menu.addSeparator()
-        view_menu.addAction("Auto-Layout Nodes", self.auto_layout_nodes, QKeySequence("Ctrl+L"))
-        view_menu.addAction("Clear All", self.clear_scene, QKeySequence(Qt.CTRL | Qt.ALT | Qt.Key_Delete))
+        view_menu.addAction(
+            "Auto-Layout Nodes", self.auto_layout_nodes, QKeySequence("Ctrl+L")
+        )
+        view_menu.addAction(
+            "Clear All",
+            self.clear_scene,
+            QKeySequence("Ctrl+Alt+Delete"),
+        )
 
         # Tools Menu (NEW)
         tools_menu = bar.addMenu("Tools")
-        tools_menu.addAction("Export Code (.py)", lambda: self._quick_export("py"), QKeySequence("Ctrl+E"))
-        tools_menu.addAction("Copy Code to Clipboard", lambda: self._quick_export("copy"), QKeySequence("Ctrl+Shift+C"))
+        tools_menu.addAction(
+            "Export Code (.py)",
+            lambda: self._quick_export("py"),
+            QKeySequence("Ctrl+E"),
+        )
+        tools_menu.addAction(
+            "Copy Code to Clipboard",
+            lambda: self._quick_export("copy"),
+            QKeySequence("Ctrl+Shift+C"),
+        )
+        tools_menu.addSeparator()
+        tools_menu.addAction(
+            "Create VGroup from Selection",
+            self.create_vgroup_from_selection,
+            QKeySequence("Ctrl+G"),
+        )
         tools_menu.addSeparator()
         tools_menu.addAction("Open Manim Documentation", self._open_manim_docs)
         tools_menu.addAction("Open Gallery / Examples", self._open_manim_gallery)
 
         # Help Menu
         help_menu = bar.addMenu("Help")
-        help_menu.addAction("Keyboard Shortcuts", self.show_shortcuts, QKeySequence(Qt.CTRL | Qt.Key_Question))
+        help_menu.addAction(
+            "Keyboard Shortcuts",
+            self.show_shortcuts,
+            QKeySequence("Ctrl+?"),
+        )
+        help_menu.addAction(
+            "Edit Keybindings…", self.show_keybindings, QKeySequence("Ctrl+,")
+        )
         help_menu.addAction("About", self.show_about)
 
     # --- MENU ACTIONS ---
@@ -4117,18 +5619,41 @@ class EfficientManimWindow(QMainWindow):
     def new_project(self):
         """Create a new project."""
         reply = QMessageBox.question(
-            self, "New Project", "Clear current project?",
-            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No
+            self,
+            "New Project",
+            "Clear current project?",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
         )
         if reply == QMessageBox.StandardButton.Yes:
             self.clear_scene()
 
     def save_project_as(self):
-        """Save project with new name."""
-        path, _ = QFileDialog.getSaveFileName(self, "Save Project As", "", f"EfficientManim (*{PROJECT_EXT})")
-        if path:
-            self.project_path = path
-            self.save_project()
+        """Save project with new name (Save As)."""
+        # Get default filename from project name textbox
+        default_filename = self.project_name_edit.text().strip() or "Untitled Project"
+        if not default_filename.endswith(PROJECT_EXT):
+            default_filename += PROJECT_EXT
+
+        # Use last project path directory if available, otherwise Documents
+        last_dir = (
+            str(Path(self.project_path).parent)
+            if self.project_path
+            else str(Path.home() / "Documents")
+        )
+
+        path, _ = QFileDialog.getSaveFileName(
+            self,
+            "Save Project As",
+            str(Path(last_dir) / default_filename),
+            f"EfficientManim (*{PROJECT_EXT})",
+        )
+        if not path:
+            return
+
+        # Update project path and name
+        self.project_path = path
+        self.project_name_edit.setText(Path(path).stem)
+        self.save_project()
 
     def show_shortcuts(self):
         """Show keyboard shortcuts dialog."""
@@ -4137,7 +5662,8 @@ class EfficientManimWindow(QMainWindow):
     def show_about(self):
         """Show about dialog."""
         QMessageBox.information(
-            self, "About", 
+            self,
+            "About",
             f"{APP_NAME} v{APP_VERSION}\n\n"
             "A visual node-based Manim IDE with AI integration.\n\n"
             "Features:\n"
@@ -4147,78 +5673,163 @@ class EfficientManimWindow(QMainWindow):
             "  • Code snippet library\n"
             "  • Manim class browser\n"
             "  • One-click export\n\n"
-            "© 2026 - Soumalya Das (@pro-grammer-SD)"
+            "© 2026 - Soumalya Das (@pro-grammer-SD)",
         )
 
     def _open_manim_docs(self):
         """Open Manim documentation in browser."""
         import webbrowser
+
         webbrowser.open("https://docs.manim.community/en/stable/")
 
     def _open_manim_gallery(self):
         """Open Manim example gallery in browser."""
         import webbrowser
+
         webbrowser.open("https://docs.manim.community/en/stable/examples.html")
 
-    def toggle_theme(self):
-        """Switch between light and dark themes."""
-        current = THEME_MANAGER.current_theme
-        new_theme = ThemeManager.DARK_THEME if current == ThemeManager.LIGHT_THEME else ThemeManager.LIGHT_THEME
-        
-        THEME_MANAGER.set_theme(new_theme)
-        self.apply_theme()
-    
-    def apply_theme(self):
-        """Apply the current theme stylesheet and update UI elements."""
-        is_dark = THEME_MANAGER.current_theme == ThemeManager.DARK_THEME
-        
-        # 1. Apply Stylesheet
+    def apply_theme(self) -> None:
+        """Apply light-mode stylesheet to all widgets."""
         self.setStyleSheet(THEME_MANAGER.get_stylesheet())
-        
-        # 2. Update Toggle Button Visuals (With Safety Check)
-        if hasattr(self, 'theme_btn'):
-            try:
-                # Text indicates what you will switch TO
-                btn_text = "  ☀ Light Mode  " if is_dark else "  🌙 Dark Mode  "
-                self.theme_btn.setText(btn_text)
-                self.theme_btn.setToolTip("Toggle Theme")
-                
-                # Dynamic Colors for high visibility
-                if is_dark:
-                    # Dark Mode Styling (Button looks bright/white to indicate Light option)
-                    btn_style = """
-                        QPushButton { 
-                            border: 1px solid #555; 
-                            border-radius: 4px;
-                            background-color: #333; 
-                            color: #fff;
-                            padding: 4px 8px;
-                            font-weight: bold;
-                        }
-                        QPushButton:hover { background-color: #444; border-color: #fff; }
-                    """
-                else:
-                    # Light Mode Styling (Button looks dark to indicate Dark option)
-                    btn_style = """
-                        QPushButton { 
-                            border: 1px solid #ccc; 
-                            border-radius: 4px;
-                            background-color: #f0f0f0; 
-                            color: #333;
-                            padding: 4px 8px;
-                            font-weight: bold;
-                        }
-                        QPushButton:hover { background-color: #e0e0e0; border-color: #333; }
-                    """
-                
-                self.theme_btn.setStyleSheet(btn_style)
-            except RuntimeError:
-                pass # Widget might be deleted during shutdown or reload, ignore safely
+        if hasattr(self, "scene"):
+            self.scene.setBackgroundBrush(QBrush(QColor("#f4f6f7")))
 
-        # 3. Update Canvas Background
-        if hasattr(self, 'scene'):
-            bg_color = QColor("#2d2d2d") if is_dark else QColor("#f4f6f7")
-            self.scene.setBackgroundBrush(QBrush(bg_color))
+    # ── Project Naming ─────────────────────────────────────────────────────────
+    def _rename_project(self):
+        """Rename the current project file based on the editable name field."""
+        new_name = self.project_name_edit.text().strip()
+        if not new_name:
+            return
+        if not new_name.endswith(".efp"):
+            new_name_efp = new_name + ".efp"
+        else:
+            new_name_efp = new_name
+            new_name = new_name[:-4]
+
+        if self.project_path:
+            old_path = Path(self.project_path)
+            new_path = old_path.parent / new_name_efp
+            try:
+                if old_path != new_path:
+                    old_path.rename(new_path)
+                    self.project_path = str(new_path)
+                    _add_to_recents(str(new_path))
+                    self.mark_modified()
+                    self.statusBar().showMessage(f"Renamed to {new_name_efp}", 2000)
+            except Exception as e:
+                self.statusBar().showMessage(f"Rename failed: {e}", 3000)
+        else:
+            # No file yet – just update the window title
+            self.setWindowTitle(f"{APP_NAME} v{APP_VERSION} - {new_name}")
+
+    def open_project_from_path(self, path: str):
+        """Open a project from a given path (used by home screen)."""
+        if Path(path).exists():
+            self._do_open_project(path)
+
+    # ── Scene Management ───────────────────────────────────────────────────────
+    def _save_current_scene_state(self):
+        """Serialize current canvas state into _all_scenes[current_scene_name]."""
+        try:
+            nodes_data = {}
+            for nid, node in self.nodes.items():
+                nodes_data[nid] = {
+                    "name": node.data.name,
+                    "cls_name": node.data.cls_name,
+                    "var_name": node.data.var_name,
+                    "type": node.data.type.name,
+                    "params": node.data.params,
+                    "x": node.x(),
+                    "y": node.y(),
+                }
+            self._all_scenes[self._current_scene_name] = {
+                "nodes": nodes_data,
+                "wires": [],  # wire serialization handled elsewhere
+            }
+        except Exception as e:
+            LOGGER.warn(f"Could not save scene state: {e}")
+
+    def _load_scene_state(self, name: str):
+        """Clear canvas and load scene state from _all_scenes[name]."""
+        try:
+            # Clear current canvas
+            for nid, node in list(self.nodes.items()):
+                self.scene.removeItem(node)
+            self.nodes.clear()
+            self.scene.clear()
+
+            state = self._all_scenes.get(name, {})
+            for nid, ndata in state.get("nodes", {}).items():
+                nt = NodeType[ndata.get("type", "MOBJECT")]
+                data = NodeData(ndata["cls_name"], nt, ndata["var_name"])
+                data.params = ndata.get("params", {})
+                node = NodeItem(data)
+                node.setPos(ndata.get("x", 0), ndata.get("y", 0))
+                self.scene.addItem(node)
+                self.nodes[data.id] = node
+            self._current_scene_name = name
+        except Exception as e:
+            LOGGER.warn(f"Could not load scene '{name}': {e}")
+
+    def _on_scene_switch(self, name: str):
+        """User switched to a different scene."""
+        if name == self._current_scene_name:
+            return
+        self._save_current_scene_state()
+        if name not in self._all_scenes:
+            self._all_scenes[name] = {"nodes": {}, "wires": []}
+        self._load_scene_state(name)
+        self.statusBar().showMessage(f"Scene: {name}", 2000)
+        self.compile_graph()
+
+    def _on_scene_added(self, name: str):
+        """A new scene was added."""
+        self._all_scenes[name] = {"nodes": {}, "wires": []}
+        self.statusBar().showMessage(f"New scene: {name}", 1500)
+
+    def _on_scene_deleted(self, name: str):
+        """A scene was deleted."""
+        if name in self._all_scenes:
+            del self._all_scenes[name]
+        if name == self._current_scene_name and self._all_scenes:
+            # Switch to first remaining scene
+            first = next(iter(self._all_scenes))
+            self._load_scene_state(first)
+        self.statusBar().showMessage(f"Scene '{name}' deleted", 1500)
+
+    # ── Add Node by Class Name (from Recents pane) ─────────────────────────────
+    def _add_node_by_class(self, class_name: str, node_type_str: str = "mobject"):
+        """Add a node to the canvas by class name."""
+        try:
+            from main import NodeType, NodeData, NodeItem
+        except ImportError:
+            pass
+
+        try:
+            nt = NodeType.MOBJECT if node_type_str == "mobject" else NodeType.ANIMATION
+            data = NodeData(class_name, nt, class_name)
+            node = NodeItem(data)
+            node.setPos(50, 50 + len(self.nodes) * 120)
+            self.scene.addItem(node)
+            self.nodes[data.id] = node
+            USAGE_TRACKER.record(class_name, node_type_str)
+            self.mark_modified()
+        except Exception as e:
+            LOGGER.warn(f"Could not add node {class_name}: {e}")
+
+    def show_keybindings(self):
+        """Show the keybindings dialog."""
+        self._keybindings.exec()
+
+    def create_vgroup_from_selection(self):
+        """Create a VGroup from selected nodes."""
+        selected = [
+            item for item in self.scene.selectedItems() if isinstance(item, NodeItem)
+        ]
+        if selected:
+            ids = [item.data.id for item in selected]
+            self.panel_vgroup.create_group_from_selection(ids)
+            self.statusBar().showMessage(f"VGroup created with {len(ids)} nodes", 2000)
 
     def mark_modified(self):
         """Mark project as modified and update window title."""
@@ -4226,7 +5837,7 @@ class EfficientManimWindow(QMainWindow):
         title = f"{APP_NAME} v{APP_VERSION}"
         if self.project_path:
             title += f" - {Path(self.project_path).name}"
-        title += " *" # Star indicates unsaved changes
+        title += " *"  # Star indicates unsaved changes
         self.setWindowTitle(title)
 
     def reset_modified(self):
@@ -4242,30 +5853,32 @@ class EfficientManimWindow(QMainWindow):
         # FIX: Clean up all preview workers before closing
         for node_id in list(self.nodes.keys()):
             self._cleanup_preview_worker(node_id)
-        
+
         # Clear preview display
         self.preview_lbl.clear()
         self.preview_lbl.setPixmap(QPixmap())
-        
+
         # Clean up temp files
         AppPaths.force_cleanup_old_files(age_seconds=0)
-        
+
         if self.project_modified and self.nodes:
             reply = QMessageBox.question(
-                self, 
-                "Unsaved Changes", 
+                self,
+                "Unsaved Changes",
                 "You have unsaved changes. Do you want to save before quitting?",
-                QMessageBox.StandardButton.Save | QMessageBox.StandardButton.Discard | QMessageBox.StandardButton.Cancel
+                QMessageBox.StandardButton.Save
+                | QMessageBox.StandardButton.Discard
+                | QMessageBox.StandardButton.Cancel,
             )
 
             if reply == QMessageBox.StandardButton.Save:
                 self.save_project()
                 # If save was cancelled inside save_project, ignore close
-                if self.project_modified: 
+                if self.project_modified:
                     event.ignore()
                 else:
                     event.accept()
-            elif reply == QMessageBox.Discard:
+            elif reply == QMessageBox.StandardButton.Discard:
                 event.accept()
             else:
                 event.ignore()
@@ -4292,21 +5905,23 @@ class EfficientManimWindow(QMainWindow):
         """Fit scene to view."""
         rect = self.scene.itemsBoundingRect()
         if not rect.isEmpty():
-            self.view.fitInView(rect, Qt.KeepAspectRatio)
+            self.view.fitInView(rect, Qt.AspectRatioMode.KeepAspectRatio)
             self.view.scale(0.9, 0.9)
             LOGGER.info("View fitted")
 
     def clear_scene(self):
         """Clear all nodes and wires with proper resource cleanup."""
         reply = QMessageBox.question(
-            self, "Clear Scene", "Delete all nodes and wires?",
-            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No
+            self,
+            "Clear Scene",
+            "Delete all nodes and wires?",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
         )
         if reply == QMessageBox.StandardButton.Yes:
             # FIX: Clean up render workers before clearing nodes
             for node_id in list(self.nodes.keys()):
                 self._cleanup_preview_worker(node_id)
-            
+
             self.nodes.clear()
             self.scene.clear()
             # FIX: Clear preview display
@@ -4321,8 +5936,9 @@ class EfficientManimWindow(QMainWindow):
 
     def add_node_center(self, type_str, cls_name):
         self.is_ai_generated_code = False  # Reset flag - manual node added
+        USAGE_TRACKER.record(cls_name, type_str)
         if self.code_view.toPlainText().strip() == "":
-             self.compile_graph()
+            self.compile_graph()
         center = self.view.mapToScene(self.view.rect().center())
         self.add_node(type_str, cls_name, pos=(center.x(), center.y()))
 
@@ -4343,9 +5959,22 @@ class EfficientManimWindow(QMainWindow):
         self.add_node_center(type_str, cls_name)
         LOGGER.info(f"Added {cls_name} from class browser")
 
-    def _load_snippet_to_ai(self, code: str):
+    def _load_snippet_to_ai(self, code: str) -> None:
         """Load snippet code into the AI panel input and switch to AI tab."""
-        # Find AI tab index
+        self._load_code_to_ai(code, source="snippet")
+
+    def _load_github_snippet_to_ai(self, code: str) -> None:
+        """Load GitHub snippet code into the AI panel."""
+        self._load_code_to_ai(code, source="github")
+
+    def _load_code_to_ai(self, code: str, source: str = "snippet") -> None:
+        """Common loader: registers VGroups with correct source, then opens AI tab."""
+        # ── VGroup auto-registration ──────────────────────────────────────
+        if hasattr(self, "panel_vgroup") and "VGroup" in code:
+            n = self.panel_vgroup.register_snippet_vgroups(code, source=source)
+            if n:
+                LOGGER.info(f"{source}: auto-registered {n} VGroup(s) in VGroup tab")
+        # ── Switch to AI tab ───────────────────────────────────────────────
         for i in range(self.tabs_top.count()):
             if "AI" in self.tabs_top.tabText(i):
                 self.tabs_top.setCurrentIndex(i)
@@ -4361,27 +5990,31 @@ class EfficientManimWindow(QMainWindow):
             self.panel_ai.status_label.setText(
                 f"Status: Snippet ready ({len(self.panel_ai.extracted_nodes)} nodes detected)"
             )
-        LOGGER.info("Snippet loaded into AI panel")
+        LOGGER.info(f"{source} snippet loaded into AI panel")
 
     def _filter_nodes(self, text: str):
         """Highlight/dim canvas nodes matching search text."""
         text = text.lower()
         for node_item in self.nodes.values():
-            match = (not text) or text in node_item.node_data.name.lower() or \
-                    text in node_item.node_data.cls_name.lower()
+            match = (
+                (not text)
+                or text in node_item.node_data.name.lower()
+                or text in node_item.node_data.cls_name.lower()
+            )
             node_item.setOpacity(1.0 if match else 0.25)
 
     def _quick_export(self, fmt: str):
         """Handle quick export bar actions."""
         code = self.code_view.toPlainText()
         if not code.strip():
-            QMessageBox.warning(self, "No Code", "Nothing to export. Build a scene first.")
+            QMessageBox.warning(
+                self, "No Code", "Nothing to export. Build a scene first."
+            )
             return
 
         if fmt == "py":
             path, _ = QFileDialog.getSaveFileName(
-                self, "Export Python File", "EfficientScene.py",
-                "Python Files (*.py)"
+                self, "Export Python File", "GeneratedScene.py", "Python Files (*.py)"
             )
             if path:
                 try:
@@ -4404,13 +6037,13 @@ class EfficientManimWindow(QMainWindow):
                 if "Video" in self.tabs_top.tabText(i):
                     self.tabs_top.setCurrentIndex(i)
                     break
-            self.panel_video.btn_render.click()
+            self.panel_video.render_scene_btn.click()
 
     def auto_layout_nodes(self):
         """Auto-arrange nodes in a clean left-to-right flow layout."""
         if not self.nodes:
             return
-        
+
         nodes_list = list(self.nodes.values())
         mobjects = [n for n in nodes_list if n.data.type == NodeType.MOBJECT]
         animations = [n for n in nodes_list if n.data.type == NodeType.ANIMATION]
@@ -4433,43 +6066,49 @@ class EfficientManimWindow(QMainWindow):
         for item in self.scene.items():
             if isinstance(item, WireItem):
                 item.update_path()
-        
+
         self.scene.notify_change()
         self.fit_view()
         LOGGER.info(f"Auto-layout applied to {len(nodes_list)} nodes")
 
-    def add_node(self, type_str, cls_name, params=None, pos=(0,0), nid=None):
+    def add_node(self, type_str, cls_name, params=None, pos=(0, 0), nid=None):
         # FIX: Normalize string to uppercase to handle "Mobject" (from UI) and "MOBJECT" (from JSON)
         is_mobject = str(type_str).upper() == "MOBJECT"
         ntype = NodeType.MOBJECT if is_mobject else NodeType.ANIMATION
-        
+
         data = NodeData(cls_name, ntype, cls_name)
-        if nid: data.id = nid
-        if params: data.params = params
+        if nid:
+            data.id = nid
+        if params:
+            data.params = params
         data.pos_x, data.pos_y = pos
-        
+
         item = NodeItem(data)
         self.scene.addItem(item)
         self.nodes[data.id] = item
         LOGGER.info(f"Created {cls_name}")
-        self.compile_graph() # Auto-Refresh
+        self.compile_graph()  # Auto-Refresh
         return item
-    
+
     def delete_selected(self):
         for item in self.scene.selectedItems():
-            if isinstance(item, NodeItem): self.remove_node(item)
-            elif isinstance(item, WireItem): self.remove_wire(item)
-        self.compile_graph() # Auto-Refresh
+            if isinstance(item, NodeItem):
+                self.remove_node(item)
+            elif isinstance(item, WireItem):
+                self.remove_wire(item)
+        self.compile_graph()  # Auto-Refresh
 
     def remove_node(self, node):
         # FIX: Clean up preview worker for this node
         self._cleanup_preview_worker(node.data.id)
-        
+
         wires = node.in_socket.links + node.out_socket.links
-        for w in wires: self.remove_wire(w)
-        if node.data.id in self.nodes: del self.nodes[node.data.id]
+        for w in wires:
+            self.remove_wire(w)
+        if node.data.id in self.nodes:
+            del self.nodes[node.data.id]
         self.scene.removeItem(node)
-        
+
         # FIX: Clear preview if this was the selected node
         if self.panel_props.current_node == node:
             self.preview_lbl.clear()
@@ -4477,8 +6116,10 @@ class EfficientManimWindow(QMainWindow):
             self.preview_lbl.setText("No Selection")
 
     def remove_wire(self, wire):
-        if wire in wire.start_socket.links: wire.start_socket.links.remove(wire)
-        if wire in wire.end_socket.links: wire.end_socket.links.remove(wire)
+        if wire in wire.start_socket.links:
+            wire.start_socket.links.remove(wire)
+        if wire in wire.end_socket.links:
+            wire.end_socket.links.remove(wire)
         self.scene.removeItem(wire)
         # Graph Changed (Handled by delete_selected, but good for singular removals)
 
@@ -4493,15 +6134,15 @@ class EfficientManimWindow(QMainWindow):
     def on_node_changed(self):
         # 1. Update Project Modified State
         self.mark_modified()
-        
+
         # 2. Re-compile the full code (for the code view tab)
         if not self.is_ai_generated_code:
-            self.compile_graph() 
-        
+            self.compile_graph()
+
         # 3. Trigger Preview Render (Only for Mobjects)
         node = self.panel_props.current_node
         if node and node.data.type == NodeType.MOBJECT:
-            self.preview_lbl.setText("Queueing...") # visual feedback
+            self.preview_lbl.setText("Queueing...")  # visual feedback
             self.queue_render(node)
 
     # --- COMPILER & RENDERER ---
@@ -4509,28 +6150,30 @@ class EfficientManimWindow(QMainWindow):
     def compile_graph(self):
         if self.is_ai_generated_code:
             return self.code_view.toPlainText()
-        
+
         code = "from manim import *\nimport numpy as np\n"
         if PYDUB_AVAILABLE:
             code += "from pydub import AudioSegment\n"
-        
-        code += "\nclass EfficientScene(Scene):\n    def construct(self):\n"
+
+        code += "\nclass GeneratedScene(Scene):\n    def construct(self):\n"
 
         # 1. Instantiate Mobjects
         mobjects = [n for n in self.nodes.values() if n.data.type == NodeType.MOBJECT]
         m_vars = {}
         for m in mobjects:
             args = []
-            
+
             # HANDLE POSITIONAL ARGS (arg0, arg1...)
             # Collect keys like arg0, arg1, sort them, and add as positional
             pos_args = {}
             named_args = {}
-            
+
             for k, v in m.data.params.items():
-                if k.startswith("_"): continue
-                if not m.data.is_param_enabled(k): continue
-                
+                if k.startswith("_"):
+                    continue
+                if not m.data.is_param_enabled(k):
+                    continue
+
                 if k.startswith("arg") and k[3:].isdigit():
                     idx = int(k[3:])
                     v_clean = self._format_param_value(k, v, m.data)
@@ -4542,20 +6185,30 @@ class EfficientManimWindow(QMainWindow):
             for i in sorted(pos_args.keys()):
                 args.append(pos_args[i])
 
-            # Add named args
+            # Add named args (filter out None values which indicate inspect._empty)
             for k, v in named_args.items():
                 v_clean = self._format_param_value(k, v, m.data)
-                args.append(f'{k}={v_clean}')
-                
+                if v_clean is not None:  # Skip inspect._empty and None values
+                    args.append(f"{k}={v_clean}")
+
             var = f"m_{m.data.id[:6]}"
             m_vars[m.data.id] = var
             code += f"        {var} = {m.data.cls_name}({', '.join(args)})\n"
             code += f"        self.add({var})\n"
 
+        # 1b. VGroup code generation
+        if hasattr(self, "panel_vgroup"):
+            for gname, ids in self.panel_vgroup.get_groups().items():
+                member_vars = [m_vars[nid] for nid in ids if nid in m_vars]
+                if member_vars:
+                    code += f"        {gname} = VGroup({', '.join(member_vars)})\n"
+
         # 2. Group animations
-        animations = [n for n in self.nodes.values() if n.data.type == NodeType.ANIMATION]
+        animations = [
+            n for n in self.nodes.values() if n.data.type == NodeType.ANIMATION
+        ]
         played = set()
-        
+
         while animations:
             ready_anims = []
             for anim in animations:
@@ -4564,66 +6217,72 @@ class EfficientManimWindow(QMainWindow):
                     src_node = link.start_socket.parentItem()
                     if src_node.data.id in m_vars:
                         targets.append(m_vars[src_node.data.id])
-                
+
                 if targets:
                     ready_anims.append((anim, targets))
                 elif not anim.in_socket.links:
                     pass
-            
+
             if not ready_anims:
                 break
 
             play_lines = []
-            
+
             # Process this batch of animations
             # Process this batch of animations
             for anim, targets in ready_anims:
                 anim_args = targets.copy()
-                
+
                 # Check for Voiceover Sync
-                audio_path = None
-                duration_var = None
 
                 # CHECK FOR MISSING MOBJECT PARAM
                 if "mobject" in anim.data.params or "mobjects" in anim.data.params:
                     # Check if the value is actually a valid UUID reference
-                    val = anim.data.params.get("mobject") or anim.data.params.get("mobjects")
+                    val = anim.data.params.get("mobject") or anim.data.params.get(
+                        "mobjects"
+                    )
                     if not val or (isinstance(val, str) and len(val) != 36):
-                         LOGGER.warn(f"Animation '{anim.data.name}' has a 'mobject' parameter but no target selected!")
-                         # We could also popup a message here, but logging is safer during compilation loop
+                        LOGGER.warn(
+                            f"Animation '{anim.data.name}' has a 'mobject' parameter but no target selected!"
+                        )
+                        # We could also popup a message here, but logging is safer during compilation loop
 
                 if anim.data.audio_asset_id:
                     path = ASSETS.get_asset_path(anim.data.audio_asset_id)
                     if path and PYDUB_AVAILABLE:
                         # Clean path for Python string
                         clean_path = path.replace("\\", "/")
-                        
+
                         # Inject Audio Logic
                         audio_var = f"audio_{anim.data.id[:6]}"
                         code += f"        # Voiceover for {anim.data.name}\n"
                         code += f"        self.add_sound(r'{clean_path}')\n"
                         code += f"        {audio_var} = AudioSegment.from_file(r'{clean_path}')\n"
-                        
+
                         # Override run_time parameter
-                        anim.data.params['run_time'] = f"{audio_var}.duration_seconds"
-                
+                        anim.data.params["run_time"] = f"{audio_var}.duration_seconds"
+
                 # Format parameters
                 for k, v in anim.data.params.items():
                     if not k.startswith("_") and anim.data.is_param_enabled(k):
-                        if k == 'run_time' and isinstance(v, str) and "duration_seconds" in v:
-                             # It's a variable reference we just injected, don't format it as a string
-                             anim_args.append(f"{k}={v}")
+                        if (
+                            k == "run_time"
+                            and isinstance(v, str)
+                            and "duration_seconds" in v
+                        ):
+                            # It's a variable reference we just injected, don't format it as a string
+                            anim_args.append(f"{k}={v}")
                         else:
-                             v_clean = self._format_param_value(k, v, anim.data)
-                             anim_args.append(f"{k}={v_clean}")
-                
+                            v_clean = self._format_param_value(k, v, anim.data)
+                            anim_args.append(f"{k}={v_clean}")
+
                 play_lines.append(f"{anim.data.cls_name}({', '.join(anim_args)})")
                 played.add(anim)
 
             if play_lines:
                 code += f"        self.play({', '.join(play_lines)})\n"
                 # Add a small wait after animations to prevent audio cutoff
-                code += f"        self.wait(0.5)\n"
+                code += "        self.wait(0.5)\n"
 
             animations = [a for a in animations if a not in played]
 
@@ -4633,6 +6292,21 @@ class EfficientManimWindow(QMainWindow):
     def _format_param_value(self, param_name, value, node_data):
         """Safely format parameter value with type enforcement and string escaping."""
         try:
+            # CRITICAL FIX: Filter out inspect._empty and invalid default values
+            # These should NEVER appear in generated code
+            if value is None or str(value) == "<class 'inspect._empty'>":
+                return None  # Signal to skip this parameter
+
+            # Also check string representations of inject._empty
+            if isinstance(value, str):
+                value_stripped = value.strip()
+                if value_stripped in (
+                    "inspect._empty",
+                    "<class 'inspect._empty'>",
+                    "_empty",
+                ):
+                    return None  # Signal to skip this parameter
+
             # 0. MOBJECT REFERENCE (UUID Detection)
             # If value is a string looking like a UUID (36 chars) and exists in our node list
             if isinstance(value, str) and len(value) == 36 and value in self.nodes:
@@ -4645,37 +6319,43 @@ class EfficientManimWindow(QMainWindow):
                 abs_path = ASSETS.get_asset_path(value)
                 if abs_path:
                     return f'r"{abs_path}"'
-            
+
             # FIXED: Check if this is an already-formatted raw string (from LaTeX panel)
-            if isinstance(value, str) and value.startswith('r"""') and value.endswith('"""'):
+            if (
+                isinstance(value, str)
+                and value.startswith('r"""')
+                and value.endswith('"""')
+            ):
                 # Return as-is - it's already a complete raw string literal
                 return value
-                    
+
             # 2. Type-safe formatting
             if TypeSafeParser.is_color_param(param_name):
                 color_val = str(value).strip()
-                if color_val.upper() in dir(manim) and hasattr(manim, color_val.upper()):
+                if color_val.upper() in dir(manim) and hasattr(
+                    manim, color_val.upper()
+                ):
                     return color_val.upper()
                 return repr(TypeSafeParser.parse_color(color_val))
-            
+
             elif TypeSafeParser.is_numeric_param(param_name):
                 num_val = TypeSafeParser.parse_numeric(value)
                 return repr(num_val)
-            
+
             elif TypeSafeParser.is_point_param(param_name):
                 point_val = TypeSafeParser.validate_point_safe(value)
                 return f"np.array({repr(point_val.tolist())})"
-            
+
             # 3. String escaping
             elif isinstance(value, str):
                 # If marked to escape (don't add quotes), return raw value
                 if node_data.should_escape_string(param_name):
                     return value.strip("'\"")
                 return repr(value)
-            
+
             else:
                 return repr(value)
-        
+
         except Exception as e:
             LOGGER.warn(f"Error formatting {param_name}={value}: {e}")
             return repr(value)
@@ -4689,21 +6369,23 @@ class EfficientManimWindow(QMainWindow):
         # Allow re-adding the same node ID to queue if parameters changed
         if node.data.id in self.render_queue:
             return
-            
+
         self.render_queue.append(node.data.id)
-        
+
         # Cleanup old files
         AppPaths.force_cleanup_old_files(age_seconds=300)
 
     def process_render_queue(self):
         """Generates a dedicated, isolated script for Mobject previewing."""
         try:
-            if not self.render_queue: return
-            
+            if not self.render_queue:
+                return
+
             nid = self.render_queue.pop(0)
-            if nid not in self.nodes: return
+            if nid not in self.nodes:
+                return
             node = self.nodes[nid]
-            
+
             # 1. SKIP ANIMATIONS
             if node.data.type != NodeType.MOBJECT:
                 return
@@ -4714,20 +6396,22 @@ class EfficientManimWindow(QMainWindow):
             script = "from manim import *\nimport numpy as np\n"
             script += "config.background_color = ManimColor((0, 0, 0, 0))\n\n"
             script += "class PreviewScene(Scene):\n    def construct(self):\n"
-            
+
             # 3. SPLIT POSITIONAL AND NAMED ARGS
-            pos_args = {}   # {0: "val", 1: "val"}
-            named_args = {} # {"color": "RED"}
-            
+            pos_args = {}  # {0: "val", 1: "val"}
+            named_args = {}  # {"color": "RED"}
+
             for k, v in node.data.params.items():
-                if k.startswith("_"): continue
-                
+                if k.startswith("_"):
+                    continue
+
                 # Check Enabled Status
-                if not node.data.is_param_enabled(k): continue
-                
+                if not node.data.is_param_enabled(k):
+                    continue
+
                 # Format the value safely
                 v_clean = self._format_param_value(k, v, node.data)
-                
+
                 # Check for arg0, arg1, arg2...
                 if k.startswith("arg") and k[3:].isdigit():
                     try:
@@ -4740,31 +6424,32 @@ class EfficientManimWindow(QMainWindow):
 
             # 4. Reconstruct Argument List
             final_args = []
-            
+
             # Add Positional Args first (sorted by index)
             if pos_args:
                 for i in sorted(pos_args.keys()):
                     final_args.append(str(pos_args[i]))
-            
+
             # Add Named Args
             for k, v in named_args.items():
-                final_args.append(f'{k}={v}')
+                final_args.append(f"{k}={v}")
 
             # 5. Instantiate with Exception Block for Safety
-            script += f"        # Target Mobject\n"
+            script += "        # Target Mobject\n"
             script += f"        obj = {node.data.cls_name}({', '.join(final_args)})\n"
             script += "        obj.move_to(ORIGIN)\n"
             script += "        if obj.width > config.frame_width: obj.scale_to_fit_width(config.frame_width * 0.9)\n"
             script += "        self.add(obj)\n"
-            
+
             # 6. Write File
             s_path = AppPaths.TEMP_DIR / f"preview_{nid}.py"
-            with open(s_path, "w", encoding="utf-8") as f: f.write(script)
-            
+            with open(s_path, "w", encoding="utf-8") as f:
+                f.write(script)
+
             # 7. Start Worker
             worker = RenderWorker(s_path, nid, AppPaths.TEMP_DIR, 15, "l")
             worker.success.connect(self.on_render_ok)
-            
+
             # Show error in UI instead of crashing/quitting
             def handle_error(err):
                 LOGGER.warn(f"Preview Render Error for {node.data.name}: {err}")
@@ -4775,7 +6460,7 @@ class EfficientManimWindow(QMainWindow):
             worker.error.connect(handle_error)
             worker.finished.connect(lambda: self._cleanup_preview_worker(nid))
             worker.start()
-            
+
             setattr(self, f"rw_{nid}", worker)
 
         except Exception as e:
@@ -4787,13 +6472,13 @@ class EfficientManimWindow(QMainWindow):
         try:
             if nid not in self.nodes:
                 return
-                
+
             node = self.nodes[nid]
             node.data.preview_path = path
-            
+
             # Force update of visual item (the green dot)
             node.update()
-            
+
             # If this node is currently selected, show the image immediately
             sel = self.scene.selectedItems()
             if sel and isinstance(sel[0], NodeItem) and sel[0] == node:
@@ -4809,7 +6494,7 @@ class EfficientManimWindow(QMainWindow):
             if hasattr(self, worker_attr):
                 worker = getattr(self, worker_attr)
                 # Wait for thread to finish if it's still running
-                if hasattr(worker, 'isRunning') and worker.isRunning():
+                if hasattr(worker, "isRunning") and worker.isRunning():
                     worker.quit()
                     worker.wait(3000)  # Wait max 3 seconds
                 # Delete the worker
@@ -4820,7 +6505,7 @@ class EfficientManimWindow(QMainWindow):
     def show_preview(self, node):
         """Display preview for selected node with safe resource management."""
         self.preview_lbl.clear()
-        
+
         # 1. Check data
         if not node:
             self.preview_lbl.setPixmap(QPixmap())  # Release any cached pixmap
@@ -4836,9 +6521,9 @@ class EfficientManimWindow(QMainWindow):
                 # Force a render if enabled but missing
                 self.queue_render(node)
             return
-            
+
         path = node.data.preview_path
-        
+
         # 2. Check file
         if not os.path.exists(path):
             self.preview_lbl.setText("File Missing\nRe-queueing...")
@@ -4849,18 +6534,19 @@ class EfficientManimWindow(QMainWindow):
         try:
             pix = QPixmap(path)
             if pix.isNull():
-                self.preview_lbl.setText("❌ Invalid Image\n(Corrupted or unsupported format)")
+                self.preview_lbl.setText(
+                    "❌ Invalid Image\n(Corrupted or unsupported format)"
+                )
                 return
-            
+
             # Scale to fit available space
             available_size = self.preview_lbl.size()
             if available_size.width() <= 1 or available_size.height() <= 1:
                 # Size not yet initialized, use default
                 available_size = QSize(400, 400)
-            
+
             scaled = pix.scaledToWidth(
-                available_size.width() - 20,
-                Qt.SmoothTransformation
+                available_size.width() - 20, Qt.TransformationMode.SmoothTransformation
             )
             self.preview_lbl.setPixmap(scaled)
         except Exception as e:
@@ -4874,49 +6560,61 @@ class EfficientManimWindow(QMainWindow):
         try:
             # Validate we have a compilable scene
             if not self.code_view.toPlainText().strip():
-                QMessageBox.warning(self, "Error", "No scene code to render. Create some nodes first.")
+                QMessageBox.warning(
+                    self, "Error", "No scene code to render. Create some nodes first."
+                )
                 return
-            
+
             output_dir = Path(config["output_path"])
             if not output_dir.exists():
-                QMessageBox.warning(self, "Error", f"Output directory does not exist: {output_dir}")
+                QMessageBox.warning(
+                    self, "Error", f"Output directory does not exist: {output_dir}"
+                )
                 return
-            
+
             LOGGER.info("Building video render script...")
-            
+
             # Generate full scene code
             scene_code = self.code_view.toPlainText()
+
+            # Detect scene class name from code
+            scene_class = detect_scene_class(scene_code)
             
-            # Ensure it has EfficientScene class (or add wrapper)
-            if "class EfficientScene" not in scene_code:
-                scene_code = "from manim import *\n\nclass EfficientScene(Scene):\n    def construct(self):\n        pass\n"
-            
+            # If no Scene subclass found, create a basic one
+            if "class " not in scene_code or "Scene" not in scene_code:
+                scene_code = "from manim import *\n\nclass MyScene(Scene):\n    def construct(self):\n        pass\n"
+                scene_class = "MyScene"
+
             # Write scene to temporary file
             script_path = output_dir / "video_render_scene.py"
             with open(script_path, "w") as f:
                 f.write(scene_code)
-            
+
             LOGGER.info(f"Scene script written to {script_path}")
-            
+
             # Start video render worker
             fps = config["fps"]
             resolution = config["resolution"]
             quality = config["quality"]
-            
-            worker = VideoRenderWorker(script_path, output_dir, fps, resolution, quality)
-            
+
+            worker = VideoRenderWorker(
+                script_path, output_dir, fps, resolution, quality, scene_class
+            )
+
             # Connect signals
             worker.progress.connect(lambda msg: LOGGER.info(msg))
             worker.success.connect(self.on_video_render_success)
             worker.error.connect(self.on_video_render_error)
-            
+
             # Store reference and start
             self.video_render_worker = worker
             self.panel_video.start_rendering(worker)
             worker.start()
-            
-            LOGGER.info(f"Video render started: {fps}fps, {resolution}, quality {quality}")
-            
+
+            LOGGER.info(
+                f"Video render started: {fps}fps, {resolution}, quality {quality}"
+            )
+
         except Exception as e:
             LOGGER.error(f"Video render setup failed: {e}")
             QMessageBox.critical(self, "Render Error", f"Failed to start render:\n{e}")
@@ -4925,7 +6623,7 @@ class EfficientManimWindow(QMainWindow):
         """Called when video render completes successfully."""
         LOGGER.info(f"✓ Video rendered successfully: {video_path}")
         self.panel_video.on_render_success(video_path)
-        
+
         # --- FIX: Auto-play in the new panel ---
         if os.path.exists(video_path):
             self.panel_output.load_video(video_path, autoplay=True)
@@ -4935,12 +6633,13 @@ class EfficientManimWindow(QMainWindow):
             self,
             "Render Complete",
             f"Video saved to:\n{video_path}\n\nOpen video file?",
-            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
         )
         if reply == QMessageBox.StandardButton.Yes:
             try:
                 import subprocess
                 import sys
+
                 if sys.platform == "win32":
                     os.startfile(str(Path(video_path).parent))
                 elif sys.platform == "darwin":
@@ -4983,123 +6682,188 @@ class EfficientManimWindow(QMainWindow):
             # Use AINodeIntegrator for robust parsing and node creation
             result = AINodeIntegrator.merge_ai_code_to_scene(code, self)
 
-            if result['success']:
+            if result["success"]:
                 LOGGER.ai(f"✅ Successfully added {result['nodes_added']} node(s)")
 
                 # Set the code view to the AI-generated code directly
                 self.code_view.setText(code)
                 self.is_ai_generated_code = True
                 LOGGER.ai("Code view updated with AI-generated code")
+                # ── VGroup auto-registration from AI-generated code ────────
+                if hasattr(self, "panel_vgroup") and "VGroup" in code:
+                    n = self.panel_vgroup.register_snippet_vgroups(code, source="ai")
+                    if n:
+                        LOGGER.ai(f"AI merge: auto-registered {n} VGroup(s)")
 
                 # Update properties panel
-                if result['nodes']:
-                    first_node = result['nodes'][0]
+                if result["nodes"]:
+                    first_node = result["nodes"][0]
                     self.panel_props.set_node(first_node)
-                    LOGGER.ai(f"Inspector updated - showing {len(first_node.data.params)} parameters")
+                    LOGGER.ai(
+                        f"Inspector updated - showing {len(first_node.data.params)} parameters"
+                    )
 
                 # Trigger render preview for mobject nodes
-                for node in result['nodes']:
+                for node in result["nodes"]:
                     if node.data.type == NodeType.MOBJECT:
                         self.queue_render(node)
 
-                if result['errors']:
-                    LOGGER.warn(f"Merge completed with {len(result['errors'])} warning(s):")
-                    for err in result['errors']:
+                if result["errors"]:
+                    LOGGER.warn(
+                        f"Merge completed with {len(result['errors'])} warning(s):"
+                    )
+                    for err in result["errors"]:
                         LOGGER.warn(f"  - {err}")
             else:
-                error_msg = "\n".join(result['errors'][:5])
+                error_msg = "\n".join(result["errors"][:5])
                 LOGGER.error(f"Failed to merge AI code:\n{error_msg}")
                 QMessageBox.critical(
-                    self, "AI Merge Failed",
+                    self,
+                    "AI Merge Failed",
                     f"Could not create nodes from AI code:\n\n{error_msg}\n\n"
-                    "Check that Manim is installed and the code is valid."
+                    "Check that Manim is installed and the code is valid.",
                 )
 
         except Exception as e:
             LOGGER.error(f"AI merge error: {str(e)}")
             traceback.print_exc()
             QMessageBox.critical(
-                self, "AI Merge Error",
-                f"Unexpected error during merge:\n{str(e)}"
+                self, "AI Merge Error", f"Unexpected error during merge:\n{str(e)}"
             )
 
     # --- PROJECT I/O ---
 
     def save_project(self):
-        path, _ = QFileDialog.getSaveFileName(self, "Save Project", "", f"EfficientManim (*{PROJECT_EXT})")
-        if not path: return
-        
-        meta = {"name": Path(path).stem, "created": str(datetime.now()), "version": APP_VERSION}
-        
+        # Get default filename from project name textbox
+        default_filename = self.project_name_edit.text().strip() or "Untitled Project"
+        if not default_filename.endswith(PROJECT_EXT):
+            default_filename += PROJECT_EXT
+
+        # Use last project path directory if available, otherwise Documents
+        last_dir = (
+            str(Path(self.project_path).parent)
+            if self.project_path
+            else str(Path.home() / "Documents")
+        )
+
+        path, _ = QFileDialog.getSaveFileName(
+            self,
+            "Save Project",
+            str(Path(last_dir) / default_filename),
+            f"EfficientManim (*{PROJECT_EXT})",
+        )
+        if not path:
+            return
+
+        # Update project name from saved path
+        self.project_name_edit.setText(Path(path).stem)
+
+        meta = {
+            "name": Path(path).stem,
+            "created": str(datetime.now()),
+            "version": APP_VERSION,
+        }
+
         graph_data = {
             "nodes": [n.data.to_dict() for n in self.nodes.values()],
-            "wires": [{"start": w.start_socket.parentItem().data.id, "end": w.end_socket.parentItem().data.id} 
-                      for w in self.scene.items() if isinstance(w, WireItem)]
+            "wires": [
+                {
+                    "start": w.start_socket.parentItem().data.id,
+                    "end": w.end_socket.parentItem().data.id,
+                }
+                for w in self.scene.items()
+                if isinstance(w, WireItem)
+            ],
         }
-        
+
         try:
             with tempfile.TemporaryDirectory() as td:
                 t_path = Path(td)
-                
+
                 # Write JSONs
-                with open(t_path / "metadata.json", "w") as f: json.dump(meta, f, indent=2)
-                with open(t_path / "graph.json", "w") as f: json.dump(graph_data, f, indent=2)
-                with open(t_path / "code.py", "w") as f: f.write(self.code_view.toPlainText())
-                
+                with open(t_path / "metadata.json", "w") as f:
+                    json.dump(meta, f, indent=2)
+                with open(t_path / "graph.json", "w") as f:
+                    json.dump(graph_data, f, indent=2)
+                with open(t_path / "code.py", "w") as f:
+                    f.write(self.code_view.toPlainText())
+
                 # Handle Assets
                 assets_dir = t_path / "assets"
                 assets_dir.mkdir()
-                
+
                 asset_manifest = []
                 for a in ASSETS.get_list():
                     # Calculate safe local filename
                     safe_suffix = Path(a.current_path).suffix
                     dst_name = f"{a.id}{safe_suffix}"
-                    
+
                     source_path = Path(a.current_path)
-                    
+
                     if source_path.exists():
                         shutil.copy2(source_path, assets_dir / dst_name)
-                        
+
                         # Save manifest entry
                         d = a.to_dict()
-                        d["local"] = dst_name # Important: Store local ref
+                        d["local"] = dst_name  # Important: Store local ref
                         asset_manifest.append(d)
                     else:
                         LOGGER.warn(f"Could not find asset to save: {source_path}")
-                
-                with open(t_path / "assets.json", "w") as f: json.dump(asset_manifest, f, indent=2)
-                
+
+                with open(t_path / "assets.json", "w") as f:
+                    json.dump(asset_manifest, f, indent=2)
+
                 # Zip it up
-                shutil.make_archive(str(Path(path).parent / Path(path).stem), 'zip', t_path)
-                
+                shutil.make_archive(
+                    str(Path(path).parent / Path(path).stem), "zip", t_path
+                )
+
                 # Rename .zip to .efp
                 final_zip = Path(path).parent / f"{Path(path).stem}.zip"
                 final_efp = Path(path).with_suffix(PROJECT_EXT)
-                
-                if final_efp.exists(): final_efp.unlink()
+
+                if final_efp.exists():
+                    final_efp.unlink()
                 shutil.move(str(final_zip), final_efp)
-                
+
+                self.project_path = str(final_efp)
+                _add_to_recents(str(final_efp))
+
+                # Update project name field
+                if hasattr(self, "project_name_edit"):
+                    self.project_name_edit.setText(final_efp.stem)
+
+                self.reset_modified()
                 LOGGER.info(f"Project saved to {final_efp}")
-                
+
         except Exception as e:
             LOGGER.error(f"Save Failed: {e}")
             traceback.print_exc()
 
     def open_project(self):
-        path, _ = QFileDialog.getOpenFileName(self, "Open", "", f"EfficientManim (*{PROJECT_EXT})")
-        if not path: return
-        
+        path, _ = QFileDialog.getOpenFileName(
+            self, "Open", "", f"EfficientManim (*{PROJECT_EXT})"
+        )
+        if not path:
+            return
+        self._do_open_project(path)
+
+    def _do_open_project(self, path: str):
+        """Core project loading logic."""
         try:
-            self.nodes.clear(); self.scene.clear(); ASSETS.clear()
-            
+            self.nodes.clear()
+            self.scene.clear()
+            ASSETS.clear()
+
             # Create a clean extraction folder for this project session
             dest = AppPaths.TEMP_DIR / "Project_Assets"
-            if dest.exists(): shutil.rmtree(dest)
+            if dest.exists():
+                shutil.rmtree(dest)
             dest.mkdir(parents=True)
-            
-            with zipfile.ZipFile(path, 'r') as zf: zf.extractall(dest)
-            
+
+            with zipfile.ZipFile(path, "r") as zf:
+                zf.extractall(dest)
+
             # 1. Load Assets and Re-link Paths
             assets_json = dest / "assets.json"
             if assets_json.exists():
@@ -5109,12 +6873,14 @@ class EfficientManimWindow(QMainWindow):
                         # Construct the path to the extracted file
                         local_name = ad.get("local", "")
                         extracted_path = dest / "assets" / local_name
-                        
+
                         # Re-create asset object
-                        a = Asset(ad["name"], str(extracted_path.as_posix()), ad["kind"])
+                        a = Asset(
+                            ad["name"], str(extracted_path.as_posix()), ad["kind"]
+                        )
                         a.id = ad["id"]
                         a.original_path = ad["original"]
-                        
+
                         # CRITICAL: Set current_path to the extracted temp file
                         if extracted_path.exists():
                             a.current_path = str(extracted_path.resolve().as_posix())
@@ -5122,10 +6888,10 @@ class EfficientManimWindow(QMainWindow):
                             # Fallback if extraction failed (shouldn't happen)
                             LOGGER.warn(f"Missing asset file: {local_name}")
                             a.current_path = ad["original"]
-                            
+
                         ASSETS.assets[a.id] = a
                     ASSETS.assets_changed.emit()
-            
+
             # 2. Load Graph
             graph_json = dest / "graph.json"
             if graph_json.exists():
@@ -5134,31 +6900,43 @@ class EfficientManimWindow(QMainWindow):
                     node_map = {}
                     for nd in g["nodes"]:
                         # Fix for Mobject casing
-                        type_str = nd["type"].capitalize() if nd["type"].upper() == "MOBJECT" else "Animation"
-                        
-                        node = self.add_node(type_str, nd["cls_name"], nd["params"], nd["pos"], nd["id"])
-                        
+                        type_str = (
+                            nd["type"].capitalize()
+                            if nd["type"].upper() == "MOBJECT"
+                            else "Animation"
+                        )
+
+                        node = self.add_node(
+                            type_str, nd["cls_name"], nd["params"], nd["pos"], nd["id"]
+                        )
+
                         # Restore metadata
                         if "param_metadata" in nd:
                             node.data.param_metadata = nd["param_metadata"]
                         if "is_ai_generated" in nd:
                             node.data.is_ai_generated = nd["is_ai_generated"]
-                        
+
                         node_map[nd["id"]] = node
-                        
+
                     for w in g["wires"]:
                         n1, n2 = node_map.get(w["start"]), node_map.get(w["end"])
-                        if n1 and n2: self.scene.try_connect(n1.out_socket, n2.in_socket)
-            
+                        if n1 and n2:
+                            self.scene.try_connect(n1.out_socket, n2.in_socket)
+
             # 3. Load Saved Code (if any)
             code_py = dest / "code.py"
             if code_py.exists():
                 with open(code_py, "r") as f:
                     self.code_view.setText(f.read())
-            
+
             self.compile_graph()
+            self.project_path = path
+            _add_to_recents(path)
+            if hasattr(self, "project_name_edit"):
+                self.project_name_edit.setText(Path(path).stem)
+            self.reset_modified()
             LOGGER.info("Project Loaded Successfully.")
-            
+
         except Exception as e:
             LOGGER.error(f"Open Failed: {e}")
             traceback.print_exc()
@@ -5168,12 +6946,17 @@ class EfficientManimWindow(QMainWindow):
 
     def append_log(self, level, msg):
         c = "black"
-        if level == "ERROR": c = "red"
-        elif level == "WARN": c = "orange"
-        elif level == "AI": c = "blue"
-        elif level == "MANIM": c = "purple"
+        if level == "ERROR":
+            c = "red"
+        elif level == "WARN":
+            c = "orange"
+        elif level == "AI":
+            c = "blue"
+        elif level == "MANIM":
+            c = "purple"
         ts = datetime.now().strftime("%H:%M:%S")
         self.logs.append(f"<span style='color:{c}'><b>[{ts}] {level}:</b> {msg}</span>")
+
 
 # ==============================================================================
 # 10. ENTRY POINT
@@ -5181,19 +6964,24 @@ class EfficientManimWindow(QMainWindow):
 
 if __name__ == "__main__":
     app = QApplication(sys.argv)
-    
+
     # Set application icon at QApplication level BEFORE any window is created
     _icon_path = Path(__file__).parent / "icon" / "icon.ico"
     if _icon_path.exists():
         app.setWindowIcon(QIcon(str(_icon_path.absolute())))
-    
-    sys._excepthook = sys.excepthook
+
+    # ── Apply Global Light-Mode Stylesheet ────────────────────────────────
+    app.setStyleSheet(THEME_MANAGER.get_stylesheet())
+
+    _original_excepthook = sys.excepthook
+
     def exception_hook(exctype, value, traceback_obj):
         LOGGER.error(f"CRITICAL: {value}")
         traceback.print_tb(traceback_obj)
-        sys._excepthook(exctype, value, traceback_obj)
+        _original_excepthook(exctype, value, traceback_obj)
+
     sys.excepthook = exception_hook
-    
+
     win = EfficientManimWindow()
     win.show()
     sys.exit(app.exec())

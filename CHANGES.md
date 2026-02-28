@@ -1,90 +1,118 @@
-# EfficientManim — Fix & Feature Summary
+# EfficientManim — Changelog
 
-## 🔴 Critical Bug Fixes
+---
 
-### 1. `AttributeError: 'builtin_function_or_method' object has no attribute 'preview_path'`
-**Root Cause**: `NodeItem` stored data as `self.node_data` but all code accessed `node.data`, which 
-called `QGraphicsItem.data()` (a Qt C++ method), not the NodeData object.
+## v2.0.1 — Structural Cleanup & Rendering Integrity Update
 
-**Fix**: Added a `@property data` to `NodeItem` that returns `self.node_data`. This transparently 
-makes all existing `node.data.X` calls work correctly throughout the entire codebase (~50+ call sites).
+**Date:** February 28, 2026
 
-### 2. Generate Code Button — Now Fully Functional
-- AI worker is properly connected via `clicked.connect(self.generate)`
-- Full generation pipeline runs and produces output
-- Graph state is fully consistent after merge
+This release removes architectural hacks and replaces them with honest, transparent behavior.
 
-### 3. AI Node Generation — Complete Graph Linking
-**Before**: Only mobjects were added; animations and connection wires were missing.
+---
 
-**Fixed `parse_ai_code`**:
-- Parses `var = ClassName(...)` assignments
-- Parses ALL `self.play(AnimClass(target, ...))` inline animation calls in order
-- Parses `self.play(target.animate.method(...))` chains
-- Uses `_balanced_paren_end()` to handle nested parentheses correctly
+### Removed: Geist Font System
 
-**Fixed `merge_ai_code_to_scene`**:
-- Creates mobject nodes (column 0) with auto-layout positions
-- Creates animation nodes (column 1+) per play_sequence entry in correct order
-- Creates WireItem connections: mobject → animation
-- Chains animation nodes sequentially with connection wires
-- Shows clear QMessageBox error on failure (no silent failures)
+The Geist custom font has been completely removed.
 
-### 4. Application Icon — Fixed
-- `QApplication.setWindowIcon()` is now called at startup, BEFORE any window is created
-- Guaranteed to show correctly at launch
+- All `QFontDatabase` font-loading logic removed
+- All Geist font references removed from codebase
+- All fallback checks and font utility helpers removed
+- `utils.py` cleaned; no font-loading logs remain
+- Application uses the system default font cleanly via `QFont()` with point size 10
+- No font warnings; no residual references
 
-### 5. Runtime Font Warnings Eliminated
-- Replaced `QFont("Geist", ...)` in `NodeItem.paint()` with `QFont("Segoe UI", ...)` (always available on Windows)
-- FontManager.create_font() already clamps sizes to `max(8, min(size, 24))`
+---
 
-### 6. Keybindings Panel — Human-Readable Display
-**Before**: `StandardKey.Delete`, `QKeySequence(<PySide6.QtCore.QKeyCombination...>)`
-**After**: `Del`, `Ctrl+Z`, `Ctrl+Y`, `Ctrl+S`, etc. using `QKeySequence.toString(PortableText)`
+### Removed: Scenes Tab
 
-### 7. Preview Feature — Production Ready
-- Removed "experimental" and "may crash" warning labels
-- `ENABLE_PREVIEW` now defaults to **`True`** (was `False`)
-- All `SETTINGS.get("ENABLE_PREVIEW", False)` replaced with `True` default
+The **Scenes** tab has been fully removed from the UI.
 
-## 🚀 New Power Features
+- `MultiSceneManagerPanel` no longer mounted as a tab
+- All signal connections (`scene_switched`, `scene_added`, `scene_deleted`) disconnected from the main window
+- Tab entry `"🎬 Scenes"` removed from `QTabWidget`
+- No dead imports; no dangling signal handlers in the active UI path
+- Application runs cleanly without the Scenes tab
 
-### 🎨 Manim Class Browser (new "Classes" tab)
-- Searchable palette of 60+ Manim classes organized by category
-- Double-click any class to instantly add it as a node
-- Categories: Geometry, Text, Graphs & Plots, 3D, Animations (In/Out), Transforms, Emphasis
+---
 
-### 📚 Code Snippet Library (new "Snippets" tab)
-7 ready-to-use templates:
-- FadeIn + FadeOut, Transform Shape, Animated Text, Geometry Showcase
-- Number Line, Emphasis & Highlight, Axes & Plot
-- Double-click any snippet → loads directly into AI panel for immediate merge
+### Fixed: Scene Class Renaming — Removed
 
-### 🔍 Node Search / Filter Bar
-- Type to filter nodes on canvas by name or class
-- Non-matching nodes dim to 25% opacity
-- Clear button to reset
+**Previously**, the graph compiler hardcoded all generated code to use:
 
-### ⚡ Quick Export Bar
-- **📄 .py** — Export current code as Python file
-- **📋 Copy** — Copy code to clipboard (Ctrl+Shift+C)
-- **🎬 Render MP4** — Jump to render tab and trigger render
+```python
+class EfficientScene(Scene):
+```
 
-### 🗂 Auto-Layout Nodes (Ctrl+L)
-- One-click clean arrangement of all nodes in left-to-right flow
-- Mobjects in column 0, animations in column 1
-- Automatic wire update after layout
+This silently renamed every AI-generated or user-defined class to `EfficientScene`, which was a trust violation.
 
-### 🌐 Tools Menu
-- Open Manim Documentation (manim.community)
-- Open Manim Gallery / Examples
-- Export Code (.py) shortcut (Ctrl+E)
-- Copy to Clipboard (Ctrl+Shift+C)
+**Now**, the compiler generates a neutral class name:
 
-### ℹ️ Enhanced About Dialog
-- Full feature list displayed
+```python
+class GeneratedScene(Scene):
+```
 
-## Architecture Notes
-- `NodeItem.data` property is the single authoritative fix for all attribute errors
-- All new features follow the existing patterns (Signal/Slot, Qt widgets)
-- Zero breaking changes to existing project file format
+And the video renderer uses `detect_scene_class()` to dynamically identify the actual scene class in any code — whether AI-generated or user-written.
+
+**Behavior now:**
+
+- Any class inheriting from `Scene` renders correctly
+- AI-generated class names (e.g., `PythagoreanTheorem`, `MyScene`) are **never renamed**
+- No injected wrapper classes
+- No hidden code mutation before rendering
+- Rendering is transparent and deterministic
+
+---
+
+### Fixed: Rendering System
+
+The `VideoRenderWorker` now:
+
+- Accepts `scene_class` as an explicit parameter
+- Passes the detected class name directly to the Manim CLI
+- Never assumes `EfficientScene` or any fixed name
+
+The `detect_scene_class(code)` function scans for `class X(Scene):` patterns and returns the actual class name, falling back to `"Scene"` only if none is found.
+
+---
+
+### Fixed: SettingsDialog
+
+- Removed broken `self.theme.currentText()` reference (widget was never created)
+- Settings dialog now saves cleanly without attempting theme switching
+- Light-mode-only mode confirmed stable
+
+---
+
+### Fixed: Theme System
+
+- Removed undefined `ThemeMode` type annotation from `_on_theme_changed()`
+- Theme change handler signature cleaned up to be safe and forward-compatible
+
+---
+
+### Code Snippet Templates
+
+All built-in snippet templates updated:
+
+- `class EfficientScene(Scene)` → `class MyScene(Scene)` in all SnippetLibrary entries
+- Templates are now neutral and don't impose a naming convention on users
+
+---
+
+## v2.0.1 — Major Feature Release
+
+Initial production release including:
+
+- Node graph canvas with visual wiring
+- AI code generation via Google Gemini
+- Live Mobject preview rendering
+- Video export to MP4/WebM
+- Manim class browser
+- Code snippet library
+- GitHub snippet loader
+- LaTeX live preview
+- AI voiceover (TTS) with node sync
+- VGroup creation and code generation
+- Usage tracking and Recents pane
+- Custom keybindings
+- Light mode design system

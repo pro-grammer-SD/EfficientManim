@@ -24,9 +24,6 @@ This project follows a simple support rule to keep things predictable.
 Instead, report them privately using one of the following methods:
 
 * Email: **[geniussantu1983@gmail.com](mailto:geniussantu1983@gmail.com)**
-  *(Replace with a real, monitored email before publishing)*
-
-If email is not available, you may contact the maintainer directly via a private channel listed in the repository.
 
 ---
 
