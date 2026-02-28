@@ -36,8 +36,7 @@ from __future__ import annotations
 import json
 import logging
 import traceback
-import uuid
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import Any, Callable, Optional
 
 LOGGER = logging.getLogger("mcp")
@@ -188,9 +187,7 @@ class MCPAgent:
         """Return a full snapshot of the current application state."""
         win = self._win
         try:
-            nodes_snapshot = [
-                MCPNodeInfo.from_node_item(n) for n in win.nodes.values()
-            ]
+            nodes_snapshot = [MCPNodeInfo.from_node_item(n) for n in win.nodes.values()]
         except Exception:
             nodes_snapshot = []
 
@@ -287,9 +284,11 @@ class MCPAgent:
 
     def _register(self, name: str):
         """Decorator to register a method as an MCP command handler."""
+
         def decorator(fn: Callable[[dict], MCPResult]):
             self._registry[name] = fn
             return fn
+
         return decorator
 
     def _register_all_handlers(self):
@@ -306,8 +305,7 @@ class MCPAgent:
         @self._register("list_nodes")
         def _(payload: dict) -> MCPResult:
             nodes = [
-                MCPNodeInfo.from_node_item(n).to_dict()
-                for n in win.nodes.values()
+                MCPNodeInfo.from_node_item(n).to_dict() for n in win.nodes.values()
             ]
             return MCPResult(success=True, data=nodes)
 
@@ -325,8 +323,13 @@ class MCPAgent:
                         break
 
             if node_item is None:
-                return MCPResult(success=False, error=f"Node not found: id={node_id!r} name={node_name!r}")
-            return MCPResult(success=True, data=MCPNodeInfo.from_node_item(node_item).to_dict())
+                return MCPResult(
+                    success=False,
+                    error=f"Node not found: id={node_id!r} name={node_name!r}",
+                )
+            return MCPResult(
+                success=True, data=MCPNodeInfo.from_node_item(node_item).to_dict()
+            )
 
         @self._register("list_assets")
         def _(payload: dict) -> MCPResult:
@@ -352,17 +355,24 @@ class MCPAgent:
 
             # ── Validation ────────────────────────────────────────────────
             if not cls_name:
-                return MCPResult(success=False, error="cls_name is required and must be a non-empty Manim class name.")
+                return MCPResult(
+                    success=False,
+                    error="cls_name is required and must be a non-empty Manim class name.",
+                )
 
             node_type_str = str(payload.get("node_type", "ANIMATION")).strip().upper()
             if node_type_str not in ("ANIMATION", "MOBJECT"):
-                LOGGER.warn(f"MCP create_node: unknown node_type '{node_type_str}', defaulting to ANIMATION")
+                LOGGER.warn(
+                    f"MCP create_node: unknown node_type '{node_type_str}', defaulting to ANIMATION"
+                )
                 node_type_str = "ANIMATION"
 
             # UUID duplication guard
             existing_names = {n.data.name for n in win.nodes.values()}
             if name in existing_names:
-                LOGGER.warn(f"MCP create_node: a node named '{name}' already exists — proceeding (names are non-unique)")
+                LOGGER.warn(
+                    f"MCP create_node: a node named '{name}' already exists — proceeding (names are non-unique)"
+                )
 
             try:
                 # ── Use the OFFICIAL node creation API (same as GUI) ─────
@@ -370,11 +380,11 @@ class MCPAgent:
                 # This ensures full lifecycle: NodeData init, NodeItem creation,
                 # scene.addItem, nodes dict registration, compile_graph trigger.
                 item = win.add_node(
-                    node_type_str,       # "MOBJECT" or "ANIMATION" — correct string type
-                    cls_name,            # Manim class name string — correct string type
-                    params=dict(params), # copy to avoid mutation
+                    node_type_str,  # "MOBJECT" or "ANIMATION" — correct string type
+                    cls_name,  # Manim class name string — correct string type
+                    params=dict(params),  # copy to avoid mutation
                     pos=(x, y),
-                    name=name,           # custom display name (new param)
+                    name=name,  # custom display name (new param)
                 )
                 win.mark_modified()
 
@@ -383,18 +393,24 @@ class MCPAgent:
                 if actual_id not in win.nodes:
                     return MCPResult(
                         success=False,
-                        error=f"Node was created but not registered in win.nodes — integrity violation."
+                        error="Node was created but not registered in win.nodes — integrity violation.",
                     )
                 if not item.data.cls_name:
                     return MCPResult(
                         success=False,
-                        error=f"Node created with empty cls_name — integrity violation."
+                        error="Node created with empty cls_name — integrity violation.",
                     )
 
-                LOGGER.info(f"MCP created node: cls={cls_name} name='{name}' type={node_type_str} id={actual_id[:8]}")
+                LOGGER.info(
+                    f"MCP created node: cls={cls_name} name='{name}' type={node_type_str} id={actual_id[:8]}"
+                )
                 return MCPResult(
                     success=True,
-                    data={"id": actual_id, "name": item.data.name, "cls_name": item.data.cls_name},
+                    data={
+                        "id": actual_id,
+                        "name": item.data.name,
+                        "cls_name": item.data.cls_name,
+                    },
                 )
             except Exception as e:
                 return MCPResult(success=False, error=f"create_node failed: {e}")
@@ -417,7 +433,10 @@ class MCPAgent:
             node_item.update()
             win.compile_graph()
             win.mark_modified()
-            return MCPResult(success=True, data={"node_id": node_id, "key": param_key, "value": param_value})
+            return MCPResult(
+                success=True,
+                data={"node_id": node_id, "key": param_key, "value": param_value},
+            )
 
         @self._register("rename_node")
         def _(payload: dict) -> MCPResult:
@@ -431,7 +450,9 @@ class MCPAgent:
             node_item.data.name = new_name
             node_item.update()
             win.mark_modified()
-            return MCPResult(success=True, data={"node_id": node_id, "new_name": new_name})
+            return MCPResult(
+                success=True, data={"node_id": node_id, "new_name": new_name}
+            )
 
         # ── Node deletion ───────────────────────────────────────────────────
 
@@ -451,7 +472,7 @@ class MCPAgent:
                 # ═══════════════════════════════════════════════════════════════
                 # CRITICAL FIX: Use the official remove_node() method to ensure
                 # complete lifecycle: edge cleanup, preview worker cleanup, UI sync.
-                # 
+                #
                 # DO NOT directly remove from scene/dict — that leaves orphaned
                 # edges and breaks graph integrity.
                 # ═══════════════════════════════════════════════════════════════
@@ -496,7 +517,9 @@ class MCPAgent:
             try:
                 asset = _get_global_assets().add_asset(audio_path)
                 if not asset:
-                    return MCPResult(success=False, error="Failed to register audio asset.")
+                    return MCPResult(
+                        success=False, error="Failed to register audio asset."
+                    )
 
                 node_item.data.audio_asset_id = asset.id
                 node_item.data.voiceover_transcript = transcript
@@ -570,13 +593,17 @@ class MCPAgent:
                 if node_id:
                     node_item = win.nodes.get(node_id)
                     if node_item is None:
-                        return MCPResult(success=False, error=f"Node not found: {node_id!r}")
+                        return MCPResult(
+                            success=False, error=f"Node not found: {node_id!r}"
+                        )
                     win.queue_render(node_item)
                     return MCPResult(success=True, data={"queued_node": node_id})
                 else:
                     # Render all nodes in queue
                     win.render_to_video()
-                    return MCPResult(success=True, data={"message": "Render triggered."})
+                    return MCPResult(
+                        success=True, data={"message": "Render triggered."}
+                    )
             except Exception as e:
                 return MCPResult(success=False, error=str(e))
 
@@ -602,6 +629,7 @@ class MCPAgent:
         def _(payload: dict) -> MCPResult:
             try:
                 from PySide6.QtWidgets import QApplication
+
                 code = win.code_view.toPlainText()
                 QApplication.clipboard().setText(code)
                 return MCPResult(success=True, data={"chars_copied": len(code)})
@@ -646,7 +674,9 @@ class MCPAgent:
 
         @self._register("ping")
         def _(payload: dict) -> MCPResult:
-            return MCPResult(success=True, data={"message": "pong", "node_count": len(win.nodes)})
+            return MCPResult(
+                success=True, data={"message": "pong", "node_count": len(win.nodes)}
+            )
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -658,10 +688,12 @@ def _get_global_assets():
     """Safely retrieve the global ASSETS registry from the main module."""
     try:
         import __main__
+
         return __main__.ASSETS
     except AttributeError:
         # Fallback: walk QApplication windows to find main window
         from PySide6.QtWidgets import QApplication
+
         for widget in QApplication.topLevelWidgets():
             if hasattr(widget, "ASSETS"):
                 return widget.ASSETS

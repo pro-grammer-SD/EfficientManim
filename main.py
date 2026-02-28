@@ -76,18 +76,29 @@ from datetime import datetime
 try:
     from keybinding_registry import KEYBINDINGS, initialize_default_keybindings
     from keybindings_panel import UnifiedKeybindingsPanel
+
     KEYBINDINGS_AVAILABLE = True
 except ImportError as e:
     KEYBINDINGS_AVAILABLE = False
     print(f"WARNING: Keybinding modules not found: {e}")
+
     # Fallback stubs
     class KEYBINDINGS:
         @staticmethod
-        def get_binding(name): return ""
-        def binding_changed(): pass
-        def registry_updated(): pass
-    class UnifiedKeybindingsPanel: pass
-    def initialize_default_keybindings(): pass
+        def get_binding(name):
+            return ""
+
+        def binding_changed():
+            pass
+
+        def registry_updated():
+            pass
+
+    class UnifiedKeybindingsPanel:
+        pass
+
+    def initialize_default_keybindings():
+        pass
 
 
 # PySide6 Imports
@@ -127,15 +138,12 @@ from PySide6.QtWidgets import (
     QStyle,
     QSlider,
     QGroupBox,
-    QTableWidget,
-    QTableWidgetItem,
     QInputDialog,
     QDockWidget,
     QProgressBar,
 )
 from PySide6.QtCore import (
     Qt,
-    QKeyCombination,
     Signal,
     QObject,
     QThread,
@@ -187,6 +195,7 @@ except ImportError:
 # after the main window is fully constructed in EfficientManimWindow.__init__.
 try:
     from mcp import MCPAgent as _MCPAgent
+
     MCP_AVAILABLE = True
 except ImportError:
     _MCPAgent = None  # type: ignore[assignment,misc]
@@ -1126,27 +1135,27 @@ class Asset:
     def from_dict(d):
         """
         Reconstruct Asset from saved dict.
-        
+
         CRITICAL FIX: Recalculate current_path on load.
-        
+
         The saved original_path might be from a different machine/session.
         We need to validate it exists, otherwise look for local_file or fail safely.
         """
         a = Asset(d["name"], d["original"], d["kind"])
         a.id = d["id"]
         a.local_file = d.get("local", "")
-        
+
         # ═══════════════════════════════════════════════════════════════
         # CRITICAL VALIDATION: Revalidate current_path on deserialization
         # ═══════════════════════════════════════════════════════════════
         original = Path(d["original"])
-        
+
         # Attempt 1: Original path exists as-is
         if original.exists():
             a.current_path = original.as_posix()
             LOGGER.info(f"Asset '{a.name}' (id={a.id[:8]}): original path valid")
             return a
-        
+
         # Attempt 2: Local file was extracted to temp
         if a.local_file and (AppPaths.TEMP_DIR / a.local_file).exists():
             a.current_path = (AppPaths.TEMP_DIR / a.local_file).as_posix()
@@ -1154,7 +1163,7 @@ class Asset:
                 f"Asset '{a.name}' (id={a.id[:8]}): original missing, using temp: {a.current_path}"
             )
             return a
-        
+
         # Attempt 3: User data assets folder
         user_assets = AppPaths.USER_DATA / "assets" / a.local_file
         if a.local_file and user_assets.exists():
@@ -1163,7 +1172,7 @@ class Asset:
                 f"Asset '{a.name}' (id={a.id[:8]}): found in user assets: {a.current_path}"
             )
             return a
-        
+
         # FAILED: No valid path found
         LOGGER.error(
             f"Asset '{a.name}' (id={a.id[:8]}): MISSING - original={a.original_path}, "
@@ -1539,28 +1548,28 @@ class AssetManager(QObject):
     def get_asset_path(self, asset_id):
         """
         Safely retrieve the absolute POSIX path for Manim.
-        
+
         CRITICAL FIX: Validate file exists before returning.
         Logs error if asset file is missing so user knows render will fail.
         """
         if asset_id in self.assets:
             asset = self.assets[asset_id]
-            
+
             # ══════════════════════════════════════════════════════════════
             # VALIDATION: Confirm file exists before returning
             # This prevents silent render failures
             # ══════════════════════════════════════════════════════════════
             path_str = asset.current_path
             path_obj = Path(path_str)
-            
+
             if not path_obj.exists():
                 LOGGER.error(
                     f"Asset file missing: '{asset.name}' (id={asset_id[:8]}) → {path_str}"
                 )
                 return None
-            
+
             return path_str
-        
+
         LOGGER.error(f"Unknown asset ID: {asset_id}")
         return None
 
@@ -2866,7 +2875,7 @@ class AIPanel(QWidget):
         self.worker = None
         self.last_code = None
         self.extracted_nodes = []  # Track AI-generated nodes
-        self._mcp_agent = None     # Set by EfficientManimWindow after construction
+        self._mcp_agent = None  # Set by EfficientManimWindow after construction
 
         # Create main layout with visual distinction
         main_layout = QVBoxLayout(self)
@@ -3394,7 +3403,9 @@ class AIPanel(QWidget):
 
         nodes: dict = main_window.nodes
         if not nodes:
-            QMessageBox.warning(self, "No Nodes", "There are no nodes in the scene to voiceover.")
+            QMessageBox.warning(
+                self, "No Nodes", "There are no nodes in the scene to voiceover."
+            )
             return
 
         self.output.clear()
@@ -3407,9 +3418,11 @@ class AIPanel(QWidget):
         node_summaries = []
         for nid, node_item in nodes.items():
             d = node_item.data
-            params_str = ", ".join(
-                f"{k}={v}" for k, v in list(d.params.items())[:5]
-            ) if d.params else "no params"
+            params_str = (
+                ", ".join(f"{k}={v}" for k, v in list(d.params.items())[:5])
+                if d.params
+                else "no params"
+            )
             node_summaries.append(
                 f"  - [{d.type.name}] {d.name} ({d.cls_name}): {params_str}"
             )
@@ -3425,10 +3438,10 @@ class AIPanel(QWidget):
             "The script should naturally describe what the animation is doing.\n"
             "Use plain, spoken English — no markdown, no code.\n\n"
             "Output ONLY a JSON array, with one object per node, in this exact format:\n"
-            '[\n'
+            "[\n"
             '  {"node_name": "<exact node name>", "script": "<voiceover script>"},\n'
-            '  ...\n'
-            ']\n\n'
+            "  ...\n"
+            "]\n\n"
             "Output ONLY the JSON array. No explanation, no markdown fences."
         )
 
@@ -3474,8 +3487,7 @@ class AIPanel(QWidget):
         )
         self._auto_vo_queue = list(scripts)
         self._auto_vo_node_map = {
-            node_item.data.name: node_item
-            for node_item in self._auto_vo_nodes.values()
+            node_item.data.name: node_item for node_item in self._auto_vo_nodes.values()
         }
         self._auto_vo_voice = SETTINGS.get("DEFAULT_VOICE", "Zephyr")
         self._auto_vo_model = SETTINGS.get("TTS_MODEL", "gemini-2.5-flash-preview-tts")
@@ -3533,6 +3545,7 @@ class AIPanel(QWidget):
             if PYDUB_AVAILABLE:
                 try:
                     from pydub import AudioSegment as _AS
+
                     seg = _AS.from_file(file_path)
                     node_item.data.voiceover_duration = len(seg) / 1000.0
                 except Exception:
@@ -3651,10 +3664,7 @@ class AIPanel(QWidget):
         available_commands: list = cmds_result.data if cmds_result.success else []
 
         # Commands Gemini is allowed to use (exclude destructive ops unless asked)
-        safe_commands = [
-            c for c in available_commands
-            if c not in ("clear_scene",)
-        ]
+        safe_commands = [c for c in available_commands if c not in ("clear_scene",)]
 
         self._mcp_ctx_before = ctx_result.data  # save for diff display later
 
@@ -3679,7 +3689,7 @@ class AIPanel(QWidget):
             "  switch_scene:     {scene_name}\n\n"
             "Rules:\n"
             "1. Output ONLY a valid JSON array. No explanation. No markdown. No fences.\n"
-            "2. Each element: {\"command\": \"...\", \"payload\": {...}}\n"
+            '2. Each element: {"command": "...", "payload": {...}}\n'
             "3. For nodes you CREATE in this session, use 'node_name' key instead of "
             "'node_id' in subsequent commands — it will be resolved automatically.\n"
             "4. Always end with compile_graph if you modified the scene.\n"
@@ -3798,7 +3808,11 @@ class AIPanel(QWidget):
                 data_str = str(result.data) if result.data else ""
                 self.output.append(
                     f"<span style='color:#27ae60;'>✅ {command}</span>"
-                    + (f" <span style='color:#555;font-size:10px;'>→ {data_str[:80]}</span>" if data_str else "")
+                    + (
+                        f" <span style='color:#555;font-size:10px;'>→ {data_str[:80]}</span>"
+                        if data_str
+                        else ""
+                    )
                     + "<br>"
                 )
                 success_count += 1
@@ -3811,7 +3825,11 @@ class AIPanel(QWidget):
         # ── Show node count delta ──────────────────────────────────────────
         try:
             after = agent.execute("get_context")
-            if after.success and hasattr(self, "_mcp_ctx_before") and self._mcp_ctx_before:
+            if (
+                after.success
+                and hasattr(self, "_mcp_ctx_before")
+                and self._mcp_ctx_before
+            ):
                 before_count = self._mcp_ctx_before.get("node_count", 0)
                 after_count = after.data.get("node_count", 0)
                 delta = after_count - before_count
@@ -4428,7 +4446,9 @@ class VoiceoverPanel(QWidget):
         preview_layout.setSpacing(4)
 
         preview_lbl = QLabel("🎵 Audio Preview")
-        preview_lbl.setStyleSheet("color: #a0a0c0; font-size: 11px; font-weight: bold; border: none;")
+        preview_lbl.setStyleSheet(
+            "color: #a0a0c0; font-size: 11px; font-weight: bold; border: none;"
+        )
         preview_layout.addWidget(preview_lbl)
 
         # Seek slider
@@ -4446,7 +4466,9 @@ class VoiceoverPanel(QWidget):
 
         # Time label
         self.lbl_time = QLabel("00:00 / 00:00")
-        self.lbl_time.setStyleSheet("color: #808090; font-family: monospace; font-size: 10px; border: none;")
+        self.lbl_time.setStyleSheet(
+            "color: #808090; font-family: monospace; font-size: 10px; border: none;"
+        )
         self.lbl_time.setAlignment(Qt.AlignmentFlag.AlignCenter)
         preview_layout.addWidget(self.lbl_time)
 
@@ -4511,7 +4533,9 @@ class VoiceoverPanel(QWidget):
             "background-color: #27ae60; color: white; padding: 7px; font-weight: bold;"
         )
         self.btn_attach.setEnabled(False)
-        self.btn_attach.setToolTip("Attach the generated audio to the selected animation node")
+        self.btn_attach.setToolTip(
+            "Attach the generated audio to the selected animation node"
+        )
         self.btn_attach.clicked.connect(self._attach_to_node)
         layout.addWidget(self.btn_attach)
 
@@ -4534,9 +4558,7 @@ class VoiceoverPanel(QWidget):
         count = 0
         for nid, node in self.main_window.nodes.items():
             short_id = nid[:6]
-            type_tag = (
-                "🎬" if node.data.type == NodeType.ANIMATION else "🔷"
-            )
+            type_tag = "🎬" if node.data.type == NodeType.ANIMATION else "🔷"
             display_text = f"{type_tag} {node.data.name} ({short_id})"
             self.node_combo.addItem(display_text, nid)
             count += 1
@@ -4598,7 +4620,7 @@ class VoiceoverPanel(QWidget):
     def _load_preview(self, file_path: str):
         """
         Load audio file into the preview player.
-        
+
         CRITICAL FIX: Proper QUrl conversion with error handling.
         - Convert path to QUrl with proper escaping
         - Validate file exists before loading
@@ -4617,20 +4639,20 @@ class VoiceoverPanel(QWidget):
                 self.btn_stop.setEnabled(False)
                 self.seek_slider.setEnabled(False)
                 return
-            
+
             # ═════════════════════════════════════════════════════════════
             # FIX: Use QUrl.fromLocalFile() for proper path escaping
             # Windows paths with backslashes must be converted safely
             # ═════════════════════════════════════════════════════════════
             from PySide6.QtCore import QUrl
-            
+
             # Convert to absolute path to prevent relative path issues
             abs_path = file_path_obj.resolve()
-            
+
             # Create QUrl with proper local file encoding
             # This handles spaces, special characters, and backslashes correctly
             media_url = QUrl.fromLocalFile(str(abs_path))
-            
+
             if not media_url.isValid():
                 self.status_lbl.setText("❌ Invalid file path or unsupported format")
                 LOGGER.error(f"Audio preview: invalid QUrl for {abs_path}")
@@ -4638,20 +4660,20 @@ class VoiceoverPanel(QWidget):
                 self.btn_stop.setEnabled(False)
                 self.seek_slider.setEnabled(False)
                 return
-            
+
             # ═════════════════════════════════════════════════════════════
             # LOAD: Set media source and enable controls
             # ═════════════════════════════════════════════════════════════
             self._player.setSource(media_url)
-            
+
             # Enable playback controls
             self.seek_slider.setEnabled(True)
             self.btn_play.setEnabled(True)
             self.btn_stop.setEnabled(True)
-            
+
             self.status_lbl.setText("✅ Audio loaded. Press ▶ to preview.")
             LOGGER.info(f"Audio preview loaded: {abs_path}")
-            
+
         except Exception as e:
             self.status_lbl.setText(f"❌ Error loading audio: {type(e).__name__}")
             LOGGER.error(f"Audio preview load error: {e}", exc_info=True)
@@ -4687,7 +4709,7 @@ class VoiceoverPanel(QWidget):
     def _on_media_status(self, status):
         """
         Handle media status changes.
-        
+
         Catches load errors, end-of-media, and other status changes.
         """
         try:
@@ -4695,45 +4717,45 @@ class VoiceoverPanel(QWidget):
             if status == QMediaPlayer.MediaStatus.EndOfMedia:
                 self.btn_play.setText("▶")
                 LOGGER.info("Audio playback: end of media reached")
-            
+
             # Handle load errors
             elif status == QMediaPlayer.MediaStatus.InvalidMedia:
                 self.status_lbl.setText("❌ Invalid audio format or corrupted file")
-                LOGGER.error(f"Audio preview: invalid media format")
+                LOGGER.error("Audio preview: invalid media format")
                 self.btn_play.setEnabled(False)
                 self.btn_stop.setEnabled(False)
-            
+
             elif status == QMediaPlayer.MediaStatus.NoMedia:
                 # No media loaded (expected after clear or init)
                 pass
-            
+
             elif status == QMediaPlayer.MediaStatus.LoadedMedia:
                 # Media successfully loaded
                 LOGGER.info("Audio preview: media loaded successfully")
-            
+
             elif status == QMediaPlayer.MediaStatus.LoadingMedia:
                 # Media is being loaded
                 self.status_lbl.setText("⏳ Loading audio...")
-        
+
         except Exception as e:
             LOGGER.error(f"Error in _on_media_status: {e}")
 
     def _on_player_error(self):
         """
         Handle QMediaPlayer errors.
-        
+
         Called when an error occurs during playback or loading.
         """
         try:
             error = self._player.error()
             error_string = self._player.errorString()
-            
+
             if error != QMediaPlayer.Error.NoError:
                 self.status_lbl.setText(f"❌ Playback error: {error_string}")
                 LOGGER.error(f"Audio preview error: {error} - {error_string}")
                 self.btn_play.setEnabled(False)
                 self.btn_stop.setEnabled(False)
-        
+
         except Exception as e:
             LOGGER.error(f"Error in _on_player_error: {e}")
 
@@ -4757,7 +4779,9 @@ class VoiceoverPanel(QWidget):
         """Attach generated audio to the selected animation node."""
         node_id = self.node_combo.currentData()
         if not node_id:
-            QMessageBox.warning(self, "No Node Selected", "Please select an animation node first.")
+            QMessageBox.warning(
+                self, "No Node Selected", "Please select an animation node first."
+            )
             return
 
         if node_id not in self.main_window.nodes:
@@ -4765,7 +4789,9 @@ class VoiceoverPanel(QWidget):
             return
 
         if not hasattr(self, "_last_asset") or self._last_asset is None:
-            QMessageBox.warning(self, "No Audio", "Generate audio first before attaching.")
+            QMessageBox.warning(
+                self, "No Audio", "Generate audio first before attaching."
+            )
             return
 
         node = self.main_window.nodes[node_id]
@@ -4788,8 +4814,6 @@ class VoiceoverPanel(QWidget):
             f"Duration: {node.data.voiceover_duration:.2f}s\n"
             "The node will use this audio during render.",
         )
-
-
 
 
 class KeyboardShortcutsDialog(QDialog):
@@ -6130,17 +6154,17 @@ class GitHubSnippetLoader(QWidget):
             try:
                 # ═══════════════════════════════════════════════════════════════
                 # WINDOWS-SAFE RECURSIVE DELETION
-                # 
+                #
                 # Fixes WinError 5: Access Denied
                 # - chmod files to remove read-only flags
                 # - Retry with exponential backoff
                 # - OS-specific force-close handling
                 # ═══════════════════════════════════════════════════════════════
-                
+
                 def handle_remove_readonly(func, path, exc_info):
                     """
                     Error handler for shutil.rmtree() on Windows.
-                    
+
                     When a file is locked or read-only:
                     1. Make it writable with os.chmod()
                     2. Retry the operation
@@ -6158,38 +6182,59 @@ class GitHubSnippetLoader(QWidget):
                     LOGGER.info(f"Successfully deleted GitHub repo: {path}")
                 except Exception as e1:
                     # Attempt 2: Force-chmod all files first, then retry
-                    LOGGER.warn(f"First deletion attempt failed: {e1}, retrying with force-chmod...")
+                    LOGGER.warn(
+                        f"First deletion attempt failed: {e1}, retrying with force-chmod..."
+                    )
                     try:
                         for root_dir, dirs, files in os.walk(path):
                             for d in dirs:
-                                os.chmod(os.path.join(root_dir, d), stat.S_IWUSR | stat.S_IRUSR | stat.S_IXUSR)
+                                os.chmod(
+                                    os.path.join(root_dir, d),
+                                    stat.S_IWUSR | stat.S_IRUSR | stat.S_IXUSR,
+                                )
                             for f in files:
-                                os.chmod(os.path.join(root_dir, f), stat.S_IWUSR | stat.S_IRUSR)
+                                os.chmod(
+                                    os.path.join(root_dir, f),
+                                    stat.S_IWUSR | stat.S_IRUSR,
+                                )
                         time.sleep(0.5)  # Brief delay for file handles to release
                         shutil.rmtree(path)
                         LOGGER.info(f"Successfully deleted GitHub repo (retry): {path}")
                     except Exception as e2:
                         # Attempt 3: Windows-specific: try moving to temp first
                         if sys.platform == "win32":
-                            LOGGER.warn(f"Second deletion failed: {e2}, attempting temp relocation...")
+                            LOGGER.warn(
+                                f"Second deletion failed: {e2}, attempting temp relocation..."
+                            )
                             try:
-                                temp_loc = Path(tempfile.gettempdir()) / f"efm_del_{uuid.uuid4().hex[:8]}"
+                                temp_loc = (
+                                    Path(tempfile.gettempdir())
+                                    / f"efm_del_{uuid.uuid4().hex[:8]}"
+                                )
                                 shutil.move(path, str(temp_loc))
-                                shutil.rmtree(str(temp_loc), onerror=handle_remove_readonly)
-                                LOGGER.info(f"Successfully deleted via temp relocation: {path}")
+                                shutil.rmtree(
+                                    str(temp_loc), onerror=handle_remove_readonly
+                                )
+                                LOGGER.info(
+                                    f"Successfully deleted via temp relocation: {path}"
+                                )
                             except Exception as e3:
-                                raise Exception(f"Could not delete after 3 attempts. Last error: {e3}")
+                                raise Exception(
+                                    f"Could not delete after 3 attempts. Last error: {e3}"
+                                )
                         else:
                             raise Exception(f"Could not delete. Last error: {e2}")
-                
+
                 # Remove from tree on success
                 idx = self.tree.indexOfTopLevelItem(root)
                 self.tree.takeTopLevelItem(idx)
                 self.status_lbl.setText(f"✅ Deleted '{root.text(0)}'")
-                
+
             except Exception as e:
                 LOGGER.error(f"Failed to delete repo: {e}")
-                QMessageBox.warning(self, "Error", f"Could not delete repository:\n{str(e)[:100]}")
+                QMessageBox.warning(
+                    self, "Error", f"Could not delete repository:\n{str(e)[:100]}"
+                )
 
 
 # ── Editable Project Name Widget ──────────────────────────────────────────────
@@ -6240,33 +6285,34 @@ class ProjectNameWidget(QWidget):
 _WINDOW_ICON = None
 _ICON_LOAD_ATTEMPTED = False
 
+
 def _load_window_icon():
     """
     Lazy-load window icon. Only loads when QApplication has been created.
     This function can be safely called at any time after QApplication instantiation.
     """
     global _WINDOW_ICON, _ICON_LOAD_ATTEMPTED
-    
+
     # Return cached icon if already loaded
     if _WINDOW_ICON is not None:
         return _WINDOW_ICON
-    
+
     # Don't attempt to load multiple times if it failed
     if _ICON_LOAD_ATTEMPTED and _WINDOW_ICON is None:
         return QIcon()
-    
+
     _ICON_LOAD_ATTEMPTED = True
-    
+
     try:
         icon_path = Path(__file__).parent / "icon" / "icon.ico"
         full_path = str(icon_path.absolute())
-        
+
         # Try loading as pixmap first (more reliable on Windows)
         pixmap = QPixmap(full_path)
         if pixmap.isNull():
             print("[ICON] First load attempt failed. Trying relative path...")
             pixmap = QPixmap("icon/icon.ico")
-        
+
         if not pixmap.isNull():
             # Create icon with all standard sizes for better taskbar support
             icon = QIcon(pixmap)
@@ -6278,7 +6324,9 @@ def _load_window_icon():
             _WINDOW_ICON = icon
             print(f"[ICON] Loaded successfully with multiple sizes from {full_path}")
         else:
-            print(f"[ICON] Failed to load from {full_path}. Check file permissions and format.")
+            print(
+                f"[ICON] Failed to load from {full_path}. Check file permissions and format."
+            )
             # Create a fallback colored icon only if QApplication exists
             try:
                 fallback = QPixmap(64, 64)
@@ -6289,20 +6337,22 @@ def _load_window_icon():
     except Exception as e:
         print(f"[ICON] Error loading: {e}")
         _WINDOW_ICON = QIcon()
-    
+
     return _WINDOW_ICON
+
 
 class EfficientManimWindow(QMainWindow):
     def __init__(self):
         super().__init__()
-        
+
         # Ensure proper Windows integration for icon display
         from PySide6.QtCore import Qt as QtConstants
+
         self.setAttribute(QtConstants.WidgetAttribute.WA_NativeWindow, True)
-        
+
         # Set icon FIRST before anything else - critical for taskbar registration on Windows
         self.setWindowIcon(_load_window_icon())
-        
+
         self.setWindowTitle(f"{APP_NAME} v{APP_VERSION}")
         self.resize(1600, 1000)
         self.setStyleSheet(THEME_MANAGER.get_stylesheet())
@@ -6347,7 +6397,7 @@ class EfficientManimWindow(QMainWindow):
 
         # ═══════════════════════════════════════════════════════════════════════
         # AUTO-RELOAD SYSTEM
-        # 
+        #
         # Provides 3-second periodic preview refresh + immediate reload on changes
         # - Detects code changes via content hash
         # - Detects node graph changes via structure hash
@@ -6355,26 +6405,26 @@ class EfficientManimWindow(QMainWindow):
         # - Prevents render flooding with debounce + in-progress flag
         # - Respectsuser setting: ENABLE_PREVIEW
         # ═══════════════════════════════════════════════════════════════════════
-        
+
         self.auto_reload_enabled = True  # Toggleable via Settings UI
         self.auto_reload_timer = QTimer()
         self.auto_reload_timer.timeout.connect(self._auto_reload_tick)
         self.auto_reload_timer.start(3000)  # Fire every 3 seconds
-        
+
         # State tracking for change detection
         self._last_code_hash = ""
         self._last_graph_hash = ""
         self._last_assets_hash = ""
-        
+
         # Debounce: pending render from changes
         self._pending_auto_render = False
         self._auto_render_debounce = QTimer()
         self._auto_render_debounce.timeout.connect(self._trigger_auto_render)
         self._auto_render_debounce.setSingleShot(True)
-        
+
         # In-progress tracking: prevent concurrent renders
         self._render_in_progress = False
-        
+
         LOGGER.info(
             "Auto-reload system initialized: "
             "3s timer + change detection + debounce + render-in-progress guard"
@@ -6382,8 +6432,10 @@ class EfficientManimWindow(QMainWindow):
 
         # ── MCP Agent — wired to this window, available app-wide as self.mcp ──
         if MCP_AVAILABLE and _MCPAgent is not None:
-            self.mcp: "_MCPAgent | None" = _MCPAgent(self)
-            LOGGER.info("MCP Agent initialised. Use self.mcp.execute(command, payload).")
+            self.mcp: "_MCPAgent | None" = _MCPAgent(self)  # pyright: ignore[reportInvalidTypeForm]
+            LOGGER.info(
+                "MCP Agent initialised. Use self.mcp.execute(command, payload)."
+            )
         else:
             self.mcp = None
             LOGGER.info("MCP Agent not available (mcp.py missing).")
@@ -6507,9 +6559,7 @@ class EfficientManimWindow(QMainWindow):
         self.ai_dock = QDockWidget("🤖 AI Assistant", self)
         self.ai_dock.setObjectName("AIDockWidget")
         # Lock the dock: no floating, no closing, no moving
-        self.ai_dock.setFeatures(
-            QDockWidget.DockWidgetFeature.NoDockWidgetFeatures
-        )
+        self.ai_dock.setFeatures(QDockWidget.DockWidgetFeature.NoDockWidgetFeatures)
         self.ai_dock.setAllowedAreas(Qt.DockWidgetArea.LeftDockWidgetArea)
         self.ai_dock.setWidget(self.panel_ai)
         self.ai_dock.setMinimumWidth(320)
@@ -6600,7 +6650,9 @@ class EfficientManimWindow(QMainWindow):
 
         edit_menu.addSeparator()
         self._delete_action = QAction("Delete Selected", self)
-        self._delete_action.setShortcut(KEYBINDINGS.get_binding("Delete Selected") or "Del")
+        self._delete_action.setShortcut(
+            KEYBINDINGS.get_binding("Delete Selected") or "Del"
+        )
         self._delete_action.triggered.connect(self.delete_selected)
         self._delete_action.setObjectName("_delete_action")
         edit_menu.addAction(self._delete_action)
@@ -6618,8 +6670,12 @@ class EfficientManimWindow(QMainWindow):
         view_menu.addAction(self._zoom_in_action)
 
         self._zoom_out_action = QAction("Zoom Out", self)
-        self._zoom_out_action.setShortcut(KEYBINDINGS.get_binding("Zoom Out") or "Ctrl+-")
-        self._zoom_out_action.triggered.connect(lambda: self.view.scale(1 / 1.15, 1 / 1.15))
+        self._zoom_out_action.setShortcut(
+            KEYBINDINGS.get_binding("Zoom Out") or "Ctrl+-"
+        )
+        self._zoom_out_action.triggered.connect(
+            lambda: self.view.scale(1 / 1.15, 1 / 1.15)
+        )
         self._zoom_out_action.setObjectName("_zoom_out_action")
         view_menu.addAction(self._zoom_out_action)
 
@@ -6646,15 +6702,17 @@ class EfficientManimWindow(QMainWindow):
             QKeySequence("Ctrl+Shift+C"),
         )
         tools_menu.addSeparator()
-        
+
         # Render Video action (unified keybinding)
         self._render_video_action = QAction("Render Video", self)
-        self._render_video_action.setShortcut(KEYBINDINGS.get_binding("Render Video") or "Ctrl+R")
+        self._render_video_action.setShortcut(
+            KEYBINDINGS.get_binding("Render Video") or "Ctrl+R"
+        )
         self._render_video_action.triggered.connect(lambda: self.render_to_video({}))
         self._render_video_action.setObjectName("_render_video_action")
         tools_menu.addAction(self._render_video_action)
         tools_menu.addSeparator()
-        
+
         tools_menu.addAction(
             "Create VGroup from Selection",
             self.create_vgroup_from_selection,
@@ -6686,7 +6744,9 @@ class EfficientManimWindow(QMainWindow):
         mcp_menu.addAction(mcp_status_action)
 
         mcp_context_action = QAction("Inspect Scene Context (JSON)", self)
-        mcp_context_action.setToolTip("Show the full MCPContext JSON for the current scene.")
+        mcp_context_action.setToolTip(
+            "Show the full MCPContext JSON for the current scene."
+        )
         mcp_context_action.triggered.connect(self._mcp_show_context)
         mcp_menu.addAction(mcp_context_action)
 
@@ -6761,18 +6821,22 @@ class EfficientManimWindow(QMainWindow):
     def _mcp_ping(self) -> None:
         """Ping the MCP agent and display status in a message box."""
         if self.mcp is None:
-            QMessageBox.warning(self, "MCP Unavailable",
-                                "MCP Agent is not initialised.\n"
-                                "Make sure mcp.py is in the same directory as main.py.")
+            QMessageBox.warning(
+                self,
+                "MCP Unavailable",
+                "MCP Agent is not initialised.\n"
+                "Make sure mcp.py is in the same directory as main.py.",
+            )
             return
         result = self.mcp.execute("ping")
         if result.success:
             node_count = result.data.get("node_count", "?")
             QMessageBox.information(
-                self, "MCP Agent — OK",
+                self,
+                "MCP Agent — OK",
                 f"✅ MCP Agent is alive.\n\n"
                 f"Nodes in current scene: {node_count}\n"
-                f"Registered commands: {len(self.mcp.list_commands())}"
+                f"Registered commands: {len(self.mcp.list_commands())}",
             )
         else:
             QMessageBox.critical(self, "MCP Error", f"Ping failed:\n{result.error}")
@@ -6780,13 +6844,16 @@ class EfficientManimWindow(QMainWindow):
     def _mcp_show_context(self) -> None:
         """Open a dialog showing the full MCPContext JSON for the current scene."""
         if self.mcp is None:
-            QMessageBox.warning(self, "MCP Unavailable", "MCP Agent is not initialised.")
+            QMessageBox.warning(
+                self, "MCP Unavailable", "MCP Agent is not initialised."
+            )
             return
         result = self.mcp.execute("get_context")
         if not result.success:
             QMessageBox.critical(self, "MCP Error", result.error)
             return
         import json as _json
+
         ctx_text = _json.dumps(result.data, indent=2, default=str)
 
         dlg = QDialog(self)
@@ -6809,10 +6876,12 @@ class EfficientManimWindow(QMainWindow):
 
         btn_row = QHBoxLayout()
         btn_copy = QPushButton("📋 Copy JSON")
-        btn_copy.clicked.connect(lambda: (
-            QApplication.clipboard().setText(ctx_text),
-            btn_copy.setText("✅ Copied!")
-        ))
+        btn_copy.clicked.connect(
+            lambda: (
+                QApplication.clipboard().setText(ctx_text),
+                btn_copy.setText("✅ Copied!"),
+            )
+        )
         btn_close = QPushButton("Close")
         btn_close.clicked.connect(dlg.accept)
         btn_row.addWidget(btn_copy)
@@ -6824,7 +6893,9 @@ class EfficientManimWindow(QMainWindow):
     def _mcp_list_commands(self) -> None:
         """Show all registered MCP command names in a dialog."""
         if self.mcp is None:
-            QMessageBox.warning(self, "MCP Unavailable", "MCP Agent is not initialised.")
+            QMessageBox.warning(
+                self, "MCP Unavailable", "MCP Agent is not initialised."
+            )
             return
         commands = self.mcp.list_commands()
         text = "\n".join(f"  • {c}" for c in commands)
@@ -6847,13 +6918,18 @@ class EfficientManimWindow(QMainWindow):
     def _mcp_show_log(self) -> None:
         """Show every MCP command executed this session."""
         if self.mcp is None:
-            QMessageBox.warning(self, "MCP Unavailable", "MCP Agent is not initialised.")
+            QMessageBox.warning(
+                self, "MCP Unavailable", "MCP Agent is not initialised."
+            )
             return
         log = self.mcp.get_action_log()
         if not log:
-            QMessageBox.information(self, "MCP Action Log", "No commands have been executed yet.")
+            QMessageBox.information(
+                self, "MCP Action Log", "No commands have been executed yet."
+            )
             return
         import json as _json
+
         lines = []
         for i, entry in enumerate(log, 1):
             payload_str = _json.dumps(entry.get("payload", {}), default=str)
@@ -6883,21 +6959,19 @@ class EfficientManimWindow(QMainWindow):
     def _mcp_exec_and_notify(self, command: str, payload: dict) -> None:
         """Execute a single MCP command and show a toast-style result notification."""
         if self.mcp is None:
-            QMessageBox.warning(self, "MCP Unavailable", "MCP Agent is not initialised.")
+            QMessageBox.warning(
+                self, "MCP Unavailable", "MCP Agent is not initialised."
+            )
             return
         result = self.mcp.execute(command, payload)
         if result.success:
             LOGGER.info(f"MCP [{command}] OK: {result.data}")
             QMessageBox.information(
-                self, f"MCP — {command}",
-                f"✅ Command succeeded.\n\n{result.data}"
+                self, f"MCP — {command}", f"✅ Command succeeded.\n\n{result.data}"
             )
         else:
             LOGGER.error(f"MCP [{command}] FAILED: {result.error}")
-            QMessageBox.critical(
-                self, f"MCP — {command} failed",
-                f"❌ {result.error}"
-            )
+            QMessageBox.critical(self, f"MCP — {command} failed", f"❌ {result.error}")
 
     def show_shortcuts(self):
         """Show keyboard shortcuts dialog."""
@@ -7114,14 +7188,14 @@ class EfficientManimWindow(QMainWindow):
                 "Zoom Out": getattr(self, "_zoom_out_action", None),
                 "Render Video": getattr(self, "_render_video_action", None),
             }
-            
+
             action = action_map.get(action_name)
             if action:
                 action.setShortcut(new_shortcut)
                 LOGGER.info(f"✓ Rebound '{action_name}' to '{new_shortcut}'")
         except Exception as e:
             LOGGER.error(f"Failed to rebind keybinding '{action_name}': {e}")
-    
+
     def _refresh_keybindings(self) -> None:
         """
         Refresh all keybindings from registry.
@@ -7130,7 +7204,7 @@ class EfficientManimWindow(QMainWindow):
         try:
             if not KEYBINDINGS_AVAILABLE:
                 return
-            
+
             # Re-apply all keybindings from registry to their actions
             action_map = {
                 "Exit": ("_quit_action", "Ctrl+Q"),
@@ -7142,13 +7216,13 @@ class EfficientManimWindow(QMainWindow):
                 "Zoom Out": ("_zoom_out_action", "Ctrl+-"),
                 "Render Video": ("_render_video_action", "Ctrl+R"),
             }
-            
+
             for action_name, (attr_name, default) in action_map.items():
                 action = getattr(self, attr_name, None)
                 if action:
                     shortcut = KEYBINDINGS.get_binding(action_name) or default
                     action.setShortcut(shortcut)
-            
+
             LOGGER.info("✓ Refreshed all keybindings from registry")
         except Exception as e:
             LOGGER.error(f"Failed to refresh keybindings: {e}")
@@ -7210,6 +7284,7 @@ class EfficientManimWindow(QMainWindow):
         """Compute SHA256 hash of current code view content."""
         try:
             import hashlib
+
             code = self.code_view.toPlainText()
             return hashlib.sha256(code.encode()).hexdigest()
         except Exception as e:
@@ -7220,18 +7295,21 @@ class EfficientManimWindow(QMainWindow):
         """Compute hash of node graph structure (node IDs, connections)."""
         try:
             import hashlib
+
             # Hash all node IDs + their parameters
             node_data = []
             for nid in sorted(self.nodes.keys()):
                 node = self.nodes[nid]
-                node_data.append(f"{nid}:{node.data.cls_name}:{sorted(node.data.params.items())}")
-            
+                node_data.append(
+                    f"{nid}:{node.data.cls_name}:{sorted(node.data.params.items())}"
+                )
+
             # Hash all edges (connections)
             edge_data = []
             for node in self.nodes.values():
                 for wire in node.out_socket.links:
                     edge_data.append(f"{id(wire)}")
-            
+
             combined = "".join(node_data) + "".join(edge_data)
             return hashlib.sha256(combined.encode()).hexdigest()
         except Exception as e:
@@ -7242,6 +7320,7 @@ class EfficientManimWindow(QMainWindow):
         """Compute hash of asset timestamps and IDs."""
         try:
             import hashlib
+
             asset_data = []
             for asset in ASSETS.get_list():
                 try:
@@ -7249,7 +7328,7 @@ class EfficientManimWindow(QMainWindow):
                     asset_data.append(f"{asset.id}:{mtime}")
                 except Exception:
                     asset_data.append(f"{asset.id}:missing")
-            
+
             combined = "".join(asset_data)
             return hashlib.sha256(combined.encode()).hexdigest()
         except Exception as e:
@@ -7259,7 +7338,7 @@ class EfficientManimWindow(QMainWindow):
     def _auto_reload_tick(self):
         """
         Called every 3 seconds by auto_reload_timer.
-        
+
         Detects changes in code, graph, or assets.
         Queues re-render if state changed (with debounce).
         """
@@ -7267,26 +7346,26 @@ class EfficientManimWindow(QMainWindow):
             # Skip if disabled or AI-generated code
             if not self.auto_reload_enabled or self.is_ai_generated_code:
                 return
-            
+
             # Skip if render already in progress (prevent flooding)
             if self._render_in_progress:
                 return
-            
+
             # Compute current state
             code_hash = self._compute_code_hash()
             graph_hash = self._compute_graph_hash()
             assets_hash = self._compute_assets_hash()
-            
+
             # Check for changes
-            code_changed = (code_hash != self._last_code_hash)
-            graph_changed = (graph_hash != self._last_graph_hash)
-            assets_changed = (assets_hash != self._last_assets_hash)
-            
+            code_changed = code_hash != self._last_code_hash
+            graph_changed = graph_hash != self._last_graph_hash
+            assets_changed = assets_hash != self._last_assets_hash
+
             # Update hashes for next iteration
             self._last_code_hash = code_hash
             self._last_graph_hash = graph_hash
             self._last_assets_hash = assets_hash
-            
+
             # If anything changed, queue a render with debounce
             if code_changed or graph_changed or assets_changed:
                 LOGGER.debug(
@@ -7294,38 +7373,38 @@ class EfficientManimWindow(QMainWindow):
                     f"(code={code_changed}, graph={graph_changed}, assets={assets_changed})"
                 )
                 self._pending_auto_render = True
-                
+
                 # Debounce: wait 500ms before rendering to avoid flooding
                 # if user is making rapid edits
                 self._auto_render_debounce.stop()
                 self._auto_render_debounce.start(500)
-        
+
         except Exception as e:
             LOGGER.error(f"Error in _auto_reload_tick: {e}")
 
     def _trigger_auto_render(self):
         """
         Called after debounce period expires.
-        
+
         Triggers re-render if there's a pending change.
         """
         try:
             if not self._pending_auto_render:
                 return
-            
+
             self._pending_auto_render = False
-            
+
             # Check if preview is enabled
             if not SETTINGS.get("ENABLE_PREVIEW", True, type=bool):
                 return
-            
+
             LOGGER.info("Auto-reload: triggering render due to detected changes")
-            
+
             # Queue all mobject nodes for re-render
             for node in self.nodes.values():
                 if node.data.type == NodeType.MOBJECT:
                     self.queue_render(node)
-        
+
         except Exception as e:
             LOGGER.error(f"Error in _trigger_auto_render: {e}")
 
@@ -7515,7 +7594,9 @@ class EfficientManimWindow(QMainWindow):
         self.fit_view()
         LOGGER.info(f"Auto-layout applied to {len(nodes_list)} nodes")
 
-    def add_node(self, type_str, cls_name, params=None, pos=(0, 0), nid=None, name=None):
+    def add_node(
+        self, type_str, cls_name, params=None, pos=(0, 0), nid=None, name=None
+    ):
         # Normalize type string to handle "Mobject" / "MOBJECT" / "mobject" variants
         is_mobject = str(type_str).upper() == "MOBJECT"
         ntype = NodeType.MOBJECT if is_mobject else NodeType.ANIMATION
@@ -7687,7 +7768,9 @@ class EfficientManimWindow(QMainWindow):
 
                 # Validate missing mobject param
                 if "mobject" in anim.data.params or "mobjects" in anim.data.params:
-                    val = anim.data.params.get("mobject") or anim.data.params.get("mobjects")
+                    val = anim.data.params.get("mobject") or anim.data.params.get(
+                        "mobjects"
+                    )
                     if not val or (isinstance(val, str) and len(val) != 36):
                         LOGGER.warn(
                             f"Animation '{anim.data.name}' has a 'mobject' parameter but no target selected!"
@@ -7700,7 +7783,7 @@ class EfficientManimWindow(QMainWindow):
 
                 if anim.data.audio_asset_id:
                     _vo_path = ASSETS.get_asset_path(anim.data.audio_asset_id)
-                    
+
                     # ═════════════════════════════════════════════════════
                     # CRITICAL VALIDATION: Check file actually exists before
                     # attempting to load it. Prevents silent render failure.
@@ -7729,6 +7812,7 @@ class EfficientManimWindow(QMainWindow):
                         # ═════════════════════════════════════════════════════
                         try:
                             from pydub import AudioSegment as _AS
+
                             _seg = _AS.from_file(_vo_path)
                             _duration_ms = len(_seg)  # pydub uses ms
 
@@ -7742,17 +7826,21 @@ class EfficientManimWindow(QMainWindow):
                                 # recorded and detect drift (> 50ms = warning)
                                 recorded_s = anim.data.voiceover_duration
                                 if recorded_s > 0:
-                                    drift_ms = abs(_duration_ms - int(recorded_s * 1000))
+                                    drift_ms = abs(
+                                        _duration_ms - int(recorded_s * 1000)
+                                    )
                                     if drift_ms > 50:
                                         LOGGER.warn(
                                             f"Voiceover drift detected for '{anim.data.name}': "
                                             f"recorded={recorded_s:.3f}s, "
-                                            f"actual={_duration_ms/1000:.3f}s, "
+                                            f"actual={_duration_ms / 1000:.3f}s, "
                                             f"drift={drift_ms}ms"
                                         )
 
                                 # Update stored duration to the exact measured value
-                                anim.data.voiceover_duration = round(_duration_ms / 1000.0, 3)
+                                anim.data.voiceover_duration = round(
+                                    _duration_ms / 1000.0, 3
+                                )
 
                                 # Record for merged-track builder
                                 _vo_entries.append((_timeline_ms, _seg))
@@ -7800,8 +7888,12 @@ class EfficientManimWindow(QMainWindow):
                 if _rt_override_s is None:
                     try:
                         _rt_raw = anim.data.params.get("run_time", "1.0")
-                        if not (isinstance(_rt_raw, str) and "duration_seconds" in _rt_raw):
-                            _batch_max_ms = max(_batch_max_ms, int(float(_rt_raw) * 1000))
+                        if not (
+                            isinstance(_rt_raw, str) and "duration_seconds" in _rt_raw
+                        ):
+                            _batch_max_ms = max(
+                                _batch_max_ms, int(float(_rt_raw) * 1000)
+                            )
                         else:
                             _batch_max_ms = max(_batch_max_ms, 1000)
                     except Exception:
@@ -7826,13 +7918,15 @@ class EfficientManimWindow(QMainWindow):
         if _vo_entries and PYDUB_AVAILABLE:
             try:
                 from pydub import AudioSegment as _AS
+
                 # Total merged track length = last offset + its segment duration + 500ms tail
                 _last_offset_ms, _last_seg = max(_vo_entries, key=lambda x: x[0])
                 _total_ms = _last_offset_ms + len(_last_seg) + 500
 
                 # Create silence canvas of the full required length
-                _merged = _AS.silent(duration=_total_ms,
-                                     frame_rate=_last_seg.frame_rate)
+                _merged = _AS.silent(
+                    duration=_total_ms, frame_rate=_last_seg.frame_rate
+                )
 
                 # Overlay each segment at its exact ms offset
                 for _offset_ms, _seg in _vo_entries:
@@ -7842,7 +7936,9 @@ class EfficientManimWindow(QMainWindow):
                     _merged = _merged.overlay(_seg, position=_offset_ms)
 
                 # Export to a session-scoped temp file
-                _merged_path = AppPaths.TEMP_DIR / f"merged_vo_{uuid.uuid4().hex[:8]}.wav"
+                _merged_path = (
+                    AppPaths.TEMP_DIR / f"merged_vo_{uuid.uuid4().hex[:8]}.wav"
+                )
                 _merged.export(str(_merged_path), format="wav")
                 _merged_posix = _merged_path.as_posix()
 
@@ -7952,7 +8048,7 @@ class EfficientManimWindow(QMainWindow):
     def process_render_queue(self):
         """
         Generates a dedicated, isolated script for Mobject previewing.
-        
+
         CRITICAL FIX: Respect render-in-progress flag to prevent concurrent renders.
         """
         try:
@@ -7963,7 +8059,7 @@ class EfficientManimWindow(QMainWindow):
             if self._render_in_progress:
                 LOGGER.debug("Skipping queue processing: render already in progress")
                 return
-            
+
             if not self.render_queue:
                 return
 
@@ -8493,8 +8589,12 @@ class EfficientManimWindow(QMainWindow):
                         )
 
                         node = self.add_node(
-                            type_str, nd["cls_name"], nd["params"], nd["pos"], nd["id"],
-                            name=nd.get("name", nd["cls_name"])
+                            type_str,
+                            nd["cls_name"],
+                            nd["params"],
+                            nd["pos"],
+                            nd["id"],
+                            name=nd.get("name", nd["cls_name"]),
                         )
 
                         # Restore metadata
