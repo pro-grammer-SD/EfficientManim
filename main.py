@@ -1,8 +1,11 @@
 # Register this as a proper app using the classic ctypes.windll workaround
 import ctypes
 import sys
+import os
 
 if sys.platform == "win32":
+    # Disable Windows icon cache to ensure fresh icon loads
+    os.environ["PYTHONICON"] = "1"
     ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID(
         "com.programmersd.efficientmanim"
     )
@@ -68,6 +71,24 @@ import numpy as np
 from enum import Enum, auto
 from pathlib import Path
 from datetime import datetime
+
+# Unified keybinding system
+try:
+    from keybinding_registry import KEYBINDINGS, initialize_default_keybindings
+    from keybindings_panel import UnifiedKeybindingsPanel
+    KEYBINDINGS_AVAILABLE = True
+except ImportError as e:
+    KEYBINDINGS_AVAILABLE = False
+    print(f"WARNING: Keybinding modules not found: {e}")
+    # Fallback stubs
+    class KEYBINDINGS:
+        @staticmethod
+        def get_binding(name): return ""
+        def binding_changed(): pass
+        def registry_updated(): pass
+    class UnifiedKeybindingsPanel: pass
+    def initialize_default_keybindings(): pass
+
 
 # PySide6 Imports
 from PySide6.QtWidgets import (
@@ -177,7 +198,7 @@ except ImportError:
 # ==============================================================================
 
 APP_NAME = "EfficientManim"
-APP_VERSION = "2.0.1"
+APP_VERSION = "2.0.2"
 PROJECT_EXT = ".efp"  # EfficientManim Project (Zip)
 
 
@@ -595,47 +616,11 @@ from themes import THEME_MANAGER
 # ==============================================================================
 
 
-class KeyboardShortcuts:
-    """Centralized keyboard shortcuts."""
-
-    SHORTCUTS = {
-        "Delete": (QKeySequence.StandardKey.Delete, "Delete selected nodes/wires"),
-        "Undo": (QKeySequence.StandardKey.Undo, "Undo last action"),
-        "Redo": (QKeySequence.StandardKey.Redo, "Redo last action"),
-        "Save": (QKeySequence.StandardKey.Save, "Save project"),
-        "Open": (QKeySequence.StandardKey.Open, "Open project"),
-        "Fit View": (
-            QKeySequence(
-                QKeyCombination(Qt.KeyboardModifier.ControlModifier, Qt.Key.Key_0)
-            ),
-            "Fit scene to view",
-        ),
-        "Clear": (
-            QKeySequence(
-                QKeyCombination(Qt.KeyboardModifier.ControlModifier, Qt.Key.Key_Delete)
-            ),
-            "Clear all nodes",
-        ),
-    }
-
-    @classmethod
-    def get_shortcut(cls, action_name):
-        return cls.SHORTCUTS.get(action_name, (None, ""))[0]
-
-    @classmethod
-    def describe_shortcuts(cls):
-        """Return formatted help text with human-readable key combinations."""
-        lines = ["=== Keyboard Shortcuts ===", ""]
-        for name, (seq, desc) in cls.SHORTCUTS.items():
-            if isinstance(seq, QKeySequence.StandardKey):
-                ks = QKeySequence(seq)
-            else:
-                ks = seq
-            key_str = ks.toString()
-            if not key_str:
-                key_str = "(platform default)"
-            lines.append(f"  {key_str:<20}  {name:<15}  {desc}")
-        return "\n".join(lines)
+# ══════════════════════════════════════════════════════════════════════════════
+# KEYBINDINGS REGISTRY (Unified System)
+# Replaced by keybinding_registry.py module — single source of truth
+# See keybinding_registry.py for details
+# ══════════════════════════════════════════════════════════════════════════════
 
 
 # ==============================================================================
@@ -4818,7 +4803,7 @@ class KeyboardShortcutsDialog(QDialog):
 
         text_display = QTextEdit()
         text_display.setReadOnly(True)
-        text_display.setPlainText(KeyboardShortcuts.describe_shortcuts())
+        text_display.setPlainText(KEYBINDINGS.describe_shortcuts())
         layout.addWidget(text_display)
 
         close_btn = QPushButton("Close")
@@ -5831,110 +5816,11 @@ class VGroupPanel(QWidget):
 
 
 # ── Keybindings Panel ─────────────────────────────────────────────────────────
-class KeybindingsPanel(QDialog):
-    DEFAULT_BINDINGS = {
-        "New Project": "Ctrl+N",
-        "Open Project": "Ctrl+O",
-        "Save Project": "Ctrl+S",
-        "Save As": "Ctrl+Shift+S",
-        "Exit": "Ctrl+Q",
-        "Undo": "Ctrl+Z",
-        "Redo": "Ctrl+Y",
-        "Delete Selected": "Del",
-        "Zoom In": "Ctrl+=",
-        "Zoom Out": "Ctrl+-",
-        "Fit View": "Ctrl+0",
-        "Clear All": "Ctrl+Alt+Del",
-        "Auto-Layout": "Ctrl+L",
-        "Export Code": "Ctrl+E",
-        "Copy Code": "Ctrl+Shift+C",
-        "Keybindings": "Ctrl+K",
-        "Settings": "Ctrl+,",
-        "AI Generate": "Ctrl+G",
-        "Render Video": "Ctrl+R",
-    }
-
-    def __init__(self, parent=None):
-        super().__init__(parent)
-        self.setWindowTitle("⌨️ Keybindings")
-        self.resize(480, 520)
-        self._bindings = self._load()
-        self._build()
-
-    def _load(self):
-        result = dict(self.DEFAULT_BINDINGS)
-        for action in self.DEFAULT_BINDINGS:
-            saved = SETTINGS.get(f"keybind_{action}", None)
-            if saved:
-                result[action] = str(saved)
-        return result
-
-    def _save(self):
-        for action, key in self._bindings.items():
-            SETTINGS.set(f"keybind_{action}", key)
-
-    def get_binding(self, action):
-        return self._bindings.get(action, self.DEFAULT_BINDINGS.get(action, ""))
-
-    def _build(self):
-        layout = QVBoxLayout(self)
-        info = QLabel("Double-click a shortcut to edit it.")
-        info.setStyleSheet("color: #6b7280; font-size: 11px;")
-        layout.addWidget(info)
-        self.table = QTableWidget(len(self._bindings), 2)
-        self.table.setHorizontalHeaderLabels(["Action", "Shortcut"])
-        self.table.horizontalHeader().setStretchLastSection(True)
-        self.table.setSelectionBehavior(QTableWidget.SelectionBehavior.SelectRows)
-        self.table.setEditTriggers(QTableWidget.EditTrigger.DoubleClicked)
-        self.table.verticalHeader().setVisible(False)
-        for row, (action, key) in enumerate(self._bindings.items()):
-            ai = QTableWidgetItem(action)
-            ai.setFlags(ai.flags() & ~Qt.ItemFlag.ItemIsEditable)
-            self.table.setItem(row, 0, ai)
-            self.table.setItem(row, 1, QTableWidgetItem(key))
-        layout.addWidget(self.table)
-        btn_row = QHBoxLayout()
-        btn_reset = QPushButton("↩ Defaults")
-        btn_reset.clicked.connect(self._reset)
-        btn_save = QPushButton("💾 Save")
-        btn_save.setStyleSheet(
-            "background-color: #2ecc71; color: white; font-weight: bold;"
-        )
-        btn_save.clicked.connect(self._apply)
-        btn_cancel = QPushButton("Cancel")
-        btn_cancel.clicked.connect(self.reject)
-        btn_row.addWidget(btn_reset)
-        btn_row.addStretch()
-        btn_row.addWidget(btn_cancel)
-        btn_row.addWidget(btn_save)
-        layout.addLayout(btn_row)
-
-    def _reset(self) -> None:
-        self._bindings = dict(self.DEFAULT_BINDINGS)
-        for row, (action, key) in enumerate(self._bindings.items()):
-            item = self.table.item(row, 1)
-            if item is not None:
-                item.setText(key)
-
-    def _apply(self) -> None:
-        for row in range(self.table.rowCount()):
-            action_item = self.table.item(row, 0)
-            key_item = self.table.item(row, 1)
-            if action_item is not None and key_item is not None:
-                action = action_item.text()
-                key = key_item.text()
-                self._bindings[action] = key
-        vals = list(self._bindings.values())
-        dups = [v for v in vals if vals.count(v) > 1 and v]
-        if dups:
-            QMessageBox.warning(
-                self,
-                "Duplicate Shortcuts",
-                f"Duplicates: {', '.join(set(dups))}\nFix before saving.",
-            )
-            return
-        self._save()
-        self.accept()
+# ──────────────────────────────────────────────────────────────────────────────
+# OLD KeybindingsPanel REMOVED
+# Replaced by UnifiedKeybindingsPanel from keybindings_panel.py
+# which uses the unified KeybindingRegistry for single source of truth
+# ──────────────────────────────────────────────────────────────────────────────
 
 
 # ── Recents & Usage helpers (thin wrappers around UserDataManager) ─────────────
@@ -6349,21 +6235,77 @@ class ProjectNameWidget(QWidget):
 # 9. MAIN WINDOW
 # ==============================================================================
 
+# Preload window icon at module level for faster taskbar registration
+# NOTE: Icon loading is lazy - it only happens when QApplication exists
+_WINDOW_ICON = None
+_ICON_LOAD_ATTEMPTED = False
+
+def _load_window_icon():
+    """
+    Lazy-load window icon. Only loads when QApplication has been created.
+    This function can be safely called at any time after QApplication instantiation.
+    """
+    global _WINDOW_ICON, _ICON_LOAD_ATTEMPTED
+    
+    # Return cached icon if already loaded
+    if _WINDOW_ICON is not None:
+        return _WINDOW_ICON
+    
+    # Don't attempt to load multiple times if it failed
+    if _ICON_LOAD_ATTEMPTED and _WINDOW_ICON is None:
+        return QIcon()
+    
+    _ICON_LOAD_ATTEMPTED = True
+    
+    try:
+        icon_path = Path(__file__).parent / "icon" / "icon.ico"
+        full_path = str(icon_path.absolute())
+        
+        # Try loading as pixmap first (more reliable on Windows)
+        pixmap = QPixmap(full_path)
+        if pixmap.isNull():
+            print("[ICON] First load attempt failed. Trying relative path...")
+            pixmap = QPixmap("icon/icon.ico")
+        
+        if not pixmap.isNull():
+            # Create icon with all standard sizes for better taskbar support
+            icon = QIcon(pixmap)
+            # Explicitly add multiple sizes for better Windows taskbar rendering
+            for size in [16, 24, 32, 48, 64, 128, 256]:
+                scaled = pixmap.scaledToWidth(size, Qt.SmoothTransformation)
+                if not scaled.isNull():
+                    icon.addPixmap(scaled, QIcon.Mode.Normal)
+            _WINDOW_ICON = icon
+            print(f"[ICON] Loaded successfully with multiple sizes from {full_path}")
+        else:
+            print(f"[ICON] Failed to load from {full_path}. Check file permissions and format.")
+            # Create a fallback colored icon only if QApplication exists
+            try:
+                fallback = QPixmap(64, 64)
+                fallback.fill(Qt.GlobalColor.blue)
+                _WINDOW_ICON = QIcon(fallback)
+            except:
+                _WINDOW_ICON = QIcon()
+    except Exception as e:
+        print(f"[ICON] Error loading: {e}")
+        _WINDOW_ICON = QIcon()
+    
+    return _WINDOW_ICON
 
 class EfficientManimWindow(QMainWindow):
     def __init__(self):
         super().__init__()
+        
+        # Ensure proper Windows integration for icon display
+        from PySide6.QtCore import Qt as QtConstants
+        self.setAttribute(QtConstants.WidgetAttribute.WA_NativeWindow, True)
+        
+        # Set icon FIRST before anything else - critical for taskbar registration on Windows
+        self.setWindowIcon(_load_window_icon())
+        
         self.setWindowTitle(f"{APP_NAME} v{APP_VERSION}")
         self.resize(1600, 1000)
         self.setStyleSheet(THEME_MANAGER.get_stylesheet())
-
-        # CRITICAL FIX: Set icon with absolute path before showing window
-        icon_path = Path(__file__).parent / "icon" / "icon.ico"
-        if icon_path.exists():
-            self.setWindowIcon(QIcon(str(icon_path.absolute())))
-        else:
-            # Fallback to relative path if absolute doesn't work
-            self.setWindowIcon(QIcon("icon/icon.ico"))
 
         self.nodes = {}
         self.project_path = None
@@ -6371,12 +6313,20 @@ class EfficientManimWindow(QMainWindow):
         self.project_modified = False
         self.is_ai_generated_code = False
 
+        # ═════════════════════════════════════════════════════════════════════
+        # Initialize unified keybinding registry
+        # ═════════════════════════════════════════════════════════════════════
+        if KEYBINDINGS_AVAILABLE:
+            initialize_default_keybindings()
+            KEYBINDINGS.binding_changed.connect(self._on_keybinding_changed)
+            KEYBINDINGS.registry_updated.connect(self._refresh_keybindings)
+
         # Multi-scene storage: scene_name -> {nodes_serialized, wires_serialized}
         self._all_scenes: dict = {"Scene 1": {"nodes": {}, "wires": []}}
         self._current_scene_name = "Scene 1"
 
-        # Keybindings (shared instance)
-        self._keybindings = KeybindingsPanel(self)
+        # Keybindings (unified registry with single UI panel)
+        self._keybindings = UnifiedKeybindingsPanel(self)
 
         AppPaths.ensure_dirs()
         self.init_font()
@@ -6626,30 +6576,34 @@ class EfficientManimWindow(QMainWindow):
         file_menu.addSeparator()
         file_menu.addAction("Settings", self.open_settings)
         file_menu.addSeparator()
-        file_menu.addAction("Exit", self.close, QKeySequence.StandardKey.Quit)
 
-        quit_act = QAction("Exit", self)
-        quit_act.setShortcut(QKeySequence("Ctrl+Q"))
-        quit_act.triggered.connect(self.close)
-        file_menu.addAction(quit_act)
+        # UNIFIED KEYBINDINGS: Use registry instead of hardcoded shortcuts
+        self._quit_action = QAction("Exit", self)
+        self._quit_action.setShortcut(KEYBINDINGS.get_binding("Exit") or "Ctrl+Q")
+        self._quit_action.triggered.connect(self.close)
+        self._quit_action.setObjectName("_quit_action")
+        file_menu.addAction(self._quit_action)
 
         # Edit Menu
         edit_menu = bar.addMenu("Edit")
-        undo_action = QAction("Undo", self)
-        undo_action.setShortcut(QKeySequence.StandardKey.Undo)
-        undo_action.triggered.connect(self.undo_action)
-        edit_menu.addAction(undo_action)
+        self._undo_action = QAction("Undo", self)
+        self._undo_action.setShortcut(KEYBINDINGS.get_binding("Undo") or "Ctrl+Z")
+        self._undo_action.triggered.connect(self.undo_action)
+        self._undo_action.setObjectName("_undo_action")
+        edit_menu.addAction(self._undo_action)
 
-        redo_action = QAction("Redo", self)
-        redo_action.setShortcut(QKeySequence.StandardKey.Redo)
-        redo_action.triggered.connect(self.redo_action)
-        edit_menu.addAction(redo_action)
+        self._redo_action = QAction("Redo", self)
+        self._redo_action.setShortcut(KEYBINDINGS.get_binding("Redo") or "Ctrl+Y")
+        self._redo_action.triggered.connect(self.redo_action)
+        self._redo_action.setObjectName("_redo_action")
+        edit_menu.addAction(self._redo_action)
 
         edit_menu.addSeparator()
-        delete_action = QAction("Delete Selected", self)
-        delete_action.setShortcut(QKeySequence.StandardKey.Delete)
-        delete_action.triggered.connect(self.delete_selected)
-        edit_menu.addAction(delete_action)
+        self._delete_action = QAction("Delete Selected", self)
+        self._delete_action.setShortcut(KEYBINDINGS.get_binding("Delete Selected") or "Del")
+        self._delete_action.triggered.connect(self.delete_selected)
+        self._delete_action.setObjectName("_delete_action")
+        edit_menu.addAction(self._delete_action)
 
         # View Menu
         view_menu = bar.addMenu("View")
@@ -6657,15 +6611,17 @@ class EfficientManimWindow(QMainWindow):
 
         # Zoom Shortcuts
         view_menu.addSeparator()
-        zoom_in_act = QAction("Zoom In", self)
-        zoom_in_act.setShortcut(QKeySequence("Ctrl+="))
-        zoom_in_act.triggered.connect(lambda: self.view.scale(1.15, 1.15))
-        view_menu.addAction(zoom_in_act)
+        self._zoom_in_action = QAction("Zoom In", self)
+        self._zoom_in_action.setShortcut(KEYBINDINGS.get_binding("Zoom In") or "Ctrl+=")
+        self._zoom_in_action.triggered.connect(lambda: self.view.scale(1.15, 1.15))
+        self._zoom_in_action.setObjectName("_zoom_in_action")
+        view_menu.addAction(self._zoom_in_action)
 
-        zoom_out_act = QAction("Zoom Out", self)
-        zoom_out_act.setShortcut(QKeySequence("Ctrl+-"))
-        zoom_out_act.triggered.connect(lambda: self.view.scale(1 / 1.15, 1 / 1.15))
-        view_menu.addAction(zoom_out_act)
+        self._zoom_out_action = QAction("Zoom Out", self)
+        self._zoom_out_action.setShortcut(KEYBINDINGS.get_binding("Zoom Out") or "Ctrl+-")
+        self._zoom_out_action.triggered.connect(lambda: self.view.scale(1 / 1.15, 1 / 1.15))
+        self._zoom_out_action.setObjectName("_zoom_out_action")
+        view_menu.addAction(self._zoom_out_action)
 
         view_menu.addSeparator()
         view_menu.addAction(
@@ -6690,6 +6646,15 @@ class EfficientManimWindow(QMainWindow):
             QKeySequence("Ctrl+Shift+C"),
         )
         tools_menu.addSeparator()
+        
+        # Render Video action (unified keybinding)
+        self._render_video_action = QAction("Render Video", self)
+        self._render_video_action.setShortcut(KEYBINDINGS.get_binding("Render Video") or "Ctrl+R")
+        self._render_video_action.triggered.connect(lambda: self.render_to_video({}))
+        self._render_video_action.setObjectName("_render_video_action")
+        tools_menu.addAction(self._render_video_action)
+        tools_menu.addSeparator()
+        
         tools_menu.addAction(
             "Create VGroup from Selection",
             self.create_vgroup_from_selection,
@@ -7126,6 +7091,79 @@ class EfficientManimWindow(QMainWindow):
         if self.project_path:
             title += f" - {Path(self.project_path).name}"
         self.setWindowTitle(title)
+
+    # ═══════════════════════════════════════════════════════════════════════════
+    # KEYBINDING HANDLERS — manage dynamic keybinding changes at runtime
+    # ═══════════════════════════════════════════════════════════════════════════
+
+    def _on_keybinding_changed(self, action_name: str, new_shortcut: str) -> None:
+        """
+        Called when a keybinding is changed in the registry.
+        Updates the corresponding QAction immediately (no restart required).
+        """
+        try:
+            # Dictionary mapping action names to their QAction objects
+            # These are created in setup_menu()
+            action_map = {
+                "Exit": getattr(self, "_quit_action", None),
+                "Undo": getattr(self, "_undo_action", None),
+                "Redo": getattr(self, "_redo_action", None),
+                "Delete Selected": getattr(self, "_delete_action", None),
+                "Save Project": getattr(self, "_save_action", None),
+                "Zoom In": getattr(self, "_zoom_in_action", None),
+                "Zoom Out": getattr(self, "_zoom_out_action", None),
+                "Render Video": getattr(self, "_render_video_action", None),
+            }
+            
+            action = action_map.get(action_name)
+            if action:
+                action.setShortcut(new_shortcut)
+                LOGGER.info(f"✓ Rebound '{action_name}' to '{new_shortcut}'")
+        except Exception as e:
+            LOGGER.error(f"Failed to rebind keybinding '{action_name}': {e}")
+    
+    def _refresh_keybindings(self) -> None:
+        """
+        Refresh all keybindings from registry.
+        Called when registry structure changes (e.g., reset to defaults).
+        """
+        try:
+            if not KEYBINDINGS_AVAILABLE:
+                return
+            
+            # Re-apply all keybindings from registry to their actions
+            action_map = {
+                "Exit": ("_quit_action", "Ctrl+Q"),
+                "Undo": ("_undo_action", "Ctrl+Z"),
+                "Redo": ("_redo_action", "Ctrl+Y"),
+                "Delete Selected": ("_delete_action", "Del"),
+                "Save Project": ("_save_action", "Ctrl+S"),
+                "Zoom In": ("_zoom_in_action", "Ctrl+="),
+                "Zoom Out": ("_zoom_out_action", "Ctrl+-"),
+                "Render Video": ("_render_video_action", "Ctrl+R"),
+            }
+            
+            for action_name, (attr_name, default) in action_map.items():
+                action = getattr(self, attr_name, None)
+                if action:
+                    shortcut = KEYBINDINGS.get_binding(action_name) or default
+                    action.setShortcut(shortcut)
+            
+            LOGGER.info("✓ Refreshed all keybindings from registry")
+        except Exception as e:
+            LOGGER.error(f"Failed to refresh keybindings: {e}")
+
+    def showEvent(self, event):
+        """
+        Ensure icon is properly registered with Windows taskbar when window is shown.
+        This is critical for the icon to appear in the taskbar on first launch.
+        """
+        super().showEvent(event)
+        # Force the icon to be applied after window is shown
+        self.setWindowIcon(_load_window_icon())
+        # On Windows, force a repaint to ensure taskbar picks up the icon
+        if sys.platform == "win32":
+            self.repaint()
 
     def closeEvent(self, event):
         """Intercept close event to check for unsaved changes and cleanup resources."""
@@ -8514,10 +8552,9 @@ class EfficientManimWindow(QMainWindow):
 if __name__ == "__main__":
     app = QApplication(sys.argv)
 
-    # Set application icon at QApplication level BEFORE any window is created
-    _icon_path = Path(__file__).parent / "icon" / "icon.ico"
-    if _icon_path.exists():
-        app.setWindowIcon(QIcon(str(_icon_path.absolute())))
+    # Preload and set application icon at QApplication level BEFORE any window is created
+    # This ensures the taskbar gets the icon immediately
+    app.setWindowIcon(_load_window_icon())
 
     # ── Apply Global Light-Mode Stylesheet ────────────────────────────────
     app.setStyleSheet(THEME_MANAGER.get_stylesheet())
