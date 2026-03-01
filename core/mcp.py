@@ -600,7 +600,16 @@ class MCPAgent:
                     return MCPResult(success=True, data={"queued_node": node_id})
                 else:
                     # Render all nodes in queue
-                    win.render_to_video()
+                    import tempfile
+                    from pathlib import Path
+                    temp_dir = Path(tempfile.gettempdir()) / "EfficientManim_Session"
+                    config = {
+                        "fps": 30,
+                        "resolution": (1280, 720),
+                        "quality": "m",
+                        "output_path": str(temp_dir),
+                    }
+                    win.render_to_video(config)
                     return MCPResult(
                         success=True, data={"message": "Render triggered."}
                     )
