@@ -283,7 +283,7 @@ class HomeScreen(QMainWindow):
     # ── Theme ──────────────────────────────────────────────────────────────────
     def _apply_theme(self):
         """Apply light-mode stylesheet to home screen."""
-        from core.themes import THEME_MANAGER
+        from app.theme.themes import THEME_MANAGER
 
         self.setStyleSheet(THEME_MANAGER.get_stylesheet())
 
@@ -409,7 +409,7 @@ def main():
     app = QApplication.instance() or QApplication(sys.argv)
 
     # ── Apply Global Light-Mode Stylesheet ────────────────────────────────
-    from core.themes import THEME_MANAGER
+    from app.theme.themes import THEME_MANAGER
 
     app.setStyleSheet(THEME_MANAGER.get_stylesheet())
 

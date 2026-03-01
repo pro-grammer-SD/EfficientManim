@@ -204,6 +204,7 @@ except ImportError:
 # 1. CORE CONFIGURATION & UTILS
 # ==============================================================================
 
+
 APP_NAME = "EfficientManim"
 APP_VERSION = "2.0.3"
 PROJECT_EXT = ".efp"  # EfficientManim Project (Zip)
@@ -2686,6 +2687,7 @@ class ElementsPanel(QWidget):
         mob_root = QTreeWidgetItem(self.tree, ["Mobjects"])
         anim_root = QTreeWidgetItem(self.tree, ["Animations"])
 
+        # Add built-in Manim elements
         for name in dir(manim):
             if name.startswith("_"):
                 continue
@@ -2700,6 +2702,7 @@ class ElementsPanel(QWidget):
                         QTreeWidgetItem(anim_root, [name])
                 except:
                     pass
+
         mob_root.setExpanded(True)
 
     def filter(self, txt):
@@ -2720,7 +2723,17 @@ class ElementsPanel(QWidget):
     def on_dbl_click(self, item, col):
         if item.childCount() == 0:
             p = item.parent()
-            t = "Mobject" if p.text(0) == "Mobjects" else "Animation"
+            parent_text = p.text(0)
+
+            # Determine type based on parent category
+            if parent_text == "Mobjects":
+                t = "Mobject"
+            elif parent_text == "Animations":
+                t = "Animation"
+            else:
+                # Default to trying as Mobject
+                t = "Mobject"
+
             self.add_requested.emit(t, item.text(0))
 
 
@@ -6080,7 +6093,10 @@ class GitHubSnippetLoader(QWidget):
             else:
                 parsed = urlparse(url)
                 # Require a proper HTTP(S) URL with github.com as hostname
-                if parsed.scheme not in ("http", "https") or parsed.hostname != "github.com":
+                if (
+                    parsed.scheme not in ("http", "https")
+                    or parsed.hostname != "github.com"
+                ):
                     raise ValueError("Not a GitHub HTTPS/HTTP URL")
                 path = parsed.path.lstrip("/").rstrip("/")
                 parts = path.split("/")
@@ -7410,6 +7426,7 @@ class EfficientManimWindow(QMainWindow):
         if self.code_view.toPlainText().strip() == "":
             self.compile_graph()
         center = self.view.mapToScene(self.view.rect().center())
+
         self.add_node(type_str, cls_name, pos=(center.x(), center.y()))
 
     # ── New Feature Helpers ───────────────────────────────────────────────────

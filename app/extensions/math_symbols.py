@@ -4,7 +4,7 @@ Math Symbols Extension - Custom Manim Symbol Nodes
 Provides pre-configured mathematical symbols for easy animation.
 
 Example usage:
-    from core.extension_api import ExtensionAPI
+    from app.api.extension_api import ExtensionAPI
     api = ExtensionAPI("math-symbols")
     setup(api)
 """
@@ -29,7 +29,7 @@ def setup(api):
     # Register integral symbol node
     api.register_node(
         node_name="Integral Symbol",
-        class_path="core.extensions.math_symbols.IntegralSymbol",
+        class_path="app.extensions.math_symbols.IntegralSymbol",
         category="Math Symbols",
         description="Animated integral symbol (∫) for calculus",
     )
@@ -37,7 +37,7 @@ def setup(api):
     # Register summation node
     api.register_node(
         node_name="Summation Symbol",
-        class_path="core.extensions.math_symbols.SummationSymbol",
+        class_path="app.extensions.math_symbols.SummationSymbol",
         category="Math Symbols",
         description="Animated summation symbol (Σ) for series",
     )
@@ -45,7 +45,7 @@ def setup(api):
     # Register matrix node
     api.register_node(
         node_name="Matrix Grid",
-        class_path="core.extensions.math_symbols.MatrixGrid",
+        class_path="app.extensions.math_symbols.MatrixGrid",
         category="Math Symbols",
         description="Animated matrix grid with customizable size",
     )

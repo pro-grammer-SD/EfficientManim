@@ -5,7 +5,7 @@ Provides a custom color palette panel that dynamically updates the app theme.
 Users can select colors and the entire app theme is instantly updated.
 
 Example usage:
-    from core.extension_api import ExtensionAPI
+    from app.api.extension_api import ExtensionAPI
     api = ExtensionAPI("color-palette")
     setup(api)
 
@@ -68,7 +68,7 @@ def setup(api):
     # Register the widget class path (lazy-loaded later when main window exists)
     api.register_ui_panel(
         panel_name="Color Palettes",
-        widget_class="core.extensions.color_palette.ColorPalettePanel",
+        widget_class="app.extensions.color_palette.ColorPalettePanel",
         position="right",
     )
 
@@ -242,7 +242,7 @@ class ColorPalettePanel(QWidget):
 
         # ── UPDATE THE APP THEME ─────────────────────────────────────────────
         try:
-            from core.themes import THEME_MANAGER, LightTheme
+            from app.theme.themes import THEME_MANAGER, LightTheme
 
             # 1. Mutate LightTheme class-level color attributes
             LightTheme.PRIMARY = color_hex

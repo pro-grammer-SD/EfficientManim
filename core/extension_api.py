@@ -9,6 +9,8 @@ Enforces permissions and maintains deterministic contract.
 import logging
 from typing import Callable, Optional, Dict, Any
 from .extension_manager import EXTENSION_MANAGER, PermissionType
+from .extension_registry import EXTENSION_REGISTRY
+from .node_registry import NODE_REGISTRY
 
 LOGGER = logging.getLogger("extension_api")
 
@@ -48,10 +50,16 @@ class ExtensionAPI:
             self.extension_id, PermissionType.REGISTER_NODES
         )
 
-        LOGGER.info(f"Extension {self.extension_id} registered node: {node_name}")
+        # Actually register the node in the global registry
+        NODE_REGISTRY.register_node(
+            node_name=node_name,
+            class_path=class_path,
+            category=category,
+            description=description,
+            extension_id=self.extension_id,
+        )
 
-        # In real implementation: add to node registry
-        # For now: just log
+        LOGGER.info(f"Extension {self.extension_id} registered node: {node_name}")
 
     def register_timeline_track(
         self, track_name: str, class_path: str, description: str = ""
@@ -81,15 +89,25 @@ class ExtensionAPI:
         Requires: REGISTER_UI_PANEL permission
 
         Args:
-            panel_name: Display name
-            widget_class: QWidget subclass path
+            panel_name: Display name (e.g., "Color Palettes")
+            widget_class: QWidget subclass path (e.g., "core.extensions.color_palette.ColorPalettePanel")
             position: "left", "right", "bottom", "floating"
         """
         self._permission_manager.check_permission(
             self.extension_id, PermissionType.REGISTER_UI_PANEL
         )
 
-        LOGGER.info(f"Extension {self.extension_id} registered UI panel: {panel_name}")
+        # Register panel in global registry (deferred until main window exists)
+        EXTENSION_REGISTRY.register_panel(
+            panel_name=panel_name,
+            widget_class_path=widget_class,
+            position=position,
+            extension_id=self.extension_id,
+        )
+
+        LOGGER.info(
+            f"Extension {self.extension_id} registered UI panel: {panel_name} @ {position}"
+        )
 
     def register_mcp_hook(self, hook_name: str, callback: Callable) -> None:
         """

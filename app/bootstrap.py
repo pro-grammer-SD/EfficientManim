@@ -5,7 +5,7 @@ Handles registration and permission setup for extensions bundled with EfficientM
 """
 
 import logging
-from .extension_manager import EXTENSION_MANAGER, PermissionType
+from .api.extension_manager import EXTENSION_MANAGER, PermissionType
 
 LOGGER = logging.getLogger("bootstrap")
 
