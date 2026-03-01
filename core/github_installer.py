@@ -58,7 +58,9 @@ class GitHubInstaller:
 
         # Handle full URL
         parsed = urlparse(url)
-        if parsed.hostname and "github.com" in parsed.hostname:
+        hostname = (parsed.hostname or "").lower()
+        # Accept only github.com or its subdomains (e.g., gist.github.com), not arbitrary hosts
+        if hostname == "github.com" or hostname.endswith(".github.com"):
             parts = parsed.path.strip("/").split("/")
             if len(parts) >= 2:
                 owner = parts[0]
