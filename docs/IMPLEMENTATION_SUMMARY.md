@@ -2,7 +2,7 @@
 
 **Status**: ✅ KEYBINDINGS SYSTEM UNIFIED (CRITICAL FIX COMPLETE)  
 **Date**: 2025-02-28  
-**Version**: EfficientManim v2.0.2 (Architectural Stabilization)
+**Version**: EfficientManim v2.0.3 (Architectural Stabilization)
 
 ---
 

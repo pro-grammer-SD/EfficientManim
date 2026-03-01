@@ -143,7 +143,7 @@ class HomeScreen(QMainWindow):
         sidebar_layout.addStretch()
 
         # Version info
-        ver_lbl = QLabel("v2.0.2  •  Production")
+        ver_lbl = QLabel("v2.0.3  •  Production")
         font = QFont()
         font.setPointSize(9)
         ver_lbl.setFont(font)
@@ -210,8 +210,8 @@ class HomeScreen(QMainWindow):
 
         features = [
             (
-                "🎭 Multi-Scene Support",
-                "Manage multiple scenes per project with easy switching",
+                "🌿 Freshly Crafted Theme",
+                "A refined visual theme designed for clarity, balance, and modern aesthetics.",
             ),
             ("🔖 VGroup Utility", "Group mobjects visually in the Elements pane"),
             ("📊 Usage Tracking", "Recents pane shows your most-used objects"),
@@ -223,6 +223,30 @@ class HomeScreen(QMainWindow):
             (
                 "💡 Light Mode Design",
                 "Clean, minimal, professional interface optimized for productivity",
+            ),
+            (
+                "🤖 MCP Agent",
+                "AI-powered Model Context Protocol agent for intelligent assistance",
+            ),
+            (
+                "🎙️ Auto Voiceover",
+                "Automatically generate voiceovers for your animations",
+            ),
+            (
+                "🎨 Revamped Icon",
+                "Fresh, professional icon design for the application",
+            ),
+            (
+                "🛸 Extension System",
+                "Build and integrate powerful extensions with EfficientManim's modular, permission-based architecture.",
+            ),
+            (
+                "📘 Documentation Upgrade",
+                "EfficientManim now includes comprehensive, production-ready documentation across core systems and extensions.",
+            ),
+            (
+                "🧹 Codebase Refactor",
+                "The project structure has been streamlined, redundant code removed, and architecture hardened for production stability.",
             ),
         ]
 
@@ -259,7 +283,7 @@ class HomeScreen(QMainWindow):
     # ── Theme ──────────────────────────────────────────────────────────────────
     def _apply_theme(self):
         """Apply light-mode stylesheet to home screen."""
-        from themes import THEME_MANAGER
+        from core.themes import THEME_MANAGER
 
         self.setStyleSheet(THEME_MANAGER.get_stylesheet())
 
@@ -385,7 +409,7 @@ def main():
     app = QApplication.instance() or QApplication(sys.argv)
 
     # ── Apply Global Light-Mode Stylesheet ────────────────────────────────
-    from themes import THEME_MANAGER
+    from core.themes import THEME_MANAGER
 
     app.setStyleSheet(THEME_MANAGER.get_stylesheet())
 

@@ -1,11 +1,8 @@
 # Register this as a proper app using the classic ctypes.windll workaround
 import ctypes
 import sys
-import os
 
 if sys.platform == "win32":
-    # Disable Windows icon cache to ensure fresh icon loads
-    os.environ["PYTHONICON"] = "1"
     ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID(
         "com.programmersd.efficientmanim"
     )
@@ -74,8 +71,8 @@ from datetime import datetime
 
 # Unified keybinding system
 try:
-    from keybinding_registry import KEYBINDINGS, initialize_default_keybindings
-    from keybindings_panel import UnifiedKeybindingsPanel
+    from core.keybinding_registry import KEYBINDINGS, initialize_default_keybindings
+    from core.keybindings_panel import UnifiedKeybindingsPanel
 
     KEYBINDINGS_AVAILABLE = True
 except ImportError as e:
@@ -194,7 +191,7 @@ except ImportError:
 # MCP (Model Context Protocol) — safe lazy import; MCPAgent is instantiated
 # after the main window is fully constructed in EfficientManimWindow.__init__.
 try:
-    from mcp import MCPAgent as _MCPAgent
+    from core.mcp import MCPAgent as _MCPAgent
 
     MCP_AVAILABLE = True
 except ImportError:
@@ -207,7 +204,7 @@ except ImportError:
 # ==============================================================================
 
 APP_NAME = "EfficientManim"
-APP_VERSION = "2.0.2"
+APP_VERSION = "2.0.3"
 PROJECT_EXT = ".efp"  # EfficientManim Project (Zip)
 
 
@@ -618,7 +615,7 @@ LOGGER = EnhancedLogManager()
 # ==============================================================================
 
 # Import unified theme manager - Light mode only
-from themes import THEME_MANAGER
+from core.themes import THEME_MANAGER
 
 # ==============================================================================
 # 3.8 KEYBOARD SHORTCUTS REGISTRY
@@ -4827,7 +4824,7 @@ class KeyboardShortcutsDialog(QDialog):
 
         text_display = QTextEdit()
         text_display.setReadOnly(True)
-        text_display.setPlainText(KEYBINDINGS.describe_shortcuts())
+        text_display.setPlainText(KeyboardShortcuts.describe_shortcuts())  # pyright: ignore[reportUndefinedVariable]
         layout.addWidget(text_display)
 
         close_btn = QPushButton("Close")
@@ -6280,82 +6277,21 @@ class ProjectNameWidget(QWidget):
 # 9. MAIN WINDOW
 # ==============================================================================
 
-# Preload window icon at module level for faster taskbar registration
-# NOTE: Icon loading is lazy - it only happens when QApplication exists
-_WINDOW_ICON = None
-_ICON_LOAD_ATTEMPTED = False
-
-
-def _load_window_icon():
-    """
-    Lazy-load window icon. Only loads when QApplication has been created.
-    This function can be safely called at any time after QApplication instantiation.
-    """
-    global _WINDOW_ICON, _ICON_LOAD_ATTEMPTED
-
-    # Return cached icon if already loaded
-    if _WINDOW_ICON is not None:
-        return _WINDOW_ICON
-
-    # Don't attempt to load multiple times if it failed
-    if _ICON_LOAD_ATTEMPTED and _WINDOW_ICON is None:
-        return QIcon()
-
-    _ICON_LOAD_ATTEMPTED = True
-
-    try:
-        icon_path = Path(__file__).parent / "icon" / "icon.ico"
-        full_path = str(icon_path.absolute())
-
-        # Try loading as pixmap first (more reliable on Windows)
-        pixmap = QPixmap(full_path)
-        if pixmap.isNull():
-            print("[ICON] First load attempt failed. Trying relative path...")
-            pixmap = QPixmap("icon/icon.ico")
-
-        if not pixmap.isNull():
-            # Create icon with all standard sizes for better taskbar support
-            icon = QIcon(pixmap)
-            # Explicitly add multiple sizes for better Windows taskbar rendering
-            for size in [16, 24, 32, 48, 64, 128, 256]:
-                scaled = pixmap.scaledToWidth(size, Qt.SmoothTransformation)
-                if not scaled.isNull():
-                    icon.addPixmap(scaled, QIcon.Mode.Normal)
-            _WINDOW_ICON = icon
-            print(f"[ICON] Loaded successfully with multiple sizes from {full_path}")
-        else:
-            print(
-                f"[ICON] Failed to load from {full_path}. Check file permissions and format."
-            )
-            # Create a fallback colored icon only if QApplication exists
-            try:
-                fallback = QPixmap(64, 64)
-                fallback.fill(Qt.GlobalColor.blue)
-                _WINDOW_ICON = QIcon(fallback)
-            except:
-                _WINDOW_ICON = QIcon()
-    except Exception as e:
-        print(f"[ICON] Error loading: {e}")
-        _WINDOW_ICON = QIcon()
-
-    return _WINDOW_ICON
-
 
 class EfficientManimWindow(QMainWindow):
     def __init__(self):
         super().__init__()
-
-        # Ensure proper Windows integration for icon display
-        from PySide6.QtCore import Qt as QtConstants
-
-        self.setAttribute(QtConstants.WidgetAttribute.WA_NativeWindow, True)
-
-        # Set icon FIRST before anything else - critical for taskbar registration on Windows
-        self.setWindowIcon(_load_window_icon())
-
         self.setWindowTitle(f"{APP_NAME} v{APP_VERSION}")
         self.resize(1600, 1000)
         self.setStyleSheet(THEME_MANAGER.get_stylesheet())
+
+        # CRITICAL FIX: Set icon with absolute path before showing window
+        icon_path = Path(__file__).parent / "icon" / "icon.ico"
+        if icon_path.exists():
+            self.setWindowIcon(QIcon(str(icon_path.absolute())))
+        else:
+            # Fallback to relative path if absolute doesn't work
+            self.setWindowIcon(QIcon("icon/icon.ico"))
 
         self.nodes = {}
         self.project_path = None
@@ -7226,18 +7162,6 @@ class EfficientManimWindow(QMainWindow):
             LOGGER.info("✓ Refreshed all keybindings from registry")
         except Exception as e:
             LOGGER.error(f"Failed to refresh keybindings: {e}")
-
-    def showEvent(self, event):
-        """
-        Ensure icon is properly registered with Windows taskbar when window is shown.
-        This is critical for the icon to appear in the taskbar on first launch.
-        """
-        super().showEvent(event)
-        # Force the icon to be applied after window is shown
-        self.setWindowIcon(_load_window_icon())
-        # On Windows, force a repaint to ensure taskbar picks up the icon
-        if sys.platform == "win32":
-            self.repaint()
 
     def closeEvent(self, event):
         """Intercept close event to check for unsaved changes and cleanup resources."""
@@ -8652,9 +8576,10 @@ class EfficientManimWindow(QMainWindow):
 if __name__ == "__main__":
     app = QApplication(sys.argv)
 
-    # Preload and set application icon at QApplication level BEFORE any window is created
-    # This ensures the taskbar gets the icon immediately
-    app.setWindowIcon(_load_window_icon())
+    # Set application icon at QApplication level BEFORE any window is created
+    _icon_path = Path(__file__).parent / "icon" / "icon.ico"
+    if _icon_path.exists():
+        app.setWindowIcon(QIcon(str(_icon_path.absolute())))
 
     # ── Apply Global Light-Mode Stylesheet ────────────────────────────────
     app.setStyleSheet(THEME_MANAGER.get_stylesheet())

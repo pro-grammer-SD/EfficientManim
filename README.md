@@ -127,12 +127,47 @@ pip install manim PySide6 google-genai pydub requests numpy
 
 ---
 
-## 📸 Screenshots
+## 📸 Gallery
+
+### Overview & Setup
 
 ![Starting up](gallery/1.png)
-![Inserting elements](gallery/2.png)
-![Customizing animations](gallery/3.png)
-![Rendered output](gallery/4.png)
+Launch the application and initialize the workspace.
+
+![Blank node canvas](gallery/2.png)
+Start with a clean node canvas, ready for composition and design.
+
+![Recents Menu](gallery/3.png)
+Quickly access recently opened projects and elements from the Recents panel.
+
+---
+
+### Customization & Rendering
+
+![Tinkering with Nodes](gallery/4.png)
+Manipulate nodes interactively to refine workflows and structures.
+
+![Searching for elements](gallery/5.png)
+Use the search tool to locate elements and components efficiently.
+
+![GitHub snippets panel](gallery/6.png)
+Access GitHub snippets directly for rapid code reuse and integration.
+
+---
+
+### Features in Action
+
+![Selecting a GitHub snippet](gallery/7.png)
+Select a snippet from GitHub to integrate seamlessly into your project.
+
+![Loading the snippet](gallery/8.png)
+Load and insert external code dynamically into the workspace.
+
+![Quickly previewing with the handy Preview tab](gallery/9.png)
+Preview your work instantly for faster iteration and verification.
+
+![Rendered snippet output](gallery/10.png)
+View the resulting output, demonstrating final rendering in the node canvas.
 
 ---
 
