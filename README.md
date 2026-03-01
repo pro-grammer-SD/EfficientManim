@@ -173,4 +173,6 @@ View the resulting output, demonstrating final rendering in the node canvas.
 
 Made with lots of ❤️💚💙 by Soumalya a.k.a. @pro-grammer-SD
 
-Discussions: https://www.reddit.com/r/manim/comments/1qck0ji/i_built_a_nodebased_manim_ide_with_ai_assistance/
+- 🌿 Legacy Discussion (v1): https://www.reddit.com/r/manim/comments/1qck0ji/i_built_a_nodebased_manim_ide_with_ai_assistance/
+
+- 🎯 Latest Discussion (v2): https://www.reddit.com/r/manim/comments/1rhou29/efficientmanim_v2xx_major_update_with_mcp/
