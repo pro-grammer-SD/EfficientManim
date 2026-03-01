@@ -1,6 +1,7 @@
 # Register this as a proper app using the classic ctypes.windll workaround
 import ctypes
 import sys
+from urllib.parse import urlparse
 
 if sys.platform == "win32":
     ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID(
@@ -6063,13 +6064,35 @@ class GitHubSnippetLoader(QWidget):
         if not url:
             return
         try:
-            if "github.com" in url:
-                idx = url.find("github.com") + len("github.com/")
-                rest = url[idx:].rstrip("/").replace(".git", "").split("/")
-                dev_name, repo_name = rest[0], rest[1]
+            # Support HTTPS/HTTP GitHub URLs and SSH-style GitHub URLs.
+            dev_name = None
+            repo_name = None
+
+            # SSH-style: git@github.com:user/repo.git
+            if url.startswith("git@github.com:"):
+                path_part = url[len("git@github.com:") :].rstrip("/")
+                parts = path_part.split("/")
+                if len(parts) >= 2:
+                    dev_name = parts[0]
+                    repo_name = parts[1]
+                else:
+                    raise ValueError("Incomplete SSH GitHub URL")
             else:
-                parts = url.rstrip("/").split("/")
-                dev_name, repo_name = parts[-2], parts[-1].replace(".git", "")
+                parsed = urlparse(url)
+                # Require a proper HTTP(S) URL with github.com as hostname
+                if parsed.scheme not in ("http", "https") or parsed.hostname != "github.com":
+                    raise ValueError("Not a GitHub HTTPS/HTTP URL")
+                path = parsed.path.lstrip("/").rstrip("/")
+                parts = path.split("/")
+                if len(parts) < 2:
+                    raise ValueError("Incomplete GitHub repository path")
+                dev_name = parts[0]
+                repo_name = parts[1]
+
+            # Normalize repository name (strip optional .git suffix)
+            if repo_name.endswith(".git"):
+                repo_name = repo_name[: -len(".git")]
+
         except Exception:
             self.status_lbl.setText("❌ Invalid GitHub URL")
             return
