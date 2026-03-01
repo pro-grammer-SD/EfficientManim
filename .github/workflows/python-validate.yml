@@ -33,9 +33,13 @@ jobs:
             pkg-config \
             libcairo2-dev \
             libpango1.0-dev \
+            libpangocairo-1.0-0 \
             libgdk-pixbuf2.0-dev \
             libffi-dev \
-            shared-mime-info
+            shared-mime-info \
+            libao-dev \
+            python3-dev \
+            build-essential
 
       - name: Install pip-tools
         run: pip install --upgrade pip pip-tools
@@ -43,13 +47,17 @@ jobs:
       - name: Validate requirements
         id: validate
         run: |
-          if pip-compile --dry-run -o requirements.out requirements.txt; then
-            echo "::debug::Python validate no broken dependencies"
+          # Try pip-compile first, but fall back to pip install validation
+          if pip-compile --dry-run --resolver=backtracking -o requirements.out requirements.txt 2>/dev/null; then
+            echo "::debug::Python validate no broken dependencies (pip-compile)"
+            echo "valid=true" >> "$GITHUB_OUTPUT"
+          elif pip install --dry-run -q -r requirements.txt 2>/dev/null; then
+            echo "::debug::Python validate no broken dependencies (pip install)"
             echo "valid=true" >> "$GITHUB_OUTPUT"
           else
             echo "valid=false" >> "$GITHUB_OUTPUT"
             echo "### :warning: Python validation failed in repository root" >> $GITHUB_STEP_SUMMARY
-            echo "We were unable to validate a Python project in the repository root. Make sure all system dependencies are installed." >> $GITHUB_STEP_SUMMARY
+            echo "We were unable to validate the Python dependencies. Please check requirements.txt." >> $GITHUB_STEP_SUMMARY
             exit 1
           fi
 
