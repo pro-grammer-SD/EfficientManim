@@ -171,8 +171,7 @@ View the resulting output, demonstrating final rendering in the node canvas.
 
 ### Tiny Demo
 
-<video src="https://raw.githubusercontent.com/pro-grammer-SD/EfficientManim/main/gallery/demo.mp4" controls muted width="600"></video>
-
+<iframe width="560" height="315" src="https://www.youtube-nocookie.com/embed/91sLPCofwFs?si=2_q_8VWzWNqZ-OP1&amp;controls=0" title="YouTube video player" frameborder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" referrerpolicy="strict-origin-when-cross-origin" allowfullscreen></iframe>
 ---
 
 Made with lots of ❤️💚💙 by Soumalya a.k.a. @pro-grammer-SD
