@@ -623,7 +623,6 @@ from app.theme.themes import THEME_MANAGER
 # Extension system imports
 from app.api.extension_api import ExtensionAPI
 from app.api.extension_registry import EXTENSION_REGISTRY
-from app.api.node_registry import NODE_REGISTRY
 from app.api.extension_manager import EXTENSION_MANAGER, PermissionType
 
 # ==============================================================================
@@ -2709,13 +2708,14 @@ class ElementsPanel(QWidget):
                         QTreeWidgetItem(anim_root, [name])
                 except:
                     pass
-        
+
         mob_root.setExpanded(True)
 
         # Extension nodes from NODE_REGISTRY
         try:
             from app.api.node_registry import NODE_REGISTRY
             from PySide6.QtCore import Qt
+
             extension_nodes = NODE_REGISTRY.get_nodes()
             for category, node_defs in extension_nodes.items():
                 cat_root = QTreeWidgetItem(self.tree, [f"📦 {category}"])
@@ -2723,15 +2723,22 @@ class ElementsPanel(QWidget):
                 for node_def in node_defs:
                     item = QTreeWidgetItem(cat_root, [node_def.node_name])
                     item.setToolTip(0, node_def.description)
-                    item.setData(0, Qt.ItemDataRole.UserRole, {
-                        "type": "extension_node",
-                        "class_path": node_def.class_path,
-                        "category": category,
-                    })
+                    item.setData(
+                        0,
+                        Qt.ItemDataRole.UserRole,
+                        {
+                            "type": "extension_node",
+                            "class_path": node_def.class_path,
+                            "category": category,
+                        },
+                    )
                 cat_root.setExpanded(True)
         except Exception as _e:
             import logging
-            logging.getLogger("elements_panel").warning(f"Could not load extension nodes: {_e}")
+
+            logging.getLogger("elements_panel").warning(
+                f"Could not load extension nodes: {_e}"
+            )
 
     def filter(self, txt):
         root = self.tree.invisibleRootItem()
@@ -2751,6 +2758,7 @@ class ElementsPanel(QWidget):
     def on_dbl_click(self, item, col):
         if item.childCount() == 0:
             from PySide6.QtCore import Qt
+
             p = item.parent()
             parent_text = p.text(0) if p else ""
 
@@ -2769,7 +2777,7 @@ class ElementsPanel(QWidget):
             else:
                 # Default to trying as Mobject
                 t = "Mobject"
-            
+
             self.add_requested.emit(t, item.text(0))
 
 
@@ -6129,7 +6137,10 @@ class GitHubSnippetLoader(QWidget):
             else:
                 parsed = urlparse(url)
                 # Require a proper HTTP(S) URL with github.com as hostname
-                if parsed.scheme not in ("http", "https") or parsed.hostname != "github.com":
+                if (
+                    parsed.scheme not in ("http", "https")
+                    or parsed.hostname != "github.com"
+                ):
                     raise ValueError("Not a GitHub HTTPS/HTTP URL")
                 path = parsed.path.lstrip("/").rstrip("/")
                 parts = path.split("/")
@@ -6401,7 +6412,7 @@ class EfficientManimWindow(QMainWindow):
         # Refresh Elements panel to show extension nodes
         if hasattr(self, "panel_elems"):
             self.panel_elems.populate()
-        
+
         # FIX: Ensure window is destroyed on close to trigger destroyed signal in home.py
         self.setAttribute(Qt.WidgetAttribute.WA_DeleteOnClose)
 
@@ -7037,17 +7048,19 @@ class EfficientManimWindow(QMainWindow):
           • Math Symbols    — Manim node types in the Elements panel
           • Animation Presets — ✨ Quick Effects one-click preset panel
         """
-        import logging
+
         logger = logging.getLogger("extensions")
 
         # ── Pre-approve permissions for all built-in (first-party) extensions ──
         builtin_permissions = {
-            "color-palette":       [PermissionType.REGISTER_UI_PANEL],
-            "math-symbols":        [PermissionType.REGISTER_NODES],
-            "animation-presets":   [PermissionType.REGISTER_UI_PANEL],
+            "color-palette": [PermissionType.REGISTER_UI_PANEL],
+            "math-symbols": [PermissionType.REGISTER_NODES],
+            "animation-presets": [PermissionType.REGISTER_UI_PANEL],
         }
         for ext_id, perms in builtin_permissions.items():
-            EXTENSION_MANAGER._permission_manager.auto_approve_permissions(ext_id, perms)
+            EXTENSION_MANAGER._permission_manager.auto_approve_permissions(
+                ext_id, perms
+            )
         logger.info("✓ Permissions pre-approved for built-in extensions")
 
         try:
@@ -7056,7 +7069,9 @@ class EfficientManimWindow(QMainWindow):
                 set_main_window as set_color_main_window,
             )
             from app.extensions.math_symbols import setup as setup_math_symbols
-            from app.extensions.animation_presets import setup as setup_animation_presets
+            from app.extensions.animation_presets import (
+                setup as setup_animation_presets,
+            )
 
             # Color Palette — needs a main window reference for live theme propagation
             set_color_main_window(self)
@@ -7086,9 +7101,13 @@ class EfficientManimWindow(QMainWindow):
                 try:
                     widget.setStyleSheet(THEME_MANAGER.get_stylesheet())
                 except Exception as e:
-                    logger.warning(f"Could not apply theme to panel '{panel_name}': {e}")
+                    logger.warning(
+                        f"Could not apply theme to panel '{panel_name}': {e}"
+                    )
 
-            logger.info(f"✅ Realised {len(realized_panels)} extension panels into main window")
+            logger.info(
+                f"✅ Realised {len(realized_panels)} extension panels into main window"
+            )
             for panel_name, widget in realized_panels.items():
                 logger.info(f"   • {panel_name}: {type(widget).__name__}")
         except Exception as e:
@@ -7535,10 +7554,10 @@ class EfficientManimWindow(QMainWindow):
         if self.code_view.toPlainText().strip() == "":
             self.compile_graph()
         center = self.view.mapToScene(self.view.rect().center())
-        
+
         # Handle extension nodes by treating them as custom mobjects
         actual_type = "Mobject" if type_str == "ExtensionNode" else type_str
-        
+
         self.add_node(actual_type, cls_name, pos=(center.x(), center.y()))
 
     # ── New Feature Helpers ───────────────────────────────────────────────────

@@ -602,6 +602,7 @@ class MCPAgent:
                     # Render all nodes in queue
                     import tempfile
                     from pathlib import Path
+
                     temp_dir = Path(tempfile.gettempdir()) / "EfficientManim_Session"
                     config = {
                         "fps": 30,

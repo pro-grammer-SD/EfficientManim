@@ -890,7 +890,7 @@ class RenderWorker(QThread):
         self.node_id = node_id
         self.output_dir = output_dir
         self.quality = quality
-        self._subprocess = None   # Live handle for cancellation
+        self._subprocess = None  # Live handle for cancellation
         self._cancelled = False
 
     def cancel(self):
@@ -944,7 +944,9 @@ class RenderWorker(QThread):
 
             if returncode != 0:
                 err = (stderr or stdout or "Unknown error")[:200]
-                LOGGER.log("WARN", "RENDER", f"Preview failed [{self.node_id[:8]}]: {err[:80]}")
+                LOGGER.log(
+                    "WARN", "RENDER", f"Preview failed [{self.node_id[:8]}]: {err[:80]}"
+                )
                 self.error.emit(f"Manim Failed: {err[:80]}")
                 return
 
@@ -959,7 +961,11 @@ class RenderWorker(QThread):
 
         except Exception as e:
             tb = traceback.format_exc()
-            LOGGER.log("ERROR", "RENDER", f"RenderWorker exception [{self.node_id[:8]}]: {e}\n{tb}")
+            LOGGER.log(
+                "ERROR",
+                "RENDER",
+                f"RenderWorker exception [{self.node_id[:8]}]: {e}\n{tb}",
+            )
             self.error.emit(str(e))
 
 
@@ -1071,8 +1077,8 @@ class VideoRenderWorker(QThread):
 class NodeType(Enum):
     MOBJECT = auto()
     ANIMATION = auto()
-    PLAY = auto()    # explicit self.play() node — required for all animations
-    WAIT = auto()    # explicit self.wait() node — required for all time delays
+    PLAY = auto()  # explicit self.play() node — required for all animations
+    WAIT = auto()  # explicit self.wait() node — required for all time delays
     VGROUP = auto()  # VGroup as first-class canvas node
 
 
@@ -1356,11 +1362,11 @@ class NodeItem(QGraphicsItem):
         # Header — color-coded per node type
         header_h = 28
         _header_colors = {
-            NodeType.MOBJECT: "#3498db",    # blue
+            NodeType.MOBJECT: "#3498db",  # blue
             NodeType.ANIMATION: "#9b59b6",  # purple
-            NodeType.PLAY: "#27ae60",       # green  ▶ explicit play()
-            NodeType.WAIT: "#e67e22",       # orange ⏱ explicit wait()
-            NodeType.VGROUP: "#16a085",     # teal   🔗 VGroup node
+            NodeType.PLAY: "#27ae60",  # green  ▶ explicit play()
+            NodeType.WAIT: "#e67e22",  # orange ⏱ explicit wait()
+            NodeType.VGROUP: "#16a085",  # teal   🔗 VGroup node
         }
         header_color = QColor(_header_colors.get(self.node_data.type, "#3498db"))
 
@@ -1390,7 +1396,11 @@ class NodeItem(QGraphicsItem):
 
         # Type badge for structural nodes
         if self.node_data.type in (NodeType.PLAY, NodeType.WAIT, NodeType.VGROUP):
-            badge_map = {NodeType.PLAY: "▶ play()", NodeType.WAIT: "⏱ wait()", NodeType.VGROUP: "🔗 group"}
+            badge_map = {
+                NodeType.PLAY: "▶ play()",
+                NodeType.WAIT: "⏱ wait()",
+                NodeType.VGROUP: "🔗 group",
+            }
             badge = badge_map.get(self.node_data.type, "")
             painter.setPen(QColor(header_color).darker(130))
             painter.setFont(QFont("Segoe UI", 8))
@@ -1510,13 +1520,13 @@ class GraphScene(QGraphicsScene):
 
         # Define allowed connection pairs (src_type → dst_type)
         allowed = {
-            (NodeType.MOBJECT,    NodeType.ANIMATION),  # classic: mobject feeds animation
-            (NodeType.MOBJECT,    NodeType.VGROUP),      # mobject joins a VGroup
-            (NodeType.ANIMATION,  NodeType.PLAY),        # animation feeds play() node
-            (NodeType.VGROUP,     NodeType.PLAY),        # vgroup feeds play() node
-            (NodeType.PLAY,       NodeType.WAIT),        # play followed by wait
-            (NodeType.WAIT,       NodeType.PLAY),        # wait followed by next play
-            (NodeType.PLAY,       NodeType.PLAY),        # play followed by play (ordering)
+            (NodeType.MOBJECT, NodeType.ANIMATION),  # classic: mobject feeds animation
+            (NodeType.MOBJECT, NodeType.VGROUP),  # mobject joins a VGroup
+            (NodeType.ANIMATION, NodeType.PLAY),  # animation feeds play() node
+            (NodeType.VGROUP, NodeType.PLAY),  # vgroup feeds play() node
+            (NodeType.PLAY, NodeType.WAIT),  # play followed by wait
+            (NodeType.WAIT, NodeType.PLAY),  # wait followed by next play
+            (NodeType.PLAY, NodeType.PLAY),  # play followed by play (ordering)
         }
         if (src_type, dst_type) not in allowed:
             friendly = {
@@ -2813,7 +2823,9 @@ class ElementsPanel(QWidget):
         struct_layout.setSpacing(4)
 
         btn_play = QPushButton("▶ Play")
-        btn_play.setToolTip("Add explicit play() node (Ctrl+Shift+P)\nConnect Animations to this node's input socket")
+        btn_play.setToolTip(
+            "Add explicit play() node (Ctrl+Shift+P)\nConnect Animations to this node's input socket"
+        )
         btn_play.setStyleSheet(
             "QPushButton { background: #27ae60; color: white; font-weight: bold; "
             "border-radius: 4px; padding: 5px 8px; }"
@@ -2823,7 +2835,9 @@ class ElementsPanel(QWidget):
         struct_layout.addWidget(btn_play)
 
         btn_wait = QPushButton("⏱ Wait")
-        btn_wait.setToolTip("Add explicit wait() node (Ctrl+Shift+W)\nSet duration in Properties panel")
+        btn_wait.setToolTip(
+            "Add explicit wait() node (Ctrl+Shift+W)\nSet duration in Properties panel"
+        )
         btn_wait.setStyleSheet(
             "QPushButton { background: #e67e22; color: white; font-weight: bold; "
             "border-radius: 4px; padding: 5px 8px; }"
@@ -4744,7 +4758,13 @@ class VoiceoverPanel(QWidget):
         count = 0
         for nid, node in self.main_window.nodes.items():
             short_id = nid[:6]
-            _vo_icon_map = {NodeType.ANIMATION: "🎬", NodeType.MOBJECT: "🔷", NodeType.PLAY: "▶", NodeType.WAIT: "⏱", NodeType.VGROUP: "🔗"}
+            _vo_icon_map = {
+                NodeType.ANIMATION: "🎬",
+                NodeType.MOBJECT: "🔷",
+                NodeType.PLAY: "▶",
+                NodeType.WAIT: "⏱",
+                NodeType.VGROUP: "🔗",
+            }
             type_tag = _vo_icon_map.get(node.data.type, "🎬")
             display_text = f"{type_tag} {node.data.name} ({short_id})"
             self.node_combo.addItem(display_text, nid)
@@ -5799,7 +5819,9 @@ class VGroupPanel(QWidget):
         # ── Also create a VGROUP canvas node so it appears in the graph ───
         try:
             self.main_window.add_vgroup_node(group_name=name, member_ids=ids)
-            LOGGER.info(f"VGROUP canvas node created for '{name}' with {len(ids)} members")
+            LOGGER.info(
+                f"VGROUP canvas node created for '{name}' with {len(ids)} members"
+            )
         except Exception as _e:
             LOGGER.warn(f"Could not create VGROUP canvas node for '{name}': {_e}")
 
@@ -7653,7 +7675,9 @@ class EfficientManimWindow(QMainWindow):
         center = self.view.mapToScene(self.view.rect().center())
         count = sum(1 for n in self.nodes.values() if n.data.type == NodeType.PLAY)
         name = f"play_{count + 1}"
-        node = self.add_node("PLAY", "play()", params={}, pos=(center.x(), center.y()), name=name)
+        node = self.add_node(
+            "PLAY", "play()", params={}, pos=(center.x(), center.y()), name=name
+        )
         LOGGER.info(f"Added PLAY node: {name}")
         return node
 
@@ -7663,8 +7687,13 @@ class EfficientManimWindow(QMainWindow):
         center = self.view.mapToScene(self.view.rect().center())
         count = sum(1 for n in self.nodes.values() if n.data.type == NodeType.WAIT)
         name = f"wait_{count + 1}"
-        node = self.add_node("WAIT", "wait()", params={"duration": 1.0},
-                             pos=(center.x() + 220, center.y()), name=name)
+        node = self.add_node(
+            "WAIT",
+            "wait()",
+            params={"duration": 1.0},
+            pos=(center.x() + 220, center.y()),
+            name=name,
+        )
         LOGGER.info(f"Added WAIT node: {name}")
         return node
 
@@ -7673,9 +7702,18 @@ class EfficientManimWindow(QMainWindow):
         self.is_ai_generated_code = False
         center = self.view.mapToScene(self.view.rect().center())
         count = sum(1 for n in self.nodes.values() if n.data.type == NodeType.VGROUP)
-        var_name = group_name if (group_name and group_name.isidentifier()) else f"vgroup_{count + 1}"
-        node = self.add_node("VGROUP", var_name, params={},
-                             pos=(center.x(), center.y() + 120), name=var_name)
+        var_name = (
+            group_name
+            if (group_name and group_name.isidentifier())
+            else f"vgroup_{count + 1}"
+        )
+        node = self.add_node(
+            "VGROUP",
+            var_name,
+            params={},
+            pos=(center.x(), center.y() + 120),
+            name=var_name,
+        )
         LOGGER.info(f"Added VGROUP node: {var_name}")
         # Auto-wire member mobjects if provided
         if member_ids:
@@ -7851,7 +7889,9 @@ class EfficientManimWindow(QMainWindow):
         item = NodeItem(data)
         self.scene.addItem(item)
         self.nodes[data.id] = item
-        LOGGER.info(f"Created {cls_name} ({ntype.name}) as '{display_name}' id={data.id[:8]}")
+        LOGGER.info(
+            f"Created {cls_name} ({ntype.name}) as '{display_name}' id={data.id[:8]}"
+        )
         self.compile_graph()  # Auto-Refresh
         return item
 
@@ -7962,7 +8002,9 @@ class EfficientManimWindow(QMainWindow):
             code += f"        self.add({var})\n"
 
         # ── STEP 2: VGROUP canvas nodes (first-class graph objects) ─────────
-        vgroup_nodes = [n for n in self.nodes.values() if n.data.type == NodeType.VGROUP]
+        vgroup_nodes = [
+            n for n in self.nodes.values() if n.data.type == NodeType.VGROUP
+        ]
         vg_vars = {}  # vgroup_node_id → python variable name
         for _vg in vgroup_nodes:
             _vg_members = []
@@ -7971,17 +8013,26 @@ class EfficientManimWindow(QMainWindow):
                 if _vsrc.data.id in m_vars:
                     _vg_members.append(m_vars[_vsrc.data.id])
             if not _vg_members:
-                LOGGER.log("WARN", "VALIDATION",
-                    f"VGroup node '{_vg.data.name}' has no connected Mobject members — skipped.")
+                LOGGER.log(
+                    "WARN",
+                    "VALIDATION",
+                    f"VGroup node '{_vg.data.name}' has no connected Mobject members — skipped.",
+                )
                 continue
-            _vg_var = _vg.data.cls_name if (_vg.data.cls_name and _vg.data.cls_name.isidentifier()) else f"vg_{_vg.data.id[:6]}"
+            _vg_var = (
+                _vg.data.cls_name
+                if (_vg.data.cls_name and _vg.data.cls_name.isidentifier())
+                else f"vg_{_vg.data.id[:6]}"
+            )
             vg_vars[_vg.data.id] = _vg_var
-            code += f"        {_vg_var} = VGroup({chr(44)+chr(32)}.join(_vg_members))\n"
+            code += (
+                f"        {_vg_var} = VGroup({chr(44) + chr(32)}.join(_vg_members))\n"
+            )
             code += f"        self.add({_vg_var})\n"
 
         # Patch: re-emit VGroup lines correctly (chr join was wrong above — redo cleanly)
         # Strip bad lines and redo
-        _vg_bad_prefix = "        vg_" 
+        _vg_bad_prefix = "        vg_"
         # simpler: just rebuild code from scratch for vgroups by tracking what was added
         # NOTE: The chr() join trick doesn't work in f-strings cleanly.
         # Correct approach using direct string concat:
@@ -8008,7 +8059,8 @@ class EfficientManimWindow(QMainWindow):
                 member_vars = [m_vars[nid] for nid in ids if nid in m_vars]
                 if member_vars:
                     already = any(
-                        self.nodes.get(vid) and self.nodes[vid].data.type == NodeType.VGROUP
+                        self.nodes.get(vid)
+                        and self.nodes[vid].data.type == NodeType.VGROUP
                         for vid in ids
                     )
                     if not already:
@@ -8017,17 +8069,29 @@ class EfficientManimWindow(QMainWindow):
         # ── STEP 3: Topology-sort PLAY / WAIT execution chain ─────────────
         play_nodes = [n for n in self.nodes.values() if n.data.type == NodeType.PLAY]
         wait_nodes = [n for n in self.nodes.values() if n.data.type == NodeType.WAIT]
-        anim_nodes = [n for n in self.nodes.values() if n.data.type == NodeType.ANIMATION]
+        anim_nodes = [
+            n for n in self.nodes.values() if n.data.type == NodeType.ANIMATION
+        ]
 
         def _struct_upstream(node):
-            return [lnk.start_socket.parentItem() for lnk in node.in_socket.links
-                    if lnk.start_socket.parentItem().data.type in (NodeType.PLAY, NodeType.WAIT)]
+            return [
+                lnk.start_socket.parentItem()
+                for lnk in node.in_socket.links
+                if lnk.start_socket.parentItem().data.type
+                in (NodeType.PLAY, NodeType.WAIT)
+            ]
 
         def _struct_downstream(node):
-            return [lnk.end_socket.parentItem() for lnk in node.out_socket.links
-                    if lnk.end_socket.parentItem().data.type in (NodeType.PLAY, NodeType.WAIT)]
+            return [
+                lnk.end_socket.parentItem()
+                for lnk in node.out_socket.links
+                if lnk.end_socket.parentItem().data.type
+                in (NodeType.PLAY, NodeType.WAIT)
+            ]
 
-        structural_roots = [n for n in play_nodes + wait_nodes if not _struct_upstream(n)]
+        structural_roots = [
+            n for n in play_nodes + wait_nodes if not _struct_upstream(n)
+        ]
         ordered_structural = []
         visited_struct = set()
 
@@ -8064,13 +8128,18 @@ class EfficientManimWindow(QMainWindow):
                 elif PYDUB_AVAILABLE:
                     try:
                         from pydub import AudioSegment as _AS
+
                         _seg = _AS.from_file(_vo_path)
                         _dur_ms = len(_seg)
                         if _dur_ms > 0:
                             if anim.data.voiceover_duration > 0:
-                                drift = abs(_dur_ms - int(anim.data.voiceover_duration * 1000))
+                                drift = abs(
+                                    _dur_ms - int(anim.data.voiceover_duration * 1000)
+                                )
                                 if drift > 50:
-                                    LOGGER.warn(f"Voiceover drift '{anim.data.name}': {drift}ms")
+                                    LOGGER.warn(
+                                        f"Voiceover drift '{anim.data.name}': {drift}ms"
+                                    )
                             anim.data.voiceover_duration = round(_dur_ms / 1000.0, 3)
                             _vo_entries.append((_timeline_ms, _seg))
                             _rt_override_s = round(_dur_ms / 1000.0, 3)
@@ -8103,7 +8172,11 @@ class EfficientManimWindow(QMainWindow):
             if _batch_ms == 0:
                 try:
                     rt_raw = anim.data.params.get("run_time", "1.0")
-                    _batch_ms = 1000 if (isinstance(rt_raw, str) and "duration_seconds" in rt_raw) else max(1000, int(float(rt_raw) * 1000))
+                    _batch_ms = (
+                        1000
+                        if (isinstance(rt_raw, str) and "duration_seconds" in rt_raw)
+                        else max(1000, int(float(rt_raw) * 1000))
+                    )
                 except Exception:
                     _batch_ms = 1000
 
@@ -8119,12 +8192,17 @@ class EfficientManimWindow(QMainWindow):
                 for lnk in node.in_socket.links:
                     src = lnk.start_socket.parentItem()
                     if src.data.type == NodeType.ANIMATION:
-                        tgt_vars = [m_vars[al.start_socket.parentItem().data.id]
-                                    for al in src.in_socket.links
-                                    if al.start_socket.parentItem().data.id in m_vars]
+                        tgt_vars = [
+                            m_vars[al.start_socket.parentItem().data.id]
+                            for al in src.in_socket.links
+                            if al.start_socket.parentItem().data.id in m_vars
+                        ]
                         if not tgt_vars:
-                            LOGGER.log("WARN", "VALIDATION",
-                                f"Animation '{src.data.name}' in PLAY '{node.data.name}' has no Mobject target.")
+                            LOGGER.log(
+                                "WARN",
+                                "VALIDATION",
+                                f"Animation '{src.data.name}' in PLAY '{node.data.name}' has no Mobject target.",
+                            )
                             continue
                         call, bms = _format_anim_call(src, tgt_vars)
                         play_calls.append(call)
@@ -8135,9 +8213,14 @@ class EfficientManimWindow(QMainWindow):
                         play_calls.append(f"{anim_cls}({vg_vars[src.data.id]})")
 
                 if not play_calls:
-                    LOGGER.log("WARN", "VALIDATION",
-                        f"PLAY node '{node.data.name}' has no connected animations — emitting comment.")
-                    code += f"        # PLAY '{node.data.name}': no animations connected\n"
+                    LOGGER.log(
+                        "WARN",
+                        "VALIDATION",
+                        f"PLAY node '{node.data.name}' has no connected animations — emitting comment.",
+                    )
+                    code += (
+                        f"        # PLAY '{node.data.name}': no animations connected\n"
+                    )
                 else:
                     code += f"        self.play({', '.join(play_calls)})\n"
                     _timeline_ms += batch_ms
@@ -8147,12 +8230,18 @@ class EfficientManimWindow(QMainWindow):
                 try:
                     dur = float(raw_dur)
                     if dur < 0.01:
-                        LOGGER.log("WARN", "VALIDATION",
-                            f"WAIT node '{node.data.name}' duration {dur} < 0.01 — clamped.")
+                        LOGGER.log(
+                            "WARN",
+                            "VALIDATION",
+                            f"WAIT node '{node.data.name}' duration {dur} < 0.01 — clamped.",
+                        )
                         dur = 0.01
                 except (TypeError, ValueError):
-                    LOGGER.log("WARN", "VALIDATION",
-                        f"WAIT node '{node.data.name}' invalid duration '{raw_dur}' — using 1.0")
+                    LOGGER.log(
+                        "WARN",
+                        "VALIDATION",
+                        f"WAIT node '{node.data.name}' invalid duration '{raw_dur}' — using 1.0",
+                    )
                     dur = 1.0
                 code += f"        self.wait({dur})\n"
                 _timeline_ms += int(dur * 1000)
@@ -8161,18 +8250,23 @@ class EfficientManimWindow(QMainWindow):
         legacy_anims = [n for n in anim_nodes if n.data.id not in anim_claimed]
         if legacy_anims:
             if play_nodes:
-                LOGGER.log("WARN", "VALIDATION",
+                LOGGER.log(
+                    "WARN",
+                    "VALIDATION",
                     f"{len(legacy_anims)} animation(s) not connected to any PLAY node. "
-                    "Add PLAY nodes (Tools → Add Play Node) for deterministic ordering.")
+                    "Add PLAY nodes (Tools → Add Play Node) for deterministic ordering.",
+                )
             code += "\n        # ── Legacy animation batch (connect to PLAY nodes) ──\n"
             _played_legacy = set()
             _remaining_legacy = list(legacy_anims)
             while _remaining_legacy:
                 _ready = []
                 for _an in _remaining_legacy:
-                    _tgts = [m_vars[_lk.start_socket.parentItem().data.id]
-                             for _lk in _an.in_socket.links
-                             if _lk.start_socket.parentItem().data.id in m_vars]
+                    _tgts = [
+                        m_vars[_lk.start_socket.parentItem().data.id]
+                        for _lk in _an.in_socket.links
+                        if _lk.start_socket.parentItem().data.id in m_vars
+                    ]
                     if _tgts:
                         _ready.append((_an, _tgts))
                 if not _ready:
@@ -8187,15 +8281,20 @@ class EfficientManimWindow(QMainWindow):
                     code += f"        self.play({', '.join(_play_lines)})\n"
                     code += "        self.wait(0.5)\n"
                     _timeline_ms += _bms + 500
-                _remaining_legacy = [a for a in _remaining_legacy if a not in _played_legacy]
+                _remaining_legacy = [
+                    a for a in _remaining_legacy if a not in _played_legacy
+                ]
 
         # ── STEP 7: Merged voiceover track ────────────────────────────────
         if _vo_entries and PYDUB_AVAILABLE:
             try:
                 from pydub import AudioSegment as _AS
+
                 _last_off, _last_seg = max(_vo_entries, key=lambda x: x[0])
                 _total_ms = _last_off + len(_last_seg) + 500
-                _merged = _AS.silent(duration=_total_ms, frame_rate=_last_seg.frame_rate)
+                _merged = _AS.silent(
+                    duration=_total_ms, frame_rate=_last_seg.frame_rate
+                )
                 for _off, _seg in _vo_entries:
                     if _seg.frame_rate != _merged.frame_rate:
                         _seg = _seg.set_frame_rate(_merged.frame_rate)
@@ -8205,14 +8304,17 @@ class EfficientManimWindow(QMainWindow):
                 _inject = f"        self.add_sound(r'{_mpath.as_posix()}')  # merged voiceover\n"
                 code = code.replace(
                     "class GeneratedScene(Scene):\n    def construct(self):\n",
-                    f"class GeneratedScene(Scene):\n    def construct(self):\n{_inject}", 1)
-                LOGGER.info(f"Merged voiceover: {len(_vo_entries)} segments, total={_total_ms}ms")
+                    f"class GeneratedScene(Scene):\n    def construct(self):\n{_inject}",
+                    1,
+                )
+                LOGGER.info(
+                    f"Merged voiceover: {len(_vo_entries)} segments, total={_total_ms}ms"
+                )
             except Exception as _e:
                 LOGGER.error(f"Merged voiceover build failed: {_e}")
 
         self.code_view.setText(code)
         return code
-
 
     def _format_param_value(self, param_name, value, node_data):
         """Safely format parameter value with type enforcement and string escaping.
@@ -8223,7 +8325,9 @@ class EfficientManimWindow(QMainWindow):
             # ── PARAMETER SANITIZATION LAYER ─────────────────────────────────
             # items=None → replace with empty list (BulletedList, etc.)
             if param_name in ("items", "strings", "labels") and value is None:
-                LOGGER.log("WARN", "VALIDATION", f"Replaced None for '{param_name}' with []")
+                LOGGER.log(
+                    "WARN", "VALIDATION", f"Replaced None for '{param_name}' with []"
+                )
                 return "[]"
 
             # font_size / font_size <= 0 → clamp to 1
@@ -8231,7 +8335,9 @@ class EfficientManimWindow(QMainWindow):
                 try:
                     fs = float(value)
                     if fs <= 0:
-                        LOGGER.log("WARN", "VALIDATION", f"Clamped {param_name}={fs} to 1")
+                        LOGGER.log(
+                            "WARN", "VALIDATION", f"Clamped {param_name}={fs} to 1"
+                        )
                         return "1"
                 except (TypeError, ValueError):
                     pass
@@ -8393,7 +8499,13 @@ class EfficientManimWindow(QMainWindow):
             # 5. Instantiate with Exception Block for Safety — wrap entire construct()
             script += "        try:\n"
             script += "            # Target Mobject\n"
-            script += "            obj = " + node.data.cls_name + "(" + ', '.join(final_args) + ")\n"
+            script += (
+                "            obj = "
+                + node.data.cls_name
+                + "("
+                + ", ".join(final_args)
+                + ")\n"
+            )
             script += "            obj.move_to(ORIGIN)\n"
             script += "            if obj.width > config.frame_width: obj.scale_to_fit_width(config.frame_width * 0.9)\n"
             script += "            self.add(obj)\n"
@@ -8417,13 +8529,17 @@ class EfficientManimWindow(QMainWindow):
             _node_ref = node  # Capture for closure
 
             def handle_error(err, _n=_node_ref):
-                LOGGER.log("WARN", "RENDER", f"Preview Render Error for {_n.data.name}: {err}")
+                LOGGER.log(
+                    "WARN", "RENDER", f"Preview Render Error for {_n.data.name}: {err}"
+                )
                 if self.panel_props.current_node == _n:
                     self.preview_lbl.setText(f"❌ Render Failed\n{str(err)[:30]}...")
                     self.preview_lbl.setStyleSheet("color: red;")
 
             worker.error.connect(handle_error)
-            worker.finished.connect(lambda _nid=nid, _w=worker: self._cleanup_preview_worker(_nid, _w))
+            worker.finished.connect(
+                lambda _nid=nid, _w=worker: self._cleanup_preview_worker(_nid, _w)
+            )
             worker.start()
 
             setattr(self, f"rw_{nid}", worker)
@@ -8549,41 +8665,58 @@ class EfficientManimWindow(QMainWindow):
         for node in self.nodes.values():
             if node.data.type == NodeType.PLAY:
                 anim_inputs = [
-                    lnk for lnk in node.in_socket.links
-                    if lnk.start_socket.parentItem().data.type in (NodeType.ANIMATION, NodeType.VGROUP)
+                    lnk
+                    for lnk in node.in_socket.links
+                    if lnk.start_socket.parentItem().data.type
+                    in (NodeType.ANIMATION, NodeType.VGROUP)
                 ]
                 if not anim_inputs:
-                    issues.append(f"⚠ PLAY node '{node.data.name}' has no animation inputs.")
+                    issues.append(
+                        f"⚠ PLAY node '{node.data.name}' has no animation inputs."
+                    )
 
             elif node.data.type == NodeType.WAIT:
                 raw = node.data.params.get("duration", None)
                 if raw is None:
-                    issues.append(f"⚠ WAIT node '{node.data.name}' has no duration set — will default to 1.0")
+                    issues.append(
+                        f"⚠ WAIT node '{node.data.name}' has no duration set — will default to 1.0"
+                    )
                 else:
                     try:
                         d = float(raw)
                         if d < 0:
-                            issues.append(f"⚠ WAIT node '{node.data.name}' has negative duration {d}.")
+                            issues.append(
+                                f"⚠ WAIT node '{node.data.name}' has negative duration {d}."
+                            )
                     except (TypeError, ValueError):
-                        issues.append(f"⚠ WAIT node '{node.data.name}' has invalid duration '{raw}'.")
+                        issues.append(
+                            f"⚠ WAIT node '{node.data.name}' has invalid duration '{raw}'."
+                        )
 
             elif node.data.type == NodeType.VGROUP:
                 mob_inputs = [
-                    lnk for lnk in node.in_socket.links
+                    lnk
+                    for lnk in node.in_socket.links
                     if lnk.start_socket.parentItem().data.type == NodeType.MOBJECT
                 ]
                 if not mob_inputs:
-                    issues.append(f"⚠ VGROUP node '{node.data.name}' has no member Mobjects — will be skipped.")
+                    issues.append(
+                        f"⚠ VGROUP node '{node.data.name}' has no member Mobjects — will be skipped."
+                    )
 
             elif node.data.type == NodeType.ANIMATION:
                 mob_inputs = [
-                    lnk for lnk in node.in_socket.links
+                    lnk
+                    for lnk in node.in_socket.links
                     if lnk.start_socket.parentItem().data.type == NodeType.MOBJECT
                 ]
                 if not mob_inputs:
-                    issues.append(f"⚠ Animation '{node.data.name}' has no connected Mobject target.")
+                    issues.append(
+                        f"⚠ Animation '{node.data.name}' has no connected Mobject target."
+                    )
                 play_outputs = [
-                    lnk for lnk in node.out_socket.links
+                    lnk
+                    for lnk in node.out_socket.links
                     if lnk.end_socket.parentItem().data.type == NodeType.PLAY
                 ]
                 if not play_outputs:
@@ -8606,7 +8739,8 @@ class EfficientManimWindow(QMainWindow):
                         LOGGER.log("WARN", "GRAPH", f"  {issue}")
                     # Log count to status bar too
                     self.statusBar().showMessage(
-                        f"⚠ {len(issues)} graph validation warning(s) — check Logs tab", 4000
+                        f"⚠ {len(issues)} graph validation warning(s) — check Logs tab",
+                        4000,
                     )
 
             # Validate we have a compilable scene
@@ -8951,7 +9085,9 @@ class EfficientManimWindow(QMainWindow):
                     node_map = {}
                     for nd in g["nodes"]:
                         # Pass the raw type string directly — add_node handles all variants
-                        type_str = nd["type"].upper()  # MOBJECT, ANIMATION, PLAY, WAIT, VGROUP
+                        type_str = nd[
+                            "type"
+                        ].upper()  # MOBJECT, ANIMATION, PLAY, WAIT, VGROUP
 
                         node = self.add_node(
                             type_str,
@@ -9037,20 +9173,36 @@ if __name__ == "__main__":
         """Main-thread uncaught exception guard. Logs and contains."""
         try:
             tb_str = "".join(traceback.format_exception(exctype, value, tb))
-            LOGGER.log("ERROR", "GLOBAL", f"Uncaught {exctype.__name__}: {value}\n{tb_str}")
+            LOGGER.log(
+                "ERROR", "GLOBAL", f"Uncaught {exctype.__name__}: {value}\n{tb_str}"
+            )
         except Exception:
             # Last resort: print to stderr if even logging fails
-            print(f"[FATAL FALLBACK] Uncaught: {exctype.__name__}: {value}", file=sys.stderr)
+            print(
+                f"[FATAL FALLBACK] Uncaught: {exctype.__name__}: {value}",
+                file=sys.stderr,
+            )
         # Intentionally do NOT call original excepthook — prevent process termination
 
     def _thread_exception_hook(args):
         """Worker-thread uncaught exception guard. Logs and contains."""
         try:
-            tb_str = "".join(traceback.format_exception(args.exc_type, args.exc_value, args.exc_traceback))
+            tb_str = "".join(
+                traceback.format_exception(
+                    args.exc_type, args.exc_value, args.exc_traceback
+                )
+            )
             thread_name = args.thread.name if args.thread else "unknown"
-            LOGGER.log("ERROR", "GLOBAL", f"Uncaught in thread '{thread_name}': {args.exc_type.__name__}: {args.exc_value}\n{tb_str}")
+            LOGGER.log(
+                "ERROR",
+                "GLOBAL",
+                f"Uncaught in thread '{thread_name}': {args.exc_type.__name__}: {args.exc_value}\n{tb_str}",
+            )
         except Exception:
-            print(f"[FATAL FALLBACK] Thread exception: {args.exc_type}: {args.exc_value}", file=sys.stderr)
+            print(
+                f"[FATAL FALLBACK] Thread exception: {args.exc_type}: {args.exc_value}",
+                file=sys.stderr,
+            )
 
     sys.excepthook = _global_exception_hook
     threading.excepthook = _thread_exception_hook
