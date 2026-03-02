@@ -158,7 +158,7 @@ api.register_node(...)  # Internally checks REGISTER_NODES
       "author": "github_username",
       "repo": "repo_name",
       "version": "1.0.0",
-      "engine_version": ">=2.0.3",
+      "engine_version": ">=2.0.4",
       "description": "...",
       "permissions": ["register_nodes"],
       "verified": true,

@@ -143,7 +143,7 @@ class HomeScreen(QMainWindow):
         sidebar_layout.addStretch()
 
         # Version info
-        ver_lbl = QLabel("v2.0.3  •  Production")
+        ver_lbl = QLabel("v2.0.4  •  Production")
         font = QFont()
         font.setPointSize(9)
         ver_lbl.setFont(font)

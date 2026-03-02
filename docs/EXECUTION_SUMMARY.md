@@ -40,7 +40,7 @@
 ## 📦 DELIVERABLES
 
 ### 1. Fixed & Stabilized Codebase ✅
-**File**: `EfficientManim-v2.0.3-stabilized.zip` (471 KB)
+**File**: `EfficientManim-v2.0.4-stabilized.zip` (471 KB)
 
 **Contents**:
 - main.py (8503 lines) — Refactored, keybindings integrated, Render Video action added
@@ -166,7 +166,7 @@
 ## 🚀 DEPLOYMENT
 
 ### How to Use
-1. Extract ZIP file: `unzip EfficientManim-v2.0.3-stabilized.zip`
+1. Extract ZIP file: `unzip EfficientManim-v2.0.4-stabilized.zip`
 2. Install dependencies: `pip install -r requirements.txt`
 3. Launch: `python main.py`
 4. Test: Press Ctrl+K to open new unified keybindings panel
@@ -312,4 +312,4 @@ EfficientManim has undergone **production-grade architectural stabilization**. T
 
 **End of Execution Summary**
 
-*Version 2.0.3 | Released 2025-02-28 | Production Ready*
+*Version 2.0.4 | Released 2025-02-28 | Production Ready*

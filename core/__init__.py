@@ -9,7 +9,7 @@ Core modules for the application including:
 - MCP agent
 """
 
-__version__ = "2.0.3"
+__version__ = "2.0.4"
 # Initialize built-in extensions with pre-approved permissions
 try:
     from . import bootstrap

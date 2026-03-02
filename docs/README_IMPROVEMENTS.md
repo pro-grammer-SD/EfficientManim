@@ -1,4 +1,4 @@
-# EfficientManim v2.0.3 — INSTALLATION & DEPLOYMENT GUIDE
+# EfficientManim v2.0.4 — INSTALLATION & DEPLOYMENT GUIDE
 
 ## 🎯 What's New in This Release
 
@@ -20,7 +20,7 @@ cp -r /path/to/EfficientManim /path/to/EfficientManim.backup
 ### Step 2: Extract Updated Files
 ```bash
 cd /path/to/EfficientManim
-unzip EfficientManim-v2.0.3-stabilized.zip -o
+unzip EfficientManim-v2.0.4-stabilized.zip -o
 ```
 
 ### Step 3: Verify All Files Present
@@ -124,8 +124,8 @@ If missing, the fallback stubs will provide basic functionality.
 
 ## 📋 Version Information
 
-**Previous Version**: 2.0.3  
-**Current Version**: 2.0.3  
+**Previous Version**: 2.0.4  
+**Current Version**: 2.0.4  
 **Release Type**: Architectural Stabilization  
 **Breaking Changes**: None (backward compatible)  
 

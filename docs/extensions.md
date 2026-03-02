@@ -1,6 +1,6 @@
 # EfficientManim Extension Platform
 
-**Version**: 2.0.3 
+**Version**: 2.0.4 
 **Status**: Production-Ready  
 **Document Version**: 1.0.0
 

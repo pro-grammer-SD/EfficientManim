@@ -207,7 +207,7 @@ except ImportError:
 import logging
 
 APP_NAME = "EfficientManim"
-APP_VERSION = "2.0.3"
+APP_VERSION = "2.0.4"
 PROJECT_EXT = ".efp"  # EfficientManim Project (Zip)
 
 

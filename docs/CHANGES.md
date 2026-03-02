@@ -2,7 +2,7 @@
 
 ---
 
-## v2.0.3 — Structural Cleanup & Rendering Integrity Update
+## v2.0.4 — Structural Cleanup & Rendering Integrity Update
 
 **Date:** February 28, 2026
 
@@ -99,7 +99,7 @@ All built-in snippet templates updated:
 
 ---
 
-## v2.0.3 — Major Feature Release
+## v2.0.4 — Major Feature Release
 
 Initial production release including:
 

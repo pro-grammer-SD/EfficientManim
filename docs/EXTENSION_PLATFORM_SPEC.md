@@ -161,7 +161,7 @@ permission_manager.check_permission(ext_id, REGISTER_NODES)
       "author": "github_username",
       "repo": "extension_repo",
       "version": "1.0.0",
-      "engine_version": ">=2.0.3",
+      "engine_version": ">=2.0.4",
       "description": "...",
       "permissions": ["register_nodes", "register_timeline_track"],
       "verified": true,
@@ -405,7 +405,7 @@ GitHub installer clones repo
   "author": "...",
   "version": "...",
   "description": "...",
-  "engine_version": ">=2.0.3",
+  "engine_version": ">=2.0.4",
   "permissions": [...],
   "verified": true/false,
   "screenshot_urls": [...]

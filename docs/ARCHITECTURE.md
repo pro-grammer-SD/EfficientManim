@@ -1,4 +1,4 @@
-# EfficientManim v2.0.3 — NEW ARCHITECTURE
+# EfficientManim v2.0.4 — NEW ARCHITECTURE
 
 ## System Law Enforcement: From Anarchy to Governance
 
@@ -6,7 +6,7 @@
 
 ## 1. KEYBINDING SYSTEM ARCHITECTURE
 
-### The Problem (v2.0.3)
+### The Problem (v2.0.4)
 
 **Two competing registries with no synchronization:**
 
@@ -39,7 +39,7 @@ Result: User edits shortcuts → changes disappear on restart
         or never apply to actual menus/canvas actions
 ```
 
-### The Solution (v2.0.3)
+### The Solution (v2.0.4)
 
 **Single source of truth with cascading updates:**
 
@@ -387,7 +387,7 @@ except ImportError:
 1. Auto-create missing config: `mkdir -p ~/.efficientmanim/`
 2. Reset keybindings: `rm ~/.efficientmanim/keybindings.json`
 3. Restore from backup
-4. Rollback to v2.0.3
+4. Rollback to v2.0.4
 
 ---
 
@@ -441,7 +441,7 @@ except ImportError:
 
 ---
 
-## 10. MIGRATION FROM v2.0.3
+## 10. MIGRATION FROM v2.0.4
 
 ### For End Users
 1. Keybindings automatically migrated from old system

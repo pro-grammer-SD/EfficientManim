@@ -103,7 +103,7 @@ class ExtensionMCP:
             "permissions": [...],
             "dependencies": [...],
             "verified": true,
-            "engine_version": ">=2.0.3",
+            "engine_version": ">=2.0.4",
             "changelog": "...",
             "screenshots": [...]
         }

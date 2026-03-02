@@ -23,7 +23,7 @@ TEMPLATES = {
   "author": "{author}",
   "version": "0.1.0",
   "description": "A deterministic extension for EfficientManim",
-  "engine_version": ">=2.0.3",
+  "engine_version": ">=2.0.4",
   "permissions": [
     "register_nodes",
     "register_timeline_track"
