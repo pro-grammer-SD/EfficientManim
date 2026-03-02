@@ -169,6 +169,11 @@ Preview your work instantly for faster iteration and verification.
 ![Rendered snippet output](gallery/10.png)
 View the resulting output, demonstrating final rendering in the node canvas.
 
+### Tiny Demo
+
+<video src="gallery/demo.mp4" controls="controls" muted="muted" width="600">
+</video>
+
 ---
 
 Made with lots of ❤️💚💙 by Soumalya a.k.a. @pro-grammer-SD
