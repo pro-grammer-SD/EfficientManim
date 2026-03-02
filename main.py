@@ -929,6 +929,8 @@ class RenderWorker(QThread):
                 stdout=subprocess.PIPE,
                 stderr=subprocess.PIPE,
                 text=True,
+                encoding="utf-8",
+                errors="replace",
                 cwd=str(self.output_dir),
                 startupinfo=startupinfo,
             )
@@ -1026,6 +1028,8 @@ class VideoRenderWorker(QThread):
                 stdout=subprocess.PIPE,
                 stderr=subprocess.PIPE,
                 text=True,
+                encoding="utf-8",
+                errors="replace",
                 cwd=str(self.output_dir),
                 startupinfo=startupinfo,
             )
@@ -6304,6 +6308,8 @@ class GitHubSnippetLoader(QWidget):
                 ["git", "clone", "--depth", "1", url, str(dest)],
                 capture_output=True,
                 text=True,
+                encoding="utf-8",
+                errors="replace",
                 timeout=60,
             )
             if result.returncode == 0:
@@ -8632,7 +8638,7 @@ class EfficientManimWindow(QMainWindow):
 
             # Write scene to temporary file
             script_path = output_dir / "video_render_scene.py"
-            with open(script_path, "w") as f:
+            with open(script_path, "w", encoding="utf-8") as f:
                 f.write(scene_code)
 
             LOGGER.info(f"Scene script written to {script_path}")
@@ -8826,11 +8832,11 @@ class EfficientManimWindow(QMainWindow):
                 t_path = Path(td)
 
                 # Write JSONs
-                with open(t_path / "metadata.json", "w") as f:
+                with open(t_path / "metadata.json", "w", encoding="utf-8") as f:
                     json.dump(meta, f, indent=2)
-                with open(t_path / "graph.json", "w") as f:
+                with open(t_path / "graph.json", "w", encoding="utf-8") as f:
                     json.dump(graph_data, f, indent=2)
-                with open(t_path / "code.py", "w") as f:
+                with open(t_path / "code.py", "w", encoding="utf-8") as f:
                     f.write(self.code_view.toPlainText())
 
                 # Handle Assets
@@ -8855,7 +8861,7 @@ class EfficientManimWindow(QMainWindow):
                     else:
                         LOGGER.warn(f"Could not find asset to save: {source_path}")
 
-                with open(t_path / "assets.json", "w") as f:
+                with open(t_path / "assets.json", "w", encoding="utf-8") as f:
                     json.dump(asset_manifest, f, indent=2)
 
                 # Zip it up
@@ -8912,7 +8918,7 @@ class EfficientManimWindow(QMainWindow):
             # 1. Load Assets and Re-link Paths
             assets_json = dest / "assets.json"
             if assets_json.exists():
-                with open(assets_json) as f:
+                with open(assets_json, encoding="utf-8") as f:
                     asset_list = json.load(f)
                     for ad in asset_list:
                         # Construct the path to the extracted file
@@ -8940,16 +8946,12 @@ class EfficientManimWindow(QMainWindow):
             # 2. Load Graph
             graph_json = dest / "graph.json"
             if graph_json.exists():
-                with open(graph_json) as f:
+                with open(graph_json, encoding="utf-8") as f:
                     g = json.load(f)
                     node_map = {}
                     for nd in g["nodes"]:
-                        # Fix for Mobject casing
-                        type_str = (
-                            nd["type"].capitalize()
-                            if nd["type"].upper() == "MOBJECT"
-                            else "Animation"
-                        )
+                        # Pass the raw type string directly — add_node handles all variants
+                        type_str = nd["type"].upper()  # MOBJECT, ANIMATION, PLAY, WAIT, VGROUP
 
                         node = self.add_node(
                             type_str,
@@ -8976,7 +8978,7 @@ class EfficientManimWindow(QMainWindow):
             # 3. Load Saved Code (if any)
             code_py = dest / "code.py"
             if code_py.exists():
-                with open(code_py, "r") as f:
+                with open(code_py, "r", encoding="utf-8") as f:
                     self.code_view.setText(f.read())
 
             self.compile_graph()
