@@ -171,7 +171,8 @@ View the resulting output, demonstrating final rendering in the node canvas.
 
 ### Tiny Demo
 
-<iframe width="560" height="315" src="https://www.youtube-nocookie.com/embed/91sLPCofwFs?si=2_q_8VWzWNqZ-OP1&amp;controls=0" title="YouTube video player" frameborder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" referrerpolicy="strict-origin-when-cross-origin" allowfullscreen></iframe>
+[![Watch Demo](https://img.youtube.com/vi/91sLPCofwFs/0.jpg)](https://youtu.be/91sLPCofwFs)
+
 ---
 
 Made with lots of ❤️💚💙 by Soumalya a.k.a. @pro-grammer-SD
