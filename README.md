@@ -171,8 +171,7 @@ View the resulting output, demonstrating final rendering in the node canvas.
 
 ### Tiny Demo
 
-<video src="gallery/demo.mp4" controls="controls" muted="muted" width="600">
-</video>
+<video src="https://raw.githubusercontent.com/pro-grammer-SD/EfficientManim/main/gallery/demo.mp4" controls muted width="600"></video>
 
 ---
 
