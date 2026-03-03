@@ -7,6 +7,7 @@
 **Date:** February 28, 2026
 
 This release removes architectural hacks and replaces them with honest, transparent behavior.
+P.S. added 2nd admin acc. @b-cubed-3
 
 ---
 
