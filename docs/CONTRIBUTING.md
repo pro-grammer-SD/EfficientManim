@@ -1,123 +1,147 @@
-# Contributing Guidelines
+# 🛠️ EfficientManim — Contributing Guide
 
-First off, thanks for considering contributing. You’re already a real one.
+## Setting Up a Dev Environment
 
-This project exists because of people like you—users, testers, writers, bug hunters, and code wizards. Whether you’re fixing a typo or shipping a major feature, you’re welcome here.
+```bash
+# 1. Fork and clone
+git clone https://github.com/your-fork/EfficientManim.git
+cd EfficientManim
+
+# 2. Create virtual environment
+python -m venv venv
+source venv/bin/activate  # or venv\Scripts\activate on Windows
+
+# 3. Install all dependencies
+pip install -r requirements.txt
+
+# 4. Install dev extras (optional but recommended)
+pip install pytest black isort pyflakes
+
+# 5. Launch
+python main.py
+```
 
 ---
 
-## Ways to Contribute
+## Code Style & Conventions
 
-You can help in many ways:
+### Formatting
+- **Black** with default settings (line length 88).
+- **isort** for import ordering.
 
-* Reporting bugs
-* Suggesting features or improvements
-* Improving documentation
-* Fixing issues or adding new features
-* Reviewing pull requests
-* Sharing feedback or ideas
+```bash
+black main.py core/ collab/ app/
+isort main.py core/ collab/ app/
+```
 
-No contribution is too small. Seriously.
+### Naming
+- Classes: `UpperCamelCase`
+- Functions and methods: `snake_case`
+- Constants: `UPPER_SNAKE_CASE`
+- Private methods: `_single_leading_underscore`
+
+### Qt Patterns
+- **Never call blocking I/O on the main thread.** Use `QThread` subclasses or background `asyncio` loops.
+- Use `QTimer.singleShot(0, fn)` to defer UI updates from worker callbacks back to the main thread.
+- Prefer `Signal` + `connect` over direct method calls across thread boundaries.
+- Always `deleteLater()` Qt objects instead of `del` when crossing thread boundaries.
+
+### Error Handling
+- All file I/O must be wrapped in `try/except`.
+- Render workers must never propagate exceptions — catch and emit `error` signal.
+- Log to `LOGGER` (not `print`) using appropriate level: `info`, `warn`, `error`.
 
 ---
 
-## Before You Start
+## Module Ownership Map
 
-Please make sure you:
+| Module / File | Owner Area | Notes |
+|---|---|---|
+| `main.py` | Core app | All UI classes, compiler, renderer, project I/O. Monolithic by design. |
+| `home.py` | Home screen | Recent projects, launch logic |
+| `collab/` | Live collaboration | WebSocket server/client, delta sync, PIN registry |
+| `collab/server.py` | WS server | `CollabServer` — asyncio in background thread |
+| `collab/client.py` | WS client | `CollabClient` — asyncio in background thread |
+| `collab/manager.py` | High-level collab | `CollaborationManager` — Qt signals, session lifecycle |
+| `collab/delta.py` | Delta logic | `make_delta`, `serialize_graph`, `apply_delta` |
+| `collab/conflict.py` | Node locking | `NodeLockManager`, `LockInfo`, TTL expiry |
+| `collab/pin_registry.py` | PIN persistence | `~/.efficientmanim/collab_sessions.json` |
+| `core/mcp.py` | MCP agent | `MCPAgent`, `MCPRegistry`, command handlers |
+| `core/keybinding_registry.py` | Keybindings | Single-source-of-truth registry |
+| `core/keybindings_panel.py` | Keybindings UI | `UnifiedKeybindingsPanel` |
+| `core/themes.py` | Theme system | `THEME_MANAGER`, QSS generation |
+| `core/extension_manager.py` | Extension platform | Permission governance, lifecycle |
+| `core/extension_api.py` | Extension API | Safe sandboxed API for plugins |
+| `core/node_registry.py` | Node registry | Custom node type registration |
+| `app/` | Legacy app layer | Older versions of core modules, kept for compat |
 
-* Have read the **Code of Conduct**
-* Check existing issues and pull requests to avoid duplicates
-* Use clear, respectful communication
+---
 
-If you’re unsure about anything, open a discussion or issue first. It’s better to align early than rewrite later.
+## Key Data Flow for New Features
+
+### Adding a New Delta Action (for collaboration)
+
+1. Add the action string to `collab/delta.py` → `apply_delta()` with an `if action == "..."` block.
+2. Emit the delta from the relevant UI event in `main.py` by calling `self.collab.send_delta(action, payload)` — guard with `if not self._collab_applying`.
+3. Document the new action in `docs/live_collaboration.md`.
+
+### Adding a New Node Type
+
+1. Add an entry to `NodeType` enum in `main.py`.
+2. Add a header color in `NodeItem.paint()`.
+3. Add connection rules to `GraphScene.try_connect()`.
+4. Add code generation logic to `EfficientManimWindow.compile_graph()`.
+5. Add a type badge in `PropertiesPanel.set_node()`.
+6. Update `docs/node_reference.md`.
+
+### Adding a New Panel / Tab
+
+1. Create a `QWidget` subclass.
+2. Instantiate it in `EfficientManimWindow.setup_ui()`.
+3. Add it to `self.tabs_top.addTab(...)`.
+4. If it needs graph change notifications, connect `self.scene.graph_changed_signal`.
+
+---
+
+## Submitting Pull Requests
+
+1. **Branch** from `main`: `git checkout -b feature/my-feature`.
+2. **One PR per feature** — keep diffs focused.
+3. **No syntax errors.** Run `python -c "import ast; ast.parse(open('main.py').read())"` before pushing.
+4. **Update docs** — if you change behaviour, update the relevant file in `docs/`.
+5. **Update README.md** if the feature is user-visible.
+6. **Describe the change** in the PR body: what it does, why, and how you tested it.
+
+### PR Title Convention
+
+```
+feat: Add timeline scrubbing to canvas bottom bar
+fix: Correct load_graph_from_json for collab sync
+docs: Add plugin_api.md and contributing guide
+refactor: Split compile_graph into smaller helpers
+```
+
+---
+
+## Running Tests
+
+There is currently no automated test suite. Testing is done manually:
+
+1. Launch the app and verify the feature works end-to-end.
+2. Test edge cases: empty scene, no API key, missing assets, corrupt project file.
+3. For collaboration features: open two windows, start a session, verify deltas sync.
+4. For rendering: produce at least one MP4 with your changes applied.
+
+If you add automated tests, place them in `tests/` and use `pytest`.
 
 ---
 
 ## Reporting Bugs
 
-When reporting a bug, include:
-
-* A clear and descriptive title
-* Steps to reproduce the issue
-* Expected behavior vs actual behavior
-* Screenshots, logs, or error messages if applicable
-* Environment details (OS, Python version, browser, etc.)
-
-Vague bug reports slow everyone down. Precision is king.
-
----
-
-## Suggesting Features
-
-Feature ideas are welcome.
-
-When suggesting one, explain:
-
-* The problem it solves
-* Why it’s useful
-* Any alternatives you’ve considered
-
-Big ideas are cool. Clear reasoning is cooler.
-
----
-
-## Development Setup
-
-1. Fork the repository
-2. Clone your fork locally
-3. Create a new branch for your change
-4. Make your changes
-5. Test your changes thoroughly
-6. Commit with a clear message
-7. Push your branch and open a Pull Request
-
-Keep commits focused. One purpose per commit.
-
----
-
-## Pull Request Guidelines
-
-A good PR:
-
-* Has a clear title and description
-* Explains *what* changed and *why*
-* References related issues if applicable
-* Passes all tests
-* Does not include unrelated changes
-
-Draft PRs are welcome if you want early feedback.
-
----
-
-## Code Style
-
-* Follow the existing code style and structure
-* Keep things readable and maintainable
-* Avoid unnecessary complexity
-* Consistency > cleverness
-
-Readable code ages better. Facts.
-
----
-
-## Documentation
-
-If your change affects usage, behavior, or APIs, update the documentation accordingly. Future users (including future you) will thank you.
-
----
-
-## Community & Conduct
-
-This project follows the **Contributor Covenant Code of Conduct**.
-
-Be respectful. Be constructive. Don’t be weird in a bad way.
-
-Harassment, abuse, or discrimination of any kind will not be tolerated.
-
----
-
-## Questions?
-
-If you’re stuck or unsure, open an issue or discussion. Asking questions is encouraged.
-
-Thanks again for contributing. Let’s build something solid.
+Open a GitHub issue with:
+- EfficientManim version (shown in title bar)
+- Python version (`python --version`)
+- OS and version
+- Steps to reproduce
+- Expected vs actual behaviour
+- Relevant section from `~/.efficientmanim/session.log`

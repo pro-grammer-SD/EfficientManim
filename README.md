@@ -2,7 +2,7 @@
 
 ![Icon](icon/icon.ico)
 
-**🌈 Create mathematical animations visually with the power of Python, AI, and Production-Grade Type Safety.**
+**🌈 Create mathematical animations visually with the power of Python, AI, and real-time collaboration.**
 
 ---
 
@@ -22,161 +22,180 @@
 ### 📦 VGroup Utility
 - Select Mobject nodes → click **Create VGroup** in the **VGroups** tab
 - VGroup code automatically generated: `group_1 = VGroup(circle_1, square_1)`
-- Groups shown in expandable tree view
+- Groups shown in expandable tree view with source badges (canvas / AI / snippet / GitHub)
+- Full member management: add, remove, highlight on canvas, copy code
 
-### 🤖 Gemini AI Code Generation
-- Describe animations in plain English — AI generates Manim code
-- AI code parsed into editable nodes with correct wiring
-- Streaming responses with real-time feedback
+---
 
-### 🎙️ AI-Powered Voiceover Studio
-- Gemini TTS Integration with multi-voice support (Zephyr, Puck, Fenrir, etc.)
-- Auto-sync animation duration to audio length
+## 🤝 Live Collaboration
 
-### 🐙 GitHub Snippet Loader
-- Clone any GitHub repository into `~/.efficientmanim/snippets/`
-- Browse `.py` files; double-click to load into AI panel as snippet
-- All cloned repos automatically repopulated on startup
+EfficientManim supports **real-time multi-user editing** over a local network or on the same machine — no cloud accounts, no third-party services.
 
-### ⭐ Recents Panel
-- Top-5 most-used Mobjects + top-5 most-used Animations tracked per session
+### What It Is
+Two or more EfficientManim windows share the same node graph live. Every node move, property change, wire add/delete, and scene switch is broadcast as a JSON delta and applied to all connected instances within milliseconds. A 6-digit **PIN** identifies the session — easy to read aloud or paste into chat.
+
+### Starting a Session
+1. Open your project in EfficientManim.
+2. Click **Collaboration → Start Live Collaboration**.
+3. A dialog shows your PIN in large, bold text. Share it with collaborators.
+4. The toolbar shows a green ● and the active PIN.
+
+### Joining a Session
+1. Click **Collaboration → Join Collaboration**.
+2. Enter the 6-digit PIN.
+3. Click **Connect** — your canvas loads the host's full graph and live sync begins.
+
+### Multi-Window (Same Machine)
+Run `python main.py` a second time, join via the same PIN — both windows stay in sync.
+
+### Network Requirements
+- **Same machine:** No setup needed.
+- **LAN:** Host firewall must allow the ephemeral TCP port shown in the session dialog.
+- **Internet:** Not supported out-of-the-box; use a reverse proxy (e.g. `ngrok`) on the host.
+
+📖 Full details: [docs/live_collaboration.md](docs/live_collaboration.md)
+
+---
+
+## 🤖 Gemini AI Integration
+
+### Code Generation
+- Describe animations in plain English — AI generates a complete `Scene.construct()` block
+- AI code parsed into typed, editable nodes with correct wiring
+- Streaming responses with real-time feedback in the AI Assistant dock
+
+### MCP Agent Mode
+- Gemini reads the live scene state as JSON and issues typed commands executed directly against the running app
+- No merge step — Gemini edits the graph the same way a human would
+- Full action log: **Help → MCP Agent → Show Action Log**
+
+### Auto Voiceover Agent
+- Analyzes all nodes, writes per-node scripts, generates TTS, attaches audio automatically
+- At render time, all segments merge into a synchronized voiceover track
+
+📖 Full details: [docs/ai_features.md](docs/ai_features.md)
+
+---
+
+## 🎙️ AI Voiceover Studio
+- Gemini TTS with six voices: Puck, Charon, Kore, Fenrir, Aoede, Zephyr
+- Built-in audio player with play/pause/stop/seek and time display
+- Attach audio to any node — duration auto-syncs `run_time=`
+
+---
+
+## 🐙 GitHub Snippet Loader
+- Clone any GitHub repository and browse its `.py` files
+- Double-click to load into the AI panel as a snippet
+- VGroup definitions auto-detected and registered
+
+---
+
+## ⭐ Recents Panel
+- Top-5 most-used Mobjects and Animations by actual insertion count
 - Persisted to `~/.efficientmanim/usage.json`
 - Double-click to instantly add to canvas
 
-### ⌨️ Editable Keybindings
-- **Help → Edit Keybindings…** opens the keybindings editor
-- Double-click any shortcut to change it
-- Duplicate detection; changes persisted to QSettings
+---
 
-### 📁 Editable Project Name
-- Project name textbox in the top-right corner of the window
-- Rename your `.efp` file without leaving the editor
+## ⌨️ Editable Keybindings
+- **Help → Edit Keybindings…** — changes apply instantly, no restart
+- Duplicate detection; persisted to `QSettings`
 
-### 📦 Portable Project Format (.efp)
-- Bundled images, sounds, and videos included
-- ZIP-based, cross-platform, easy to share
+---
 
-### 🌓 Dark / Light Themes
-- Full dark mode with no white bleed-through
-- Switch via the theme button in the corner or Settings
-- QSS-based styling with ColorToken system
+## 📦 Portable Project Format (.efp)
+- ZIP-based: graph JSON + compiled code + all bundled media
+- Cross-platform — one file contains everything
+📖 Full details: [docs/efp_format.md](docs/efp_format.md)
 
-### 🎨 Manim Class Browser
-- 60+ Manim classes in 8 categories (Geometry, Text, Graphs, 3D, Animations, etc.)
-- Search bar filters in real-time
+---
+
+## 🎨 Manim Class Browser
+- 60+ Manim classes in 8 categories with real-time search filter
 - Double-click or drag to add node to canvas
 
-### 🎬 Professional Video Rendering
-- Full scene export to MP4/WebM
-- Up to 4K resolution, 15–60 FPS, quality presets
+---
+
+## 🎬 Professional Video Rendering
+- Full scene export to MP4/WebM, up to 4K, 15–60 FPS, four quality presets
+- Integrated video player for instant review
+
+---
+
+## ✒️ LaTeX Studio
+- Live LaTeX preview via MathPad API
+- One-click apply to any `MathTex` or `Tex` node
+
+---
+
+## 🔌 Plugin / Extension System
+- Extensions in `~/.efficientmanim/ext/<author>/<name>/`
+- Permission-gated: nodes, UI panels, timeline tracks, MCP hooks
+📖 Full details: [docs/plugin_api.md](docs/plugin_api.md)
 
 ---
 
 ## 🏠 Home Screen
 
-Run `python home.py` to see the home screen with recent projects.  
-Run `python main.py` to skip the home screen and open the editor directly.
+```bash
+python home.py   # Home screen with recent projects
+python main.py   # Open editor directly
+```
 
 ---
 
 ## ⌨️ Keyboard Shortcuts
 
-| Action | Shortcut |
-|--------|----------|
-| New Project | `Ctrl+N` |
-| Open Project | `Ctrl+O` |
-| Save Project | `Ctrl+S` |
-| Save As | `Ctrl+Shift+S` |
-| Exit | `Ctrl+Q` |
-| Undo | `Ctrl+Z` |
-| Redo | `Ctrl+Y` |
-| Delete Selected | `Del` |
-| Fit View | `Ctrl+0` |
-| Auto-Layout | `Ctrl+L` |
-| Export Code | `Ctrl+E` |
-| Copy Code | `Ctrl+Shift+C` |
-| Toggle Theme | `Ctrl+T` |
-| Edit Keybindings | `Ctrl+,` |
+| Action | Shortcut | Action | Shortcut |
+|--------|----------|--------|----------|
+| New Project | `Ctrl+N` | Fit View | `Ctrl+0` |
+| Open Project | `Ctrl+O` | Zoom In | `Ctrl+=` |
+| Save Project | `Ctrl+S` | Zoom Out | `Ctrl+-` |
+| Save As | `Ctrl+Shift+S` | Auto-Layout | `Ctrl+L` |
+| Exit | `Ctrl+Q` | Export Code | `Ctrl+E` |
+| Undo | `Ctrl+Z` | Copy Code | `Ctrl+Shift+C` |
+| Redo | `Ctrl+Y` | Render Video | `Ctrl+R` |
+| Delete Selected | `Del` | Add Play Node | `Ctrl+Shift+P` |
+| Select All | `Ctrl+A` | Add Wait Node | `Ctrl+Shift+W` |
+| Create VGroup | `Ctrl+G` | Edit Keybindings | `Ctrl+,` |
 
-All shortcuts are editable via **Help → Edit Keybindings…**
+📖 Full reference: [docs/shortcuts.md](docs/shortcuts.md)
 
 ---
 
-## 🛠️ Prerequisites
+## 📚 Documentation
 
-1. **Python 3.10+**
-2. **FFmpeg** — for video rendering (must be in PATH)
-3. **Git** — optional, for GitHub Snippet Loader
-4. **LaTeX** — optional, for local LaTeX rendering
+| Document | Contents |
+|---|---|
+| [docs/overview.md](docs/overview.md) | Architecture, modules, data flow |
+| [docs/setup.md](docs/setup.md) | Installation, requirements, first launch |
+| [docs/live_collaboration.md](docs/live_collaboration.md) | PIN sessions, delta sync, network setup |
+| [docs/node_reference.md](docs/node_reference.md) | All node types and properties |
+| [docs/ai_features.md](docs/ai_features.md) | Code gen, MCP agent, voiceover, LaTeX |
+| [docs/shortcuts.md](docs/shortcuts.md) | Full keyboard shortcut reference |
+| [docs/efp_format.md](docs/efp_format.md) | Project file format internals |
+| [docs/plugin_api.md](docs/plugin_api.md) | Extension / plugin development guide |
+| [docs/contributing.md](docs/contributing.md) | Dev setup, code style, PR guide |
 
-## 📦 Installation
+---
+
+## 🛠️ Installation
 
 ```bash
 git clone https://github.com/pro-grammer-SD/EfficientManim.git
 cd EfficientManim
 pip install -r requirements.txt
-python home.py    # Full experience with home screen
-# or
-python main.py    # Open editor directly
+python main.py
 ```
 
-Manual install:
-```bash
-pip install manim PySide6 google-genai pydub requests numpy
-```
+**Requirements:** Python 3.10+, FFmpeg (on PATH), Git, LaTeX (for MathTex)
+
+Full guide: [docs/setup.md](docs/setup.md)
 
 ---
 
-## 📸 Gallery
+## 🌿 About
 
-### Overview & Setup
-
-![Starting up](gallery/1.png)
-Launch the application and initialize the workspace.
-
-![Blank node canvas](gallery/2.png)
-Start with a clean node canvas, ready for composition and design.
-
-![Recents Menu](gallery/3.png)
-Quickly access recently opened projects and elements from the Recents panel.
-
----
-
-### Customization & Rendering
-
-![Tinkering with Nodes](gallery/4.png)
-Manipulate nodes interactively to refine workflows and structures.
-
-![Searching for elements](gallery/5.png)
-Use the search tool to locate elements and components efficiently.
-
-![GitHub snippets panel](gallery/6.png)
-Access GitHub snippets directly for rapid code reuse and integration.
-
----
-
-### Features in Action
-
-![Selecting a GitHub snippet](gallery/7.png)
-Select a snippet from GitHub to integrate seamlessly into your project.
-
-![Loading the snippet](gallery/8.png)
-Load and insert external code dynamically into the workspace.
-
-![Quickly previewing with the handy Preview tab](gallery/9.png)
-Preview your work instantly for faster iteration and verification.
-
-![Rendered snippet output](gallery/10.png)
-View the resulting output, demonstrating final rendering in the node canvas.
-
-### Tiny Demo
-
-[![Watch Demo](https://img.youtube.com/vi/91sLPCofwFs/0.jpg)](https://youtu.be/91sLPCofwFs)
-
----
-
-Made with lots of ❤️💚💙 by Soumalya a.k.a. @pro-grammer-SD
-
-- 🌿 Legacy Discussion (v1): https://www.reddit.com/r/manim/comments/1qck0ji/i_built_a_nodebased_manim_ide_with_ai_assistance/
-
-- 🎯 Latest Discussion (v2): https://www.reddit.com/r/manim/comments/1rhou29/efficientmanim_v2xx_major_update_with_mcp/
+© 2026 — Soumalya Das (@pro-grammer-SD) · Co-authored with Bailey Beber  
+Built with PySide6 · Manim · Google Gemini

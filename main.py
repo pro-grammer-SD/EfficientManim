@@ -141,6 +141,7 @@ from PySide6.QtWidgets import (
     QInputDialog,
     QDockWidget,
     QProgressBar,
+    QToolBar,
 )
 from PySide6.QtCore import (
     Qt,
@@ -179,6 +180,12 @@ from PySide6.QtGui import (
 from PySide6.QtMultimedia import QMediaPlayer, QAudioOutput
 from PySide6.QtMultimediaWidgets import QVideoWidget
 
+# Collaboration imports
+from collab import CollaborationManager
+from collab.ui.start_dialog import StartCollabDialog
+from collab.ui.join_dialog import JoinCollabDialog
+from collab.ui.session_widget import SessionWidget
+from collab.ui.participant_panel import ParticipantPanel
 
 # Manim Import (Safe)
 try:
@@ -1088,6 +1095,8 @@ class NodeData:
     def __init__(self, name, n_type, cls_name):
         self.id = str(uuid.uuid4())
         self.name = name
+        # var_name is a stable python-friendly identifier used for scene persistence
+        self.var_name = name
         self.type = n_type
         self.cls_name = cls_name
         self.params = {}  # Key-Value store
@@ -1103,11 +1112,19 @@ class NodeData:
         self.is_ai_generated = False
         self.ai_source: str | None = None  # Original Manim class name
         self.ai_code_snippet: str | None = None  # Original code from AI
+        # Collaboration lock metadata (ephemeral)
+        self.lock_owner_id: str | None = None
+        self.lock_owner_name: str | None = None
+        self.lock_owner_color: str | None = None
+        self.lock_expires_at: float = 0.0
+        # Last timestamp applied (for last-writer-wins)
+        self._collab_last_ts: float = 0.0
 
     def to_dict(self):
         return {
             "id": self.id,
             "name": self.name,
+            "var_name": self.var_name,
             "type": self.type.name,
             "cls_name": self.cls_name,
             "params": self.params,
@@ -1120,12 +1137,17 @@ class NodeData:
             "is_ai_generated": self.is_ai_generated,
             "ai_source": self.ai_source,
             "ai_code_snippet": self.ai_code_snippet,
+            "lock_owner_id": self.lock_owner_id,
+            "lock_owner_name": self.lock_owner_name,
+            "lock_owner_color": self.lock_owner_color,
+            "lock_expires_at": self.lock_expires_at,
         }
 
     @staticmethod
     def from_dict(d):
         n = NodeData(d["name"], NodeType[d["type"]], d["cls_name"])
         n.id = d["id"]
+        n.var_name = d.get("var_name", d["name"])
         n.params = d["params"]
         n.param_metadata = d.get("param_metadata", {})
         n.pos_x, n.pos_y = d["pos"]
@@ -1136,6 +1158,10 @@ class NodeData:
         n.is_ai_generated = d.get("is_ai_generated", False)
         n.ai_source = d.get("ai_source")
         n.ai_code_snippet = d.get("ai_code_snippet")
+        n.lock_owner_id = d.get("lock_owner_id")
+        n.lock_owner_name = d.get("lock_owner_name")
+        n.lock_owner_color = d.get("lock_owner_color")
+        n.lock_expires_at = float(d.get("lock_expires_at", 0.0) or 0.0)
         return n
 
     def is_param_enabled(self, param_name):
@@ -1262,10 +1288,11 @@ class SocketItem(QGraphicsPathItem):
 class WireItem(QGraphicsPathItem):
     """Connection between sockets with robust path management."""
 
-    def __init__(self, start_socket, end_socket):
+    def __init__(self, start_socket, end_socket, wire_id=None):
         super().__init__()
         self.start_socket = start_socket
         self.end_socket = end_socket
+        self.wire_id = wire_id or uuid.uuid4().hex
         if not self.start_socket or not self.end_socket:
             raise ValueError("Both start_socket and end_socket must be valid")
 
@@ -1312,6 +1339,7 @@ class NodeItem(QGraphicsItem):
     def __init__(self, data: NodeData):
         super().__init__()
         self.node_data = data  # Internal storage
+        self._window = None
         self._init_geometry()
 
     # ── Transparent proxy so that node.data.X works everywhere ──────────────
@@ -1333,6 +1361,7 @@ class NodeItem(QGraphicsItem):
             | QGraphicsItem.GraphicsItemFlag.ItemIsSelectable
             | QGraphicsItem.GraphicsItemFlag.ItemSendsGeometryChanges
         )
+        self.setAcceptHoverEvents(True)
         self.setPos(self.node_data.pos_x, self.node_data.pos_y)
 
         # Sockets
@@ -1356,6 +1385,15 @@ class NodeItem(QGraphicsItem):
         pen = QPen(QColor("#bdc3c7"), 1.5)
         if self.isSelected():
             pen = QPen(QColor("#3498db"), 2.5)
+        # Collaboration lock indicator
+        lock_info = None
+        if self._window is not None:
+            try:
+                lock_info = self._window.collab_get_lock(self.node_data.id)
+            except Exception:
+                lock_info = None
+        if lock_info and lock_info.owner_id != getattr(self._window, "collab_client_id", None):
+            pen = QPen(QColor(lock_info.owner_color or "#9ca3af"), 3.0)
         painter.setPen(pen)
         painter.drawRoundedRect(0, 0, self.width, self.height, 8, 8)
 
@@ -1415,6 +1453,16 @@ class NodeItem(QGraphicsItem):
             painter.setPen(Qt.PenStyle.NoPen)
             painter.drawEllipse(self.width - 16, self.height - 16, 8, 8)
 
+        # Lock icon overlay
+        if lock_info and lock_info.owner_id != getattr(self._window, "collab_client_id", None):
+            painter.setPen(QColor(lock_info.owner_color or "#9ca3af"))
+            painter.setFont(QFont("Segoe UI", 9, QFont.Weight.Bold))
+            painter.drawText(
+                QRectF(self.width - 28, 4, 24, 16),
+                Qt.AlignmentFlag.AlignCenter,
+                "🔒",
+            )
+
     def itemChange(self, change, value):
         if change == QGraphicsItem.GraphicsItemChange.ItemPositionChange:
             self.node_data.pos_x = value.x()
@@ -1425,7 +1473,31 @@ class NodeItem(QGraphicsItem):
             if self.scene():
                 s = self.scene()
                 s and hasattr(s, "notify_change") and s.notify_change()  # type: ignore[union-attr]
+            if self._window is not None:
+                try:
+                    self._window.on_node_moved(self)
+                except Exception:
+                    pass
         return super().itemChange(change, value)
+
+    def mousePressEvent(self, event):
+        if self._window is not None and self._window.is_node_locked_by_other(self.node_data.id):
+            event.ignore()
+            return
+        if self._window is not None:
+            try:
+                self._window.collab_request_lock(self.node_data.id)
+            except Exception:
+                pass
+        super().mousePressEvent(event)
+
+    def mouseReleaseEvent(self, event):
+        if self._window is not None:
+            try:
+                self._window.collab_release_lock(self.node_data.id)
+            except Exception:
+                pass
+        super().mouseReleaseEvent(event)
 
 
 class GraphScene(QGraphicsScene):
@@ -1438,6 +1510,7 @@ class GraphScene(QGraphicsScene):
         super().__init__()
         self.drag_wire = None
         self.start_socket = None
+        self.main_window = None
         self.setBackgroundBrush(QBrush(QColor("#f4f6f7")))
 
     def notify_change(self):
@@ -1480,7 +1553,7 @@ class GraphScene(QGraphicsScene):
 
         super().mouseReleaseEvent(event)
 
-    def try_connect(self, s1, s2):
+    def try_connect(self, s1, s2, wire_id=None):
         """Attempt to create a connection between two sockets with validation.
 
         Args:
@@ -1553,7 +1626,15 @@ class GraphScene(QGraphicsScene):
 
         # Create Wire with error handling
         try:
-            wire = WireItem(out_sock, in_sock)
+            # Prevent duplicate connections between same sockets
+            for existing in out_sock.links:
+                try:
+                    if existing.start_socket == out_sock and existing.end_socket == in_sock:
+                        return existing
+                except Exception:
+                    pass
+
+            wire = WireItem(out_sock, in_sock, wire_id=wire_id)
             self.addItem(wire)
             out_sock.links.append(wire)
             in_sock.links.append(wire)
@@ -1562,6 +1643,11 @@ class GraphScene(QGraphicsScene):
             LOGGER.info(
                 f"Connected {node_src.node_data.name} -> {node_dst.node_data.name}"
             )
+            if self.main_window is not None:
+                try:
+                    self.main_window.on_wire_added(wire)
+                except Exception:
+                    pass
             return wire
         except Exception as e:
             LOGGER.error(f"Failed to create connection: {e}")
@@ -2413,8 +2499,9 @@ class PropertiesPanel(QWidget):
 
     node_updated = Signal()
 
-    def __init__(self):
+    def __init__(self, main_window=None):
         super().__init__()
+        self.main_window = main_window
         self.current_node = None
         self._vbox_layout = QVBoxLayout(self)
 
@@ -2672,6 +2759,11 @@ class PropertiesPanel(QWidget):
 
                 self.current_node.update()
                 self.debouncer.start()
+                if self.main_window is not None:
+                    try:
+                        self.main_window.on_node_property_changed(self.current_node, key, v)
+                    except Exception:
+                        pass
             except Exception as e:
                 LOGGER.warn(f"Value change error for {key}: {e}")
 
@@ -4313,6 +4405,10 @@ class AINodeIntegrator:
 
         # Create NodeItem
         item = NodeItem(node_data)
+        try:
+            item._window = scene_graph
+        except Exception:
+            pass
 
         # Add to scene graph
         scene_graph.scene.addItem(item)
@@ -5026,6 +5122,49 @@ class VoiceoverPanel(QWidget):
 class KeyboardShortcutsDialog(QDialog):
     """Display keyboard shortcuts and help."""
 
+    _SHORTCUTS_TEXT = """
+EfficientManim — Keyboard Shortcuts
+=====================================
+
+File:
+  Ctrl+N          New Project
+  Ctrl+O          Open Project
+  Ctrl+S          Save Project
+  Ctrl+Shift+S    Save As
+  Ctrl+Q          Exit
+
+Edit:
+  Ctrl+Z          Undo
+  Ctrl+Y          Redo
+  Del             Delete Selected
+  Ctrl+G          Create VGroup from Selection
+
+View:
+  Ctrl+0          Fit View
+  Ctrl+=          Zoom In
+  Ctrl+-          Zoom Out
+  Ctrl+L          Auto-Layout Nodes
+  Ctrl+Alt+Delete Clear Scene
+
+Tools:
+  Ctrl+E          Export Code (.py)
+  Ctrl+Shift+C    Copy Code to Clipboard
+  Ctrl+R          Render Video
+  Ctrl+Shift+P    Add Play Node
+  Ctrl+Shift+W    Add Wait Node
+
+Help:
+  Ctrl+?          Show Shortcuts
+  Ctrl+,          Edit Keybindings
+
+Canvas:
+  Middle Mouse    Pan Canvas
+  Ctrl+Scroll     Zoom In/Out
+  Ctrl+A          Select All Nodes
+
+Use Help → Edit Keybindings… to customize any shortcut.
+"""
+
     def __init__(self, parent=None):
         super().__init__(parent)
         self.setWindowTitle("Keyboard Shortcuts")
@@ -5034,7 +5173,7 @@ class KeyboardShortcutsDialog(QDialog):
 
         text_display = QTextEdit()
         text_display.setReadOnly(True)
-        text_display.setPlainText(KeyboardShortcuts.describe_shortcuts())  # pyright: ignore[reportUndefinedVariable]
+        text_display.setPlainText(self._SHORTCUTS_TEXT)
         layout.addWidget(text_display)
 
         close_btn = QPushButton("Close")
@@ -5825,6 +5964,21 @@ class VGroupPanel(QWidget):
         except Exception as _e:
             LOGGER.warn(f"Could not create VGROUP canvas node for '{name}': {_e}")
 
+        # Broadcast VGroup creation to collaborators
+        mw = self.main_window
+        if (
+            hasattr(mw, "collab")
+            and mw.collab.is_connected
+            and not getattr(mw, "_collab_applying", False)
+        ):
+            try:
+                mw.collab.send_delta(
+                    "vgroup_created",
+                    {"vgroup_id": name, "member_node_ids": ids},
+                )
+            except Exception:
+                pass
+
         # Select the new group in tree
         for i in range(self.tree.topLevelItemCount()):
             it = self.tree.topLevelItem(i)
@@ -6004,6 +6158,17 @@ class VGroupPanel(QWidget):
         self._groups.pop(name, None)
         self._meta.pop(name, None)
         self._refresh_tree()
+        # Broadcast deletion to collaborators
+        mw = self.main_window
+        if (
+            hasattr(mw, "collab")
+            and mw.collab.is_connected
+            and not getattr(mw, "_collab_applying", False)
+        ):
+            try:
+                mw.collab.send_delta("vgroup_deleted", {"vgroup_id": name})
+            except Exception:
+                pass
 
     # ── Public API ────────────────────────────────────────────────────────────
 
@@ -6054,6 +6219,26 @@ class VGroupPanel(QWidget):
         if new_count:
             self._refresh_tree()
         return new_count
+
+    def add_group_from_collab(self, name: str, member_ids: list) -> None:
+        """Register a VGroup received from a collaboration delta."""
+        if name in self._groups:
+            return
+        self._groups[name] = list(member_ids)
+        members = []
+        if hasattr(self, "main_window"):
+            for mid in member_ids:
+                node = self.main_window.nodes.get(mid)
+                if node:
+                    members.append(node.data.name)
+        self._meta[name] = {"source": "collab", "members": members}
+        self._refresh_tree()
+
+    def delete_group_from_collab(self, name: str) -> None:
+        """Remove a VGroup received via collaboration delta."""
+        self._groups.pop(name, None)
+        self._meta.pop(name, None)
+        self._refresh_tree()
 
 
 # ── Keybindings Panel ─────────────────────────────────────────────────────────
@@ -6569,6 +6754,20 @@ class EfficientManimWindow(QMainWindow):
         self.setup_ui()
         self.setup_menu()
         self.apply_theme()
+        self._collab_applying = False
+        self._collab_suppress = False
+
+        # Collaboration manager + UI
+        self.collab = CollaborationManager(self)
+        self.collab_client_id = self.collab.client_id
+        self.collab.session_started.connect(self._on_collab_started)
+        self.collab.session_ended.connect(self._on_collab_ended)
+        self.collab.participants_changed.connect(self._on_collab_participants)
+        self.collab.status_message.connect(self._on_collab_status)
+        self.setup_collaboration_ui()
+        # Keep the server-side graph cache fresh whenever the graph changes
+        # (graph_changed_signal fires on main thread, so serialize_graph is safe)
+        self.scene.graph_changed_signal.connect(self.collab.update_graph_cache)
 
         # FIX: Ensure window is destroyed on close to trigger destroyed signal in home.py
         self.setAttribute(Qt.WidgetAttribute.WA_DeleteOnClose)
@@ -6647,6 +6846,7 @@ class EfficientManimWindow(QMainWindow):
 
         # 1. Top: Graph Scene
         self.scene = GraphScene()
+        self.scene.main_window = self
         self.scene.selection_changed_signal.connect(self.on_selection)
         self.scene.graph_changed_signal.connect(self.mark_modified)
         self.scene.graph_changed_signal.connect(self.compile_graph)
@@ -6682,7 +6882,7 @@ class EfficientManimWindow(QMainWindow):
         self.tabs_top = QTabWidget()
 
         # Initialize Panels
-        self.panel_props = PropertiesPanel()
+        self.panel_props = PropertiesPanel(self)
         self.panel_props.node_updated.connect(self.mark_modified)
         self.panel_props.node_updated.connect(self.on_node_changed)
 
@@ -6921,6 +7121,14 @@ class EfficientManimWindow(QMainWindow):
         tools_menu.addAction("Open Manim Documentation", self._open_manim_docs)
         tools_menu.addAction("Open Gallery / Examples", self._open_manim_gallery)
 
+        # Collaboration Menu
+        collab_menu = bar.addMenu("Collaboration")
+        collab_menu.addAction("Start Live Collaboration", self.start_collaboration)
+        collab_menu.addAction("Join Collaboration", self.join_collaboration)
+        collab_menu.addAction("View Active Session", self.view_collaboration)
+        collab_menu.addSeparator()
+        collab_menu.addAction("End Session / Disconnect", self.end_collaboration)
+
         # Help Menu
         help_menu = bar.addMenu("Help")
         help_menu.addAction(
@@ -6971,6 +7179,116 @@ class EfficientManimWindow(QMainWindow):
             lambda: self._mcp_exec_and_notify("save_project", {})
         )
         mcp_menu.addAction(mcp_save_action)
+
+    # ── Collaboration UI ───────────────────────────────────────────────────
+
+    def setup_collaboration_ui(self):
+        """Initialize collaboration toolbar and participant panel."""
+        self.collab_toolbar = QToolBar("Collaboration", self)
+        self.addToolBar(Qt.ToolBarArea.TopToolBarArea, self.collab_toolbar)
+        self.collab_widget = SessionWidget()
+        self.collab_widget.set_active(False)
+        self.collab_widget.end_requested.connect(self.end_collaboration)
+        self.collab_toolbar.addWidget(self.collab_widget)
+
+        # Participants panel
+        self.collab_participants = ParticipantPanel()
+        self.collab_participants_dock = QDockWidget("🤝 Participants", self)
+        self.collab_participants_dock.setWidget(self.collab_participants)
+        self.addDockWidget(
+            Qt.DockWidgetArea.RightDockWidgetArea, self.collab_participants_dock
+        )
+        self.collab_participants_dock.hide()
+
+    def _on_collab_started(self, pin: str):
+        self.collab_widget.set_pin(pin)
+        self.collab_widget.set_active(True)
+        role = "Host" if self.collab.is_hosting else "Guest"
+        self.collab_widget.set_role(role)
+        self.statusBar().showMessage(f"Collaboration active ({role}). PIN: {pin}", 4000)
+
+    def _on_collab_ended(self, reason: str):
+        self.collab_widget.set_pin("")
+        self.collab_widget.set_active(False)
+        self.collab_widget.set_count(0)
+        self.collab_widget.set_role("")
+        self.collab_participants_dock.hide()
+        self.statusBar().showMessage(f"Collaboration ended ({reason})", 3000)
+
+    def _on_collab_participants(self, participants: dict):
+        self.collab_widget.set_count(len(participants))
+        self.collab_participants.update_participants(participants)
+        if participants:
+            self.collab_participants_dock.show()
+
+    def _on_collab_status(self, message: str):
+        if message:
+            self.statusBar().showMessage(message, 4000)
+
+    def start_collaboration(self):
+        pin = self.collab.start_host()
+        if not pin:
+            QMessageBox.information(
+                self, "Collaboration", "A session is already active."
+            )
+            return
+        dlg = StartCollabDialog(
+            pin,
+            host_ip=self.collab.host_ip,
+            port=self.collab.host_port,
+            parent=self,
+        )
+        dlg.exec()
+
+    def join_collaboration(self):
+        if self.collab.is_connected:
+            QMessageBox.information(
+                self, "Collaboration", "Already connected to a session."
+            )
+            return
+        dlg = JoinCollabDialog(self)
+        if dlg.exec() != QDialog.DialogCode.Accepted:
+            return
+        pin = dlg.pin()
+        if len(pin) != 6:
+            QMessageBox.warning(
+                self, "Collaboration", "Please enter a valid 6-digit PIN."
+            )
+            return
+        self.statusBar().showMessage(f"Looking up PIN {pin}…", 2000)
+        ok = self.collab.join_session(pin)
+        if not ok:
+            QMessageBox.warning(
+                self,
+                "Collaboration — PIN Not Found",
+                f"Session PIN '{pin}' was not found in the local registry.\n\n"
+                "Checklist:\n"
+                "  1. The host must click Collaboration → Start Live Collaboration first\n"
+                "  2. Both windows must be running on the same machine\n"
+                "  3. Make sure you typed the PIN correctly (6 digits)\n\n"
+                f"Registry path: {__import__('pathlib').Path.home() / '.efficientmanim' / 'collab_sessions.json'}",
+            )
+            return
+        self.statusBar().showMessage(f"Connecting to session {pin}… (check Logs tab)", 5000)
+
+    def view_collaboration(self):
+        if not self.collab.is_connected:
+            QMessageBox.information(self, "Collaboration", "No active session.")
+            return
+        dlg = StartCollabDialog(
+            self.collab.pin,
+            host_ip=self.collab.host_ip,
+            port=self.collab.host_port,
+            parent=self,
+        )
+        # Keep participant count live
+        dlg.set_participant_count(self.collab.server.client_count if self.collab.server else 0)
+        dlg.exec()
+
+    def end_collaboration(self):
+        if not self.collab.is_connected:
+            return
+        self.collab.end_session("ended")
 
     # --- MENU ACTIONS ---
 
@@ -7281,6 +7599,10 @@ class EfficientManimWindow(QMainWindow):
                 data = NodeData(ndata["cls_name"], nt, ndata["var_name"])
                 data.params = ndata.get("params", {})
                 node = NodeItem(data)
+                try:
+                    node._window = self
+                except Exception:
+                    pass
                 node.setPos(ndata.get("x", 0), ndata.get("y", 0))
                 self.scene.addItem(node)
                 self.nodes[data.id] = node
@@ -7298,6 +7620,16 @@ class EfficientManimWindow(QMainWindow):
         self._load_scene_state(name)
         self.statusBar().showMessage(f"Scene: {name}", 2000)
         self.compile_graph()
+        # Broadcast scene switch to all collaborators
+        if (
+            hasattr(self, "collab")
+            and self.collab.is_connected
+            and not getattr(self, "_collab_applying", False)
+        ):
+            try:
+                self.collab.send_delta("scene_switched", {"scene_name": name})
+            except Exception:
+                pass
 
     def _on_scene_added(self, name: str):
         """A new scene was added."""
@@ -7333,6 +7665,10 @@ class EfficientManimWindow(QMainWindow):
             if nt == NodeType.WAIT:
                 data.params = {"duration": 1.0}
             node = NodeItem(data)
+            try:
+                node._window = self
+            except Exception:
+                pass
             node.setPos(50, 50 + len(self.nodes) * 120)
             self.scene.addItem(node)
             self.nodes[data.id] = node
@@ -7350,10 +7686,20 @@ class EfficientManimWindow(QMainWindow):
         selected = [
             item for item in self.scene.selectedItems() if isinstance(item, NodeItem)
         ]
-        if selected:
-            ids = [item.data.id for item in selected]
-            self.panel_vgroup.create_group_from_selection(ids)
-            self.statusBar().showMessage(f"VGroup created with {len(ids)} nodes", 2000)
+        if not selected:
+            return
+        ids = [item.data.id for item in selected]
+        # Use VGroupPanel's internal create logic
+        if hasattr(self, "panel_vgroup"):
+            self.panel_vgroup._groups[f"vgroup_{len(self.panel_vgroup._groups)+1}"] = ids
+            name = f"vgroup_{len(self.panel_vgroup._groups)}"
+            self.panel_vgroup._meta[name] = {
+                "source": "canvas",
+                "members": [self.nodes[i].data.name for i in ids if i in self.nodes],
+            }
+            self.panel_vgroup._refresh_tree()
+            self.add_vgroup_node(group_name=name, member_ids=ids)
+        self.statusBar().showMessage(f"VGroup created with {len(ids)} nodes", 2000)
 
     def mark_modified(self):
         """Mark project as modified and update window title."""
@@ -7446,6 +7792,7 @@ class EfficientManimWindow(QMainWindow):
         # Clean up temp files
         AppPaths.force_cleanup_old_files(age_seconds=0)
 
+        should_close = False
         if self.project_modified and self.nodes:
             reply = QMessageBox.question(
                 self,
@@ -7462,12 +7809,21 @@ class EfficientManimWindow(QMainWindow):
                 if self.project_modified:
                     event.ignore()
                 else:
-                    event.accept()
+                    should_close = True
             elif reply == QMessageBox.StandardButton.Discard:
-                event.accept()
+                should_close = True
             else:
                 event.ignore()
         else:
+            should_close = True
+
+        if should_close:
+            # End collaboration session gracefully
+            if hasattr(self, "collab") and getattr(self.collab, "is_connected", False):
+                try:
+                    self.collab.end_session("closed")
+                except Exception:
+                    pass
             event.accept()
 
     # ═══════════════════════════════════════════════════════════════════════════
@@ -7887,11 +8243,42 @@ class EfficientManimWindow(QMainWindow):
         data.pos_x, data.pos_y = pos
 
         item = NodeItem(data)
+        try:
+            item._window = self
+        except Exception:
+            pass
         self.scene.addItem(item)
         self.nodes[data.id] = item
         LOGGER.info(
             f"Created {cls_name} ({ntype.name}) as '{display_name}' id={data.id[:8]}"
         )
+        # Collaboration: broadcast this new node to all peers
+        if (
+            hasattr(self, "collab")
+            and self.collab.is_connected
+            and not getattr(self, "_collab_applying", False)
+            and not getattr(self, "_collab_suppress", False)
+        ):
+            try:
+                self.collab.send_delta(
+                    "node_added",
+                    {
+                        "node_id": data.id,
+                        "node_type": ntype.name,
+                        "cls_name": cls_name,
+                        "name": display_name,
+                        "x": float(pos[0]),
+                        "y": float(pos[1]),
+                        "params": dict(data.params),
+                        "param_metadata": dict(data.param_metadata),
+                        "audio_asset_id": data.audio_asset_id,
+                        "voiceover_transcript": data.voiceover_transcript,
+                        "voiceover_duration": data.voiceover_duration,
+                        "is_ai_generated": data.is_ai_generated,
+                    },
+                )
+            except Exception:
+                pass
         self.compile_graph()  # Auto-Refresh
         return item
 
@@ -7904,6 +8291,17 @@ class EfficientManimWindow(QMainWindow):
         self.compile_graph()  # Auto-Refresh
 
     def remove_node(self, node):
+        # Collaboration: broadcast deletion BEFORE actually removing
+        if (
+            hasattr(self, "collab")
+            and self.collab.is_connected
+            and not getattr(self, "_collab_applying", False)
+            and not getattr(self, "_collab_suppress", False)
+        ):
+            try:
+                self.collab.send_delta("node_deleted", {"node_id": node.data.id})
+            except Exception:
+                pass
         # FIX: Clean up preview worker for this node
         self._cleanup_preview_worker(node.data.id)
 
@@ -7928,6 +8326,174 @@ class EfficientManimWindow(QMainWindow):
         self.scene.removeItem(wire)
         # Graph Changed (Handled by delete_selected, but good for singular removals)
 
+        # Collaboration delta
+        if hasattr(self, "collab") and self.collab.is_connected and not self._collab_applying:
+            wire_id = getattr(wire, "wire_id", None)
+            if wire_id:
+                try:
+                    self.collab.send_delta("wire_deleted", {"wire_id": wire_id})
+                except Exception:
+                    pass
+
+    # ── Collaboration helpers ───────────────────────────────────────────
+
+    def on_node_moved(self, node):
+        if not hasattr(self, "collab") or not self.collab.is_connected:
+            return
+        if self._collab_applying or self._collab_suppress:
+            return
+        self.collab.send_delta(
+            "node_moved",
+            {
+                "node_id": node.data.id,
+                "x": float(node.data.pos_x),
+                "y": float(node.data.pos_y),
+            },
+        )
+        # Track which node the local user is editing
+        try:
+            self.collab.update_active_node(node.data.id)
+        except Exception:
+            pass
+
+    def on_node_property_changed(self, node, key, value):
+        if not hasattr(self, "collab") or not self.collab.is_connected:
+            return
+        if self._collab_applying:
+            return
+        prop_key = "__name__" if key == "_name" else key
+        self.collab.send_delta(
+            "node_property_changed",
+            {
+                "node_id": node.data.id,
+                "property_key": prop_key,
+                "new_value": value,
+            },
+        )
+
+    def on_wire_added(self, wire):
+        if not hasattr(self, "collab") or not self.collab.is_connected:
+            return
+        if self._collab_applying:
+            return
+        try:
+            self.collab.send_delta(
+                "wire_added",
+                {
+                    "wire_id": getattr(wire, "wire_id", None),
+                    "from_node": wire.start_socket.parentItem().data.id,
+                    "from_port": "out",
+                    "to_node": wire.end_socket.parentItem().data.id,
+                    "to_port": "in",
+                },
+            )
+        except Exception:
+            pass
+
+    def add_wire_by_ids(self, from_node_id: str, to_node_id: str, wire_id=None):
+        if from_node_id not in self.nodes or to_node_id not in self.nodes:
+            return None
+        src = self.nodes[from_node_id].out_socket
+        dst = self.nodes[to_node_id].in_socket
+        return self.scene.try_connect(src, dst, wire_id=wire_id)
+
+    def remove_wire_by_id(self, wire_id: str):
+        if not wire_id:
+            return
+        for item in list(self.scene.items()):
+            if isinstance(item, WireItem) and getattr(item, "wire_id", None) == wire_id:
+                self.remove_wire(item)
+                break
+
+    def load_graph_from_json(self, graph_json: dict):
+        """Clear canvas and load graph JSON (used by collaboration sync)."""
+        try:
+            # Suppress all outgoing deltas while rebuilding from remote state
+            prev_suppress = getattr(self, "_collab_suppress", False)
+            self._collab_suppress = True
+            # Clean existing nodes
+            for node_id in list(self.nodes.keys()):
+                self._cleanup_preview_worker(node_id)
+            self.nodes.clear()
+            self.scene.clear()
+
+            node_map = {}
+            for nd in graph_json.get("nodes", []):
+                node = self.add_node(
+                    nd.get("type", "MOBJECT"),
+                    nd.get("cls_name", ""),
+                    params=nd.get("params", {}),
+                    pos=tuple(nd.get("pos", (0, 0))),
+                    nid=nd.get("id"),
+                    name=nd.get("name"),
+                )
+                # Restore metadata
+                node.data.param_metadata = nd.get("param_metadata", {})
+                node.data.audio_asset_id = nd.get("audio_asset_id")
+                node.data.voiceover_transcript = nd.get("voiceover_transcript")
+                node.data.voiceover_duration = float(nd.get("voiceover_duration", 0.0))
+                node.data.is_ai_generated = bool(nd.get("is_ai_generated", False))
+                node_map[node.data.id] = node
+
+            for w in graph_json.get("wires", []):
+                self.add_wire_by_ids(
+                    w.get("from_node"),
+                    w.get("to_node"),
+                    wire_id=w.get("wire_id"),
+                )
+            self.compile_graph()
+        except Exception as e:
+            LOGGER.warn(f"Failed to load graph JSON: {e}")
+        finally:
+            self._collab_suppress = prev_suppress
+
+    def collab_request_lock(self, node_id: str):
+        """Request a collaborative node lock for this client."""
+        if hasattr(self, "collab"):
+            self.collab.lock_node(node_id)
+
+    def collab_release_lock(self, node_id: str):
+        """Release collaborative lock on a node."""
+        if hasattr(self, "collab"):
+            self.collab.unlock_node(node_id)
+
+    def collab_get_lock(self, node_id: str):
+        """Return LockInfo if node is locked, else None."""
+        if hasattr(self, "collab"):
+            return self.collab.lock_manager.get_lock(node_id)
+        return None
+
+    def is_node_locked_by_other(self, node_id: str) -> bool:
+        """Return True if node is locked by a different collaborator."""
+        lock = self.collab_get_lock(node_id)
+        if not lock:
+            return False
+        return lock.owner_id != getattr(self, "collab_client_id", None)
+
+    def collab_lock_node(self, node_id: str, owner_id, owner_name, owner_color, expires_at=None):
+        """Apply an incoming lock delta from a remote collaborator."""
+        import time as _t
+        if hasattr(self, "collab"):
+            # expires_at from remote uses time.monotonic on that machine — use local TTL
+            local_expires = _t.monotonic() + self.collab.lock_manager.ttl_seconds
+            self.collab.lock_manager.lock(
+                node_id,
+                owner_id or "",
+                owner_name or "",
+                owner_color or "#9ca3af",
+                local_expires,
+            )
+        node = self.nodes.get(node_id)
+        if node:
+            node.update()
+
+    def collab_unlock_node(self, node_id: str):
+        """Apply an incoming unlock delta from a remote collaborator."""
+        if hasattr(self, "collab"):
+            self.collab.lock_manager.unlock(node_id)
+        node = self.nodes.get(node_id)
+        if node:
+            node.update()
     def on_selection(self):
         sel = self.scene.selectedItems()
         if len(sel) == 1 and isinstance(sel[0], NodeItem):
@@ -8874,6 +9440,13 @@ class EfficientManimWindow(QMainWindow):
                 self.code_view.setText(code)
                 self.is_ai_generated_code = True
                 LOGGER.ai("Code view updated with AI-generated code")
+                # Collaboration: broadcast the entire new graph to all peers
+                # (AI merge bypasses per-node add_node hooks, so force full sync)
+                if hasattr(self, "collab") and self.collab.is_connected:
+                    try:
+                        self.collab.broadcast_full_graph()
+                    except Exception:
+                        pass
                 # ── VGroup auto-registration from AI-generated code ────────
                 if hasattr(self, "panel_vgroup") and "VGroup" in code:
                     n = self.panel_vgroup.register_snippet_vgroups(code, source="ai")
@@ -9151,6 +9724,16 @@ class EfficientManimWindow(QMainWindow):
 # ==============================================================================
 
 if __name__ == "__main__":
+    import logging as _logging
+    _logging.basicConfig(
+        level=_logging.DEBUG,
+        format="%(asctime)s %(levelname)-7s %(name)s: %(message)s",
+        datefmt="%H:%M:%S",
+    )
+    # Reduce noise from websockets internals
+    _logging.getLogger("websockets").setLevel(_logging.WARNING)
+    _logging.getLogger("asyncio").setLevel(_logging.WARNING)
+
     app = QApplication(sys.argv)
 
     # Set application icon at QApplication level BEFORE any window is created
