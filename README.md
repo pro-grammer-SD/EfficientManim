@@ -2,6 +2,8 @@
 
 ![Icon](icon/icon.ico)
 
+[![IdeaCred](https://ideacred.com/api/badge/pro-grammer-SD/EfficientManim?style=for-the-badge)](https://ideacred.com/submissions)
+
 **🌈 Create mathematical animations visually with the power of Python, AI, and real-time collaboration.**
 
 ---
