@@ -81,9 +81,10 @@ This makes the app easier to learn, faster to use, and far more intuitive overal
 
 ---
 
-## ✨ For more information
+## 🏗️ Architectural Details
 
-See [here](docs/README.md)
+For a detailed breakdown of the project structure, design decisions, and internal architecture, see:
+[docs/README.md](docs/README.md)
 
 ---
 
