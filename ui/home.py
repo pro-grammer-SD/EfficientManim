@@ -188,4 +188,3 @@ class HomeScreen(QWidget):
         path = item.data(Qt.ItemDataRole.UserRole)
         if path:
             self.recent_project_requested.emit(path)
-            

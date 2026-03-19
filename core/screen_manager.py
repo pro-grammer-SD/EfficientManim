@@ -22,8 +22,6 @@ try:
         QWidget,
         QStackedWidget,
         QVBoxLayout,
-
-
         QFrame,
     )
     from PySide6.QtCore import Signal, QObject

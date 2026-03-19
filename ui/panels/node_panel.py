@@ -1965,7 +1965,7 @@ class AIPanel(QWidget):
         """Walk up the widget tree to find the EfficientManimWindow."""
         widget = self.parent()
         while widget is not None:
-            if type(widget).__name__ == 'EfficientManimWindow':
+            if type(widget).__name__ == "EfficientManimWindow":
                 return widget
             widget = widget.parent()
         return None
@@ -4181,7 +4181,3 @@ class ProjectNameWidget(QWidget):
 # ==============================================================================
 # 9. MAIN WINDOW
 # ==============================================================================
-
-
-
-

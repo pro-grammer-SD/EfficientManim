@@ -2551,5 +2551,3 @@ class EfficientManimWindow(QMainWindow):
             c = "purple"
         ts = datetime.now().strftime("%H:%M:%S")
         self.logs.append(f"<span style='color:{c}'><b>[{ts}] {level}:</b> {msg}</span>")
-
-
