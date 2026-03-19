@@ -60,6 +60,7 @@ def main() -> None:
         home_window.close()
 
     home_window = QMainWindow()
+    home_window.setStyleSheet("QMainWindow { background-color: #ffffff; }")
     home_screen = HomeScreen()
     home_window.setCentralWidget(home_screen)
     home_window.setWindowTitle("EfficientManim")
