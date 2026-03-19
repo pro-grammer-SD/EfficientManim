@@ -11,9 +11,9 @@ EfficientManim integrates Google Gemini across four major AI workflows: code gen
 ### How It Works
 
 1. Type a description in the **AI Assistant** dock on the left.
-2. Click **⚡ Generate Code**.
+2. Click **Generate Code**.
 3. Gemini streams back a complete `Scene.construct()` Python block.
-4. When streaming finishes, click **✅ Merge to Scene** to parse the code into nodes, or **❌ Reject** to discard.
+4. When streaming finishes, click **Merge to Scene** to parse the code into nodes, or **Reject** to discard.
 
 ### Writing Good Prompts
 
@@ -54,7 +54,7 @@ Go to **File → Settings → Code Model** to choose between:
 
 ## MCP Agent Mode
 
-Enable the **🔌 MCP Agent Mode** checkbox in the AI panel before clicking Generate.
+Enable the **MCP Agent Mode** checkbox in the AI panel before clicking Generate.
 
 Instead of generating Python code, Gemini reads the live scene state and outputs a JSON array of typed commands executed directly against the running application.
 
@@ -98,13 +98,13 @@ Use **Help → MCP Agent** submenu:
 - **MCP Status / Ping** — shows node count and command count
 - **Inspect Scene Context (JSON)** — full MCPContext as formatted JSON
 - **List All Commands** — all registered command names
-- **Show Action Log** — every command executed this session
+- **Show Action Log** — every command executed in this run
 
 ---
 
 ## Auto Voiceover Agent
 
-Enable the **🎙️ Enable Auto Voiceover** checkbox in the AI panel before clicking Generate.
+Enable the **Enable Auto Voiceover** checkbox in the AI panel before clicking Generate.
 
 ### What It Does
 
@@ -125,16 +125,16 @@ After completion:
 
 ## TTS Voiceover Studio
 
-The **🎙️ Voiceover** tab lets you generate, preview, and attach TTS audio to individual nodes.
+The **Voiceover** tab lets you generate, preview, and attach TTS audio to individual nodes.
 
 ### Workflow
 
 1. Select a target node from the dropdown (any node type is supported).
 2. Write your script in the text box.
 3. Choose a voice: Puck, Charon, Kore, Fenrir, Aoede, or Zephyr.
-4. Click **⚡ Generate Audio** — TTS streams via `gemini-2.5-flash-preview-tts`.
+4. Click **Generate Audio** — TTS streams via `gemini-2.5-flash-preview-tts`.
 5. Preview the audio with the built-in player (play, pause, stop, seek).
-6. Click **📎 Add to Animation Node** to attach.
+6. Click **Add to Animation Node** to attach.
 
 ### Audio Player Controls
 
@@ -149,7 +149,7 @@ When a node has an attached voiceover, the compiler:
 1. Reads the audio file duration via `pydub`.
 2. Uses that duration as `run_time=` for the animation.
 3. Places the audio segment at the correct timeline offset.
-4. Merges all segments into `~/.efficientmanim/session/merged_vo_XXXX.wav`.
+4. Merges all segments into `<temp>/merged_vo_XXXX.wav`.
 5. Injects `self.add_sound(r'path/to/merged_vo.wav')` at the top of `construct()`.
 
 ### TTS Model Selection

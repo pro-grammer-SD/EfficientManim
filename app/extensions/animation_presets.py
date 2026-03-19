@@ -1,3 +1,6 @@
+# ruff: noqa: E402
+from __future__ import annotations
+
 """
 Animation Presets Extension — ✨ Quick Effects
 
@@ -16,8 +19,6 @@ Presets:
 All presets produce valid Manim Community Edition Python that the renderer
 can execute immediately.
 """
-
-from __future__ import annotations
 
 import logging
 import textwrap
@@ -370,7 +371,7 @@ class QuickEffectsPanel(QWidget):
         """
         Return the Python variable name for the currently selected graph node.
 
-        Walks up the widget tree to find EfficientManimWindow and inspects its
+        Walks up the widget tree to find __import__('ui.main_window').main_window.EfficientManimWindow and inspects its
         `scene.selectedItems()`.  Falls back to self._selected_obj.
         """
         try:
@@ -456,13 +457,16 @@ class QuickEffectsPanel(QWidget):
     # ── Window helpers ────────────────────────────────────────────────────────
 
     def _get_main_window(self):
-        """Walk widget tree to find EfficientManimWindow."""
+        """Walk widget tree to find __import__('ui.main_window').main_window.EfficientManimWindow."""
         if self._main_window is not None:
             return self._main_window
         widget = self
         while widget is not None:
             # Import lazily to avoid circular deps at module load time
-            if type(widget).__name__ == "EfficientManimWindow":
+            if (
+                type(widget).__name__
+                == "__import__('ui.main_window').main_window.EfficientManimWindow"
+            ):
                 self._main_window = widget
                 return widget
             widget = widget.parent()
@@ -470,7 +474,10 @@ class QuickEffectsPanel(QWidget):
         app = QApplication.instance()
         if app:
             for w in app.topLevelWidgets():
-                if type(w).__name__ == "EfficientManimWindow":
+                if (
+                    type(w).__name__
+                    == "__import__('ui.main_window').main_window.EfficientManimWindow"
+                ):
                     self._main_window = w
                     return w
         return None

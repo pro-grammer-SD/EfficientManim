@@ -4,3 +4,4 @@ __pycache__/
 local/
 *.pyc
 *.zip
+*.rar

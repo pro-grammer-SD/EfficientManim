@@ -54,7 +54,7 @@ def setup(api):
 
 
 try:
-    from manim import Tex, VGroup
+    from manim import Tex
 
     MANIM_AVAILABLE = True
 except ImportError:

@@ -1,3 +1,6 @@
+# ruff: noqa: E402
+from PySide6.QtWidgets import QMainWindow
+
 """
 extension_registry.py — Central registry for extension-provided panels
 
@@ -82,7 +85,7 @@ class ExtensionRegistry:
         """
         Create and add all registered panels to the main window.
 
-        Called once after EfficientManimWindow.__init__() completes.
+        Called once after __import__('ui.main_window').main_window.EfficientManimWindow.__init__() completes.
 
         Returns:
             {panel_name: widget_instance} for all successfully created panels

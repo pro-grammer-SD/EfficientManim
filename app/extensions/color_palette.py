@@ -284,7 +284,7 @@ class ColorPalettePanel(QWidget):
                 color.alpha(),
             )
             return color.name()
-        except:
+        except Exception:
             return "#1d4ed8"  # Default dark blue
 
     @staticmethod
@@ -299,7 +299,7 @@ class ColorPalettePanel(QWidget):
                 color.alpha(),
             )
             return color.name()
-        except:
+        except Exception:
             return "#dbeafe"  # Default light blue
 
     def get_palette(self, name: str) -> list:

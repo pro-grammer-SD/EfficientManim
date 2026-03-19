@@ -34,8 +34,8 @@ from typing import Dict, Optional, List, Tuple
 from dataclasses import dataclass
 
 try:
-    from PySide6.QtCore import QObject, Signal, QSettings
-    from PySide6.QtGui import QKeySequence
+    from PySide6.QtCore import QObject, Signal
+    
 
     HAS_PYSIDE = True
 except ImportError:

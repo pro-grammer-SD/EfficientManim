@@ -54,7 +54,7 @@ class AutosaveManager(QObject if HAS_PYSIDE else object):
         self._last_assets_hash = ""
         self._last_keybindings_hash = ""
 
-        # Compute functions (will be set by EfficientManimWindow)
+        # Compute functions (will be set by __import__('ui.main_window').main_window.EfficientManimWindow)
         self._compute_code_hash: Optional[Callable[[], str]] = None
         self._compute_graph_hash: Optional[Callable[[], str]] = None
         self._compute_assets_hash: Optional[Callable[[], str]] = None

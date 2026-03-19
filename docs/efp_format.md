@@ -60,11 +60,7 @@ my_project.efp  (ZIP)
       "voiceover_duration": 0.0,
       "is_ai_generated": false,
       "ai_source": null,
-      "ai_code_snippet": null,
-      "lock_owner_id": null,
-      "lock_owner_name": null,
-      "lock_owner_color": null,
-      "lock_expires_at": 0.0
+      "ai_code_snippet": null
     }
   ],
   "wires": [
@@ -160,5 +156,5 @@ Never rename or remove existing keys — this would break backward compatibility
 
 | App Version | Notes |
 |---|---|
-| 2.0.0+ | Current format. Collaboration lock fields (`lock_owner_id` etc.) are new but optional — old files that lack them load with null defaults. |
+| 2.0.5+ | Current format. `var_name`, `param_metadata`, and AI metadata are optional and backward-compatible. |
 | Pre-2.0 | Earlier formats may lack `var_name`, `param_metadata`, `is_ai_generated`. All handled by `.get()` fallbacks in `NodeData.from_dict()`. |

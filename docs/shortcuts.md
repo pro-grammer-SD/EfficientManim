@@ -106,6 +106,5 @@ The registry tracks all reserved shortcuts. If you attempt to assign a shortcut 
 
 ## Tips
 
-- Nodes that are **locked** by a collaborator show a 🔒 icon — you cannot move or edit them until the lock expires (10 seconds) or the collaborator releases it.
 - The canvas filter bar (`🔍 Filter nodes…` above the canvas) dims non-matching nodes so you can quickly locate what you're looking for.
 - `Ctrl+L` auto-layout separates Mobjects (column 1) and Animations (column 2), then calls `fit_view` automatically.

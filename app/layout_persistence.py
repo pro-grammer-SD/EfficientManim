@@ -18,7 +18,7 @@ Survives app restarts.
 import json
 import logging
 from pathlib import Path
-from typing import Dict, Any, Optional
+from typing import Dict, Any, Optional, Tuple
 
 LOGGER = logging.getLogger("layout_persistence")
 

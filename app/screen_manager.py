@@ -20,7 +20,7 @@ try:
         QVBoxLayout,
         QFrame,
     )
-    from PySide6.QtCore import Qt, Signal, QObject
+    from PySide6.QtCore import Signal, QObject
 
     HAS_PYSIDE = True
 except ImportError:

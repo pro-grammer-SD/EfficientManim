@@ -36,7 +36,7 @@ source venv/bin/activate
 pip install -r requirements.txt
 ```
 
-This installs: `manim`, `PySide6`, `google-genai`, `pydub`, `requests`, `numpy`, `websockets`.
+This installs: `manim`, `PySide6`, `google-genai`, `pydub`, `requests`, `numpy`.
 
 ### 4. Install system dependencies
 
@@ -62,10 +62,6 @@ export GEMINI_API_KEY=your_key_here
 ### 6. Launch the application
 
 ```bash
-# Open the home screen:
-python home.py
-
-# Or open the editor directly:
 python main.py
 ```
 
@@ -79,7 +75,7 @@ python main.py
 4. Double-click `▶ Play` (at the top of the Elements tab) to add a Play node.
 5. Connect: `Circle → FadeIn`, then `FadeIn → Play`.
 6. Check the **Code** tab at the bottom — you should see `self.play(FadeIn(m_xxxxxx))`.
-7. Click **📽 Render Full Scene** in the Video tab to produce an MP4.
+7. Click **Render Scene** in the Video tab to produce an MP4.
 
 ---
 
@@ -93,9 +89,6 @@ Make sure you are not mixing 32-bit and 64-bit Python installations.
 
 **`ModuleNotFoundError: No module named 'google.genai'`**
 Run `pip install google-genai>=0.3.0`.
-
-**`websockets` import error**
-Run `pip install websockets>=11.0`. This is required for Live Collaboration.
 
 **LaTeX-related Manim errors**
 Install the full TeX Live distribution. On Windows, run MiKTeX's package manager and install `standalone`, `amsmath`, and `preview`.

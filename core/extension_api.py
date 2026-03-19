@@ -1,3 +1,4 @@
+# ruff: noqa: E402
 """
 extension_api.py — Safe API for extensions to interact with host
 

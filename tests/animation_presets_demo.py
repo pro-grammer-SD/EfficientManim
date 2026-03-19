@@ -8,7 +8,34 @@ Run with:
     manim -pql animation_presets_demo.py QuickEffectsPresetsDemo
 """
 
-from manim import *
+from manim import (
+    Scene,
+    Text,
+    Circle,
+    Square,
+    Star,
+    FadeIn,
+    FadeOut,
+    ScaleInPlace,
+    Rotate,
+    GrowFromCenter,
+    AddTextLetterByLetter,
+    UP,
+    DOWN,
+    YELLOW,
+    BLUE,
+    GREEN,
+    ORANGE,
+    PURPLE,
+    WHITE,
+    TAU,
+    PI,
+    there_and_back_with_pause,
+    rush_into,
+    rush_from,
+    smooth,
+    overshoot,
+)
 
 
 class QuickEffectsPresetsDemo(Scene):

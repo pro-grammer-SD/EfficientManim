@@ -22,11 +22,11 @@ try:
         QWidget,
         QStackedWidget,
         QVBoxLayout,
-        QHBoxLayout,
-        QSplitter,
+
+
         QFrame,
     )
-    from PySide6.QtCore import Qt, Signal, QObject, QSize
+    from PySide6.QtCore import Signal, QObject
 
     HAS_PYSIDE = True
 except ImportError:
@@ -84,7 +84,7 @@ class EditorScreen(QWidget if HAS_PYSIDE else object):
         self._layout = QVBoxLayout(self)
         self._layout.setContentsMargins(0, 0, 0, 0)
 
-        # Main container will be populated by EfficientManimWindow
+        # Main container will be populated by __import__('ui.main_window').main_window.EfficientManimWindow
         # This is just the framework
         main_frame = QFrame()
         main_frame.setObjectName("EditorMainFrame")
@@ -142,7 +142,7 @@ class TimelineScreen(QWidget if HAS_PYSIDE else object):
         self._layout = QVBoxLayout(self)
         self._layout.setContentsMargins(0, 0, 0, 0)
 
-        # Main timeline container will be populated by EfficientManimWindow
+        # Main timeline container will be populated by __import__('ui.main_window').main_window.EfficientManimWindow
         main_frame = QFrame()
         main_frame.setObjectName("TimelineMainFrame")
         self._layout.addWidget(main_frame)

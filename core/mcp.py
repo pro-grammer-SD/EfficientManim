@@ -1,3 +1,6 @@
+# ruff: noqa: E402
+from __future__ import annotations
+
 """
 mcp.py — Model Context Protocol for EfficientManim
 
@@ -31,13 +34,13 @@ All destructive operations (delete_node, clear_scene) require explicit
 `confirm=True` in the command payload to prevent accidental data loss.
 """
 
-from __future__ import annotations
-
 import json
 import logging
 import traceback
 from dataclasses import dataclass
 from typing import Any, Callable, Optional
+
+from graph.node import NodeData, NodeItem
 
 LOGGER = logging.getLogger("mcp")
 
@@ -164,7 +167,7 @@ class MCPContext:
 
 class MCPAgent:
     """
-    Executes MCP commands against the live EfficientManimWindow.
+    Executes MCP commands against the live __import__('ui.main_window').main_window.EfficientManimWindow.
 
     All commands are dispatched through a registry. Each handler receives
     the agent's window reference and a payload dict, and returns MCPResult.
@@ -603,7 +606,7 @@ class MCPAgent:
                     import tempfile
                     from pathlib import Path
 
-                    temp_dir = Path(tempfile.gettempdir()) / "EfficientManim_Session"
+                    temp_dir = Path(tempfile.gettempdir()) / "EfficientManim_Temp"
                     config = {
                         "fps": 30,
                         "resolution": (1280, 720),
