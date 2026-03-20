@@ -189,3 +189,12 @@ View the resulting output, demonstrating final rendering in the node canvas.
 Made with lots of ❤️💚💙 by Soumalya a.k.a. @pro-grammer-SD
 
 Discussions: https://www.reddit.com/r/manim/comments/1qck0ji/i_built_a_nodebased_manim_ide_with_ai_assistance/
+
+### 🧭 Advanced MCP + History Control
+- All actions—including node edits, wires, VGroups, scenes, project I/O, rendering, assets, AI workflows, themes, keybindings, and TTS—are now available via `docs/mcp_commands.md` with consistent structured JSON responses.
+- The rewritten `HistoryManager` captures grouped atomic operations (AI merges/imports, property edits, motion, wiring) and exposes per-node undo/redo stacks plus project/scene/node checkpoints (`docs/history_system.md`).
+- Use the new `history.*` MCP commands (`undo_project`, `redo_node`, `restore_checkpoint`, `timeline`, `replay`, etc.) to inspect diffs, summaries, and timeline metadata before issuing state changes.
+
+### 📚 Documentation Links
+- `docs/history_system.md` walks through the new history data model, checkpoint APIs, signals, and how to hook future actions into undo/redo.
+- `docs/mcp_commands.md` is the canonical MCP API reference listing every command, payload, metadata, and sample usage for AI agents.

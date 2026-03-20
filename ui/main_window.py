@@ -11,6 +11,7 @@ import uuid
 import zipfile
 import webbrowser
 from datetime import datetime
+from contextlib import nullcontext
 from pathlib import Path
 
 from PySide6.QtCore import Qt, QTimer, QSize
@@ -33,7 +34,7 @@ from PySide6.QtWidgets import (
 
 from core.config import APP_NAME, APP_VERSION, PROJECT_EXT, AppPaths, SETTINGS
 from core.file_manager import ASSETS, USAGE_TRACKER, Asset, add_recent
-from core.history_manager import UndoRedoManager
+from core.history_manager import HistoryManager, WireState
 from core.themes import THEME_MANAGER
 from graph.edge import WireItem
 from graph.graph_editor import GraphScene, GraphView
@@ -59,6 +60,7 @@ from ui.panels.node_panel import (
     VGroupPanel,
     VoiceoverPanel,
 )
+from ui.panels.history_panel import HistoryPanel
 from ui.panels.render_panel import VideoOutputPanel, VideoRenderPanel
 from ui.toolbar import QuickExportBar
 from utils.helpers import TypeSafeParser, detect_scene_class, manim
@@ -115,7 +117,7 @@ class EfficientManimWindow(QMainWindow):
 
         self.nodes = {}
         self.project_path = None
-        self.undo_manager = UndoRedoManager()
+        self.history_manager: HistoryManager | None = None
         self.project_modified = False
         self.is_ai_generated_code = False
 
@@ -141,6 +143,7 @@ class EfficientManimWindow(QMainWindow):
 
         self.setup_ui()
         build_menus(self)
+        self._init_history()
         self.apply_theme()
 
         # FIX: Ensure window is destroyed on close to trigger destroyed signal in home.py
@@ -240,6 +243,8 @@ class EfficientManimWindow(QMainWindow):
 
         self.quick_export_bar = QuickExportBar()
         self.quick_export_bar.export_requested.connect(self._quick_export)
+        self.quick_export_bar.undo_requested.connect(self.undo_action)
+        self.quick_export_bar.redo_requested.connect(self.redo_action)
         canvas_layout.addWidget(self.quick_export_bar)
 
         left_splitter.addWidget(canvas_widget)
@@ -261,6 +266,7 @@ class EfficientManimWindow(QMainWindow):
         self.panel_props.node_updated.connect(self.on_node_changed)
 
         self.panel_outliner = SceneOutlinerPanel(self)
+        self.panel_history = HistoryPanel()
 
         self.panel_elems = ElementsPanel()
         self.panel_elems.add_requested.connect(self.add_node_center)
@@ -306,6 +312,7 @@ class EfficientManimWindow(QMainWindow):
         self.tabs_top.addTab(self.panel_class_browser, "Classes")
         self.tabs_top.addTab(self.panel_vgroup, "VGroups")
         self.tabs_top.addTab(self.panel_outliner, "Outliner")
+        self.tabs_top.addTab(self.panel_history, "History")
         self.tabs_top.addTab(self.panel_props, "Properties")
         self.tabs_top.addTab(self.panel_assets, "Assets")
         self.tabs_top.addTab(self.panel_latex, "LaTeX")
@@ -351,16 +358,192 @@ class EfficientManimWindow(QMainWindow):
         main.addWidget(right)
         main.setSizes([1000, 600])
 
-    def new_project(self):
-        """Create a new project."""
-        reply = QMessageBox.question(
-            self,
-            "New Project",
-            "Clear current project?",
-            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+    # ── History System ───────────────────────────────────────────────────────
+
+    def _init_history(self) -> None:
+        """Initialize history manager, hooks, and UI bindings."""
+        self.history_manager = HistoryManager(
+            snapshot_provider=self._history_snapshot_provider,
+            apply_snapshot=self._history_apply_snapshot,
+            apply_node_state=self._history_apply_node_state,
+            scene_name_provider=lambda: self._current_scene_name,
+            max_history=None,
         )
-        if reply == QMessageBox.StandardButton.Yes:
-            self.clear_scene()
+        self.history_manager.state_changed.connect(self._update_history_actions)
+        self.history_manager.history_changed.connect(self._refresh_history_panel)
+        self.history_manager.snapshot_applied.connect(self._on_history_applied)
+        if hasattr(self, "panel_history"):
+            try:
+                self.panel_history.set_manager(self.history_manager)
+            except Exception:
+                pass
+
+        # Move history debounce
+        self._move_debounce = QTimer()
+        self._move_debounce.setSingleShot(True)
+        self._move_debounce.timeout.connect(self._commit_move_history)
+        self._pending_move_nodes: set[str] = set()
+
+        # Initialize root snapshot
+        self.history_manager.reset(description="Initial State")
+
+    def _history_snapshot_provider(self):
+        """Return raw node/wire state for snapshotting."""
+        nodes_data: dict[str, dict] = {}
+        for nid, node in self.nodes.items():
+            # Ensure live position is captured
+            try:
+                node.data.pos_x = float(node.x())
+                node.data.pos_y = float(node.y())
+            except Exception:
+                pass
+            nodes_data[nid] = node.data.to_dict()
+
+        wires: list[WireState] = []
+        for item in list(self.scene.items()):
+            if isinstance(item, WireItem):
+                try:
+                    from_id = item.start_socket.parentItem().data.id
+                    to_id = item.end_socket.parentItem().data.id
+                    wires.append(WireState(item.wire_id, from_id, to_id))
+                except Exception:
+                    pass
+        return nodes_data, wires
+
+    def _history_apply_snapshot(self, snapshot):
+        """Restore full graph from a snapshot (no history capture)."""
+        if self.history_manager is None:
+            return
+        with self.history_manager.suspend():
+            # Clean existing nodes and workers
+            for node_id in list(self.nodes.keys()):
+                self._cleanup_preview_worker(node_id)
+            self.nodes.clear()
+            self.scene.clear()
+
+            # Rebuild nodes
+            for nid, node_state in snapshot.nodes.items():
+                data = NodeData.from_dict(node_state.data)
+                node = NodeItem(data)
+                try:
+                    node._window = self
+                except Exception:
+                    pass
+                node.setPos(data.pos_x, data.pos_y)
+                self.scene.addItem(node)
+                self.nodes[data.id] = node
+
+            # Rebuild wires
+            for w in snapshot.wires:
+                self.add_wire_by_ids(w.from_node, w.to_node, wire_id=w.wire_id)
+
+            # Reset panels
+            self.panel_props.set_node(None)
+            if hasattr(self, "panel_outliner"):
+                try:
+                    self.panel_outliner.refresh_list()
+                except Exception:
+                    pass
+
+            # Update preview
+            self.preview_lbl.clear()
+            self.preview_lbl.setPixmap(QPixmap())
+            self.preview_lbl.setText("No Selection")
+
+    def _history_apply_node_state(self, node_id: str, node_data: dict | None, wires):
+        """Restore a single node and its wires (no history capture)."""
+        if self.history_manager is None:
+            return
+        with self.history_manager.suspend():
+            # Remove existing wires connected to the node
+            for item in list(self.scene.items()):
+                if isinstance(item, WireItem):
+                    try:
+                        a = item.start_socket.parentItem().data.id
+                        b = item.end_socket.parentItem().data.id
+                        if node_id in (a, b):
+                            self.remove_wire(item, record_history=False)
+                    except Exception:
+                        pass
+
+            # Delete node if no data
+            if node_data is None:
+                node_item = self.nodes.get(node_id)
+                if node_item:
+                    self.remove_node(node_item, record_history=False)
+                return
+
+            # Create or update node
+            node_item = self.nodes.get(node_id)
+            new_data = NodeData.from_dict(node_data)
+            if node_item is None:
+                node_item = NodeItem(new_data)
+                try:
+                    node_item._window = self
+                except Exception:
+                    pass
+                node_item.setPos(new_data.pos_x, new_data.pos_y)
+                self.scene.addItem(node_item)
+                self.nodes[new_data.id] = node_item
+            else:
+                node_item.data = new_data
+                node_item.setPos(new_data.pos_x, new_data.pos_y)
+                node_item.update()
+
+            # Rebuild wires for this node
+            for w in wires:
+                self.add_wire_by_ids(w.from_node, w.to_node, wire_id=w.wire_id)
+
+    def _on_history_applied(self, snapshot):
+        """Post-undo/redo UI refresh."""
+        self.is_ai_generated_code = False
+        self.compile_graph()
+        self.mark_modified()
+
+    def _update_history_actions(self, can_undo: bool, can_redo: bool):
+        """Enable/disable undo/redo UI actions."""
+        if hasattr(self, "_undo_action"):
+            self._undo_action.setEnabled(can_undo)
+        if hasattr(self, "_redo_action"):
+            self._redo_action.setEnabled(can_redo)
+        if hasattr(self, "quick_export_bar"):
+            try:
+                self.quick_export_bar.set_history_enabled(can_undo, can_redo)
+            except Exception:
+                pass
+
+    def _refresh_history_panel(self):
+        if hasattr(self, "panel_history"):
+            try:
+                self.panel_history.refresh()
+            except Exception:
+                pass
+
+    def _commit_move_history(self):
+        if not self._pending_move_nodes:
+            return
+        if self.history_manager is None:
+            return
+        ids = sorted(self._pending_move_nodes)
+        self._pending_move_nodes.clear()
+        desc = "Move Node" if len(ids) == 1 else "Move Nodes"
+        merge_key = f"move:{','.join(ids)}" if len(ids) == 1 else "move:multi"
+        self.history_manager.capture(
+            desc, merge_key=merge_key, metadata={"affected_nodes": ids}
+        )
+
+    def new_project(self, force: bool = False):
+        """Create a new project."""
+        if not force:
+            reply = QMessageBox.question(
+                self,
+                "New Project",
+                "Clear current project?",
+                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+            )
+            if reply != QMessageBox.StandardButton.Yes:
+                return
+        self.clear_scene(force=True)
 
     def save_project_as(self):
         """Save project with new name (Save As)."""
@@ -384,11 +567,7 @@ class EfficientManimWindow(QMainWindow):
         )
         if not path:
             return
-
-        # Update project path and name
-        self.project_path = path
-        self.project_name_edit.setText(Path(path).stem)
-        self.save_project()
+        self.save_project_to(path)
 
     # ══════════════════════════════════════════════════════════════════════
     # MCP MENU ACTIONS  (Help → MCP Agent submenu)
@@ -677,6 +856,8 @@ class EfficientManimWindow(QMainWindow):
         self._load_scene_state(name)
         self.statusBar().showMessage(f"Scene: {name}", 2000)
         self.compile_graph()
+        if self.history_manager:
+            self.history_manager.reset(description=f"Scene {name}")
 
     def _on_scene_added(self, name: str):
         """A new scene was added."""
@@ -698,27 +879,13 @@ class EfficientManimWindow(QMainWindow):
         """Add a node to the canvas by class name."""
         try:
             type_upper = node_type_str.upper()
-            if type_upper == "PLAY":
-                nt = NodeType.PLAY
-            elif type_upper == "WAIT":
-                nt = NodeType.WAIT
-            elif type_upper == "VGROUP":
-                nt = NodeType.VGROUP
-            elif type_upper in ("MOBJECT", "MOB"):
-                nt = NodeType.MOBJECT
-            else:
-                nt = NodeType.ANIMATION
-            data = NodeData(class_name, nt, class_name)
-            if nt == NodeType.WAIT:
-                data.params = {"duration": 1.0}
-            node = NodeItem(data)
-            try:
-                node._window = self
-            except Exception:
-                pass
-            node.setPos(50, 50 + len(self.nodes) * 120)
-            self.scene.addItem(node)
-            self.nodes[data.id] = node
+            type_str = (
+                type_upper
+                if type_upper in ("PLAY", "WAIT", "VGROUP")
+                else ("MOBJECT" if type_upper in ("MOBJECT", "MOB") else "ANIMATION")
+            )
+            pos = (50, 50 + len(self.nodes) * 120)
+            self.add_node(type_str, class_name, pos=pos, name=class_name)
             USAGE_TRACKER.record(class_name, node_type_str)
             self.mark_modified()
         except Exception as e:
@@ -735,6 +902,8 @@ class EfficientManimWindow(QMainWindow):
         ]
         if not selected:
             return
+        if self.history_manager:
+            self.history_manager.begin_group("Create VGroup")
         ids = [item.data.id for item in selected]
         # Use VGroupPanel's internal create logic
         if hasattr(self, "panel_vgroup"):
@@ -748,6 +917,8 @@ class EfficientManimWindow(QMainWindow):
             }
             self.panel_vgroup._refresh_tree()
             self.add_vgroup_node(group_name=name, member_ids=ids)
+        if self.history_manager:
+            self.history_manager.end_group()
         self.statusBar().showMessage(f"VGroup created with {len(ids)} nodes", 2000)
 
     def mark_modified(self):
@@ -1003,16 +1174,14 @@ class EfficientManimWindow(QMainWindow):
 
     def undo_action(self):
         """Undo last action."""
-        if self.undo_manager.undo():
-            self.compile_graph()
+        if self.history_manager and self.history_manager.undo():
             LOGGER.info("Undo executed")
         else:
             LOGGER.warn("Nothing to undo")
 
     def redo_action(self):
         """Redo last undone action."""
-        if self.undo_manager.redo():
-            self.compile_graph()
+        if self.history_manager and self.history_manager.redo():
             LOGGER.info("Redo executed")
         else:
             LOGGER.warn("Nothing to redo")
@@ -1025,28 +1194,34 @@ class EfficientManimWindow(QMainWindow):
             self.view.scale(0.9, 0.9)
             LOGGER.info("View fitted")
 
-    def clear_scene(self):
+    def clear_scene(self, force: bool = False):
         """Clear all nodes and wires with proper resource cleanup."""
-        reply = QMessageBox.question(
-            self,
-            "Clear Scene",
-            "Delete all nodes and wires?",
-            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
-        )
-        if reply == QMessageBox.StandardButton.Yes:
-            # FIX: Clean up render workers before clearing nodes
-            for node_id in list(self.nodes.keys()):
-                self._cleanup_preview_worker(node_id)
+        if not force:
+            reply = QMessageBox.question(
+                self,
+                "Clear Scene",
+                "Delete all nodes and wires?",
+                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+            )
+            if reply != QMessageBox.StandardButton.Yes:
+                return
+        if self.history_manager:
+            self.history_manager.begin_group("Clear Scene")
+        # FIX: Clean up render workers before clearing nodes
+        for node_id in list(self.nodes.keys()):
+            self._cleanup_preview_worker(node_id)
 
-            self.nodes.clear()
-            self.scene.clear()
-            # FIX: Clear preview display
-            self.preview_lbl.clear()
-            self.preview_lbl.setPixmap(QPixmap())  # Release pixmap memory
-            self.preview_lbl.setText("No Selection")
-            self.undo_manager = UndoRedoManager()
-            self.compile_graph()
-            LOGGER.info("Scene cleared")
+        self.nodes.clear()
+        self.scene.clear()
+        # FIX: Clear preview display
+        self.preview_lbl.clear()
+        self.preview_lbl.setPixmap(QPixmap())  # Release pixmap memory
+        self.preview_lbl.setText("No Selection")
+        if self.history_manager:
+            self.history_manager.mark_group_dirty()
+            self.history_manager.end_group()
+        self.compile_graph()
+        LOGGER.info("Scene cleared")
 
     # --- GRAPH LOGIC ---
 
@@ -1099,6 +1274,8 @@ class EfficientManimWindow(QMainWindow):
     def add_vgroup_node(self, group_name: str = "", member_ids: list = None):
         """Add a VGROUP canvas node. Optionally pre-populated with member_ids."""
         self.is_ai_generated_code = False
+        if member_ids and self.history_manager:
+            self.history_manager.begin_group("Add VGroup Node")
         center = self.view.mapToScene(self.view.rect().center())
         count = sum(1 for n in self.nodes.values() if n.data.type == NodeType.VGROUP)
         var_name = (
@@ -1120,6 +1297,8 @@ class EfficientManimWindow(QMainWindow):
                 member_item = self.nodes.get(mid)
                 if member_item and member_item.data.type == NodeType.MOBJECT:
                     self.scene.try_connect(member_item.out_socket, node.in_socket)
+        if member_ids and self.history_manager:
+            self.history_manager.end_group()
         return node
 
     # ── New Feature Helpers ───────────────────────────────────────────────────
@@ -1221,7 +1400,11 @@ class EfficientManimWindow(QMainWindow):
 
     def auto_layout_nodes(self):
         """Auto-arrange nodes in a clean left-to-right flow layout."""
+        if self.history_manager:
+            self.history_manager.begin_group("Auto Layout")
         apply_auto_layout(self.nodes, self.scene, self.fit_view)
+        if self.history_manager:
+            self.history_manager.end_group()
 
     def add_node(
         self, type_str, cls_name, params=None, pos=(0, 0), nid=None, name=None
@@ -1239,23 +1422,30 @@ class EfficientManimWindow(QMainWindow):
             f"Created {cls_name} ({data.type.name}) as '{data.name}' id={data.id[:8]}"
         )
         self.compile_graph()  # Auto-Refresh
+        if self.history_manager:
+            self.history_manager.capture(f"Add {data.cls_name}", merge_key=None)
         return item
 
     def delete_selected(self):
+        if self.history_manager:
+            self.history_manager.begin_group("Delete Selection")
         for item in self.scene.selectedItems():
             if isinstance(item, NodeItem):
-                self.remove_node(item)
+                self.remove_node(item, record_history=False)
             elif isinstance(item, WireItem):
-                self.remove_wire(item)
+                self.remove_wire(item, record_history=False)
+        if self.history_manager:
+            self.history_manager.mark_group_dirty()
+            self.history_manager.end_group()
         self.compile_graph()  # Auto-Refresh
 
-    def remove_node(self, node):
+    def remove_node(self, node, record_history: bool = True):
         # FIX: Clean up preview worker for this node
         self._cleanup_preview_worker(node.data.id)
 
         wires = node.in_socket.links + node.out_socket.links
         for w in wires:
-            self.remove_wire(w)
+            self.remove_wire(w, record_history=False)
         if node.data.id in self.nodes:
             del self.nodes[node.data.id]
         self.scene.removeItem(node)
@@ -1266,13 +1456,24 @@ class EfficientManimWindow(QMainWindow):
             self.preview_lbl.setPixmap(QPixmap())
             self.preview_lbl.setText("No Selection")
 
-    def remove_wire(self, wire):
+        if record_history and self.history_manager:
+            self.history_manager.capture(f"Delete {node.data.cls_name}")
+
+    def remove_wire(self, wire, record_history: bool = True):
         if wire in wire.start_socket.links:
             wire.start_socket.links.remove(wire)
         if wire in wire.end_socket.links:
             wire.end_socket.links.remove(wire)
         self.scene.removeItem(wire)
         # Graph Changed (Handled by delete_selected, but good for singular removals)
+        if record_history and self.history_manager:
+            try:
+                src = wire.start_socket.parentItem().data.name
+                dst = wire.end_socket.parentItem().data.name
+                desc = f"Disconnect {src} -> {dst}"
+            except Exception:
+                desc = "Disconnect"
+            self.history_manager.capture(desc, merge_key="wire")
 
     def on_node_property_changed(self, node, key, value):
         """Handle node property edits from the Properties panel."""
@@ -1282,6 +1483,17 @@ class EfficientManimWindow(QMainWindow):
                 self.panel_outliner.refresh_list()
             except Exception:
                 pass
+        if self.history_manager and not self.history_manager.is_restoring:
+            try:
+                nname = node.data.name
+            except Exception:
+                nname = "Node"
+            if key == "_name":
+                desc = f"Rename {nname}"
+            else:
+                desc = f"Edit {nname}.{key}"
+            merge_key = f"prop:{node.data.id}:{key}"
+            self.history_manager.capture(desc, merge_key=merge_key)
 
     def add_wire_by_ids(self, from_node_id: str, to_node_id: str, wire_id=None):
         if from_node_id not in self.nodes or to_node_id not in self.nodes:
@@ -1289,6 +1501,18 @@ class EfficientManimWindow(QMainWindow):
         src = self.nodes[from_node_id].out_socket
         dst = self.nodes[to_node_id].in_socket
         return self.scene.try_connect(src, dst, wire_id=wire_id)
+
+    def on_wire_added(self, wire: WireItem) -> None:
+        """History hook when a new wire is created."""
+        if self.history_manager is None or self.history_manager.is_restoring:
+            return
+        try:
+            src = wire.start_socket.parentItem().data.name
+            dst = wire.end_socket.parentItem().data.name
+            desc = f"Connect {src} -> {dst}"
+        except Exception:
+            desc = "Connect"
+        self.history_manager.capture(desc, merge_key="wire")
 
     def remove_wire_by_id(self, wire_id: str):
         if not wire_id:
@@ -1300,38 +1524,44 @@ class EfficientManimWindow(QMainWindow):
 
     def load_graph_from_json(self, graph_json: dict):
         """Clear canvas and load graph JSON into the editor."""
+        ctx = self.history_manager.suspend() if self.history_manager else nullcontext()
         try:
-            # Clean existing nodes
-            for node_id in list(self.nodes.keys()):
-                self._cleanup_preview_worker(node_id)
-            self.nodes.clear()
-            self.scene.clear()
+            with ctx:
+                # Clean existing nodes
+                for node_id in list(self.nodes.keys()):
+                    self._cleanup_preview_worker(node_id)
+                self.nodes.clear()
+                self.scene.clear()
 
-            node_map = {}
-            for nd in graph_json.get("nodes", []):
-                node = self.add_node(
-                    nd.get("type", "MOBJECT"),
-                    nd.get("cls_name", ""),
-                    params=nd.get("params", {}),
-                    pos=tuple(nd.get("pos", (0, 0))),
-                    nid=nd.get("id"),
-                    name=nd.get("name"),
-                )
-                # Restore metadata
-                node.data.param_metadata = nd.get("param_metadata", {})
-                node.data.audio_asset_id = nd.get("audio_asset_id")
-                node.data.voiceover_transcript = nd.get("voiceover_transcript")
-                node.data.voiceover_duration = float(nd.get("voiceover_duration", 0.0))
-                node.data.is_ai_generated = bool(nd.get("is_ai_generated", False))
-                node_map[node.data.id] = node
+                node_map = {}
+                for nd in graph_json.get("nodes", []):
+                    node = self.add_node(
+                        nd.get("type", "MOBJECT"),
+                        nd.get("cls_name", ""),
+                        params=nd.get("params", {}),
+                        pos=tuple(nd.get("pos", (0, 0))),
+                        nid=nd.get("id"),
+                        name=nd.get("name"),
+                    )
+                    # Restore metadata
+                    node.data.param_metadata = nd.get("param_metadata", {})
+                    node.data.audio_asset_id = nd.get("audio_asset_id")
+                    node.data.voiceover_transcript = nd.get("voiceover_transcript")
+                    node.data.voiceover_duration = float(
+                        nd.get("voiceover_duration", 0.0)
+                    )
+                    node.data.is_ai_generated = bool(nd.get("is_ai_generated", False))
+                    node_map[node.data.id] = node
 
-            for w in graph_json.get("wires", []):
-                self.add_wire_by_ids(
-                    w.get("from_node"),
-                    w.get("to_node"),
-                    wire_id=w.get("wire_id"),
-                )
-            self.compile_graph()
+                for w in graph_json.get("wires", []):
+                    self.add_wire_by_ids(
+                        w.get("from_node"),
+                        w.get("to_node"),
+                        wire_id=w.get("wire_id"),
+                    )
+                self.compile_graph()
+            if self.history_manager:
+                self.history_manager.reset(description="Load Graph")
         except Exception as e:
             LOGGER.warn(f"Failed to load graph JSON: {e}")
 
@@ -1342,6 +1572,17 @@ class EfficientManimWindow(QMainWindow):
             self.show_preview(sel[0])
         else:
             self.panel_props.set_node(None)
+
+    def on_node_moved(self, node_item: NodeItem) -> None:
+        """Track node movement with debounce for history."""
+        if self.history_manager is None or self.history_manager.is_restoring:
+            return
+        try:
+            self._pending_move_nodes.add(node_item.data.id)
+            # Debounce to avoid capturing every frame
+            self._move_debounce.start(220)
+        except Exception:
+            pass
 
     def on_node_changed(self):
         # 1. Update Project Modified State
@@ -2306,6 +2547,23 @@ class EfficientManimWindow(QMainWindow):
                     )
                     for err in result["errors"]:
                         LOGGER.warn(f"  - {err}")
+
+                # History capture (single atomic action)
+                if self.history_manager:
+                    try:
+                        prompt_text = (
+                            self.panel_ai.input.toPlainText()
+                            if hasattr(self.panel_ai, "input")
+                            else ""
+                        )
+                    except Exception:
+                        prompt_text = ""
+                    meta = {
+                        "ai_prompt": prompt_text,
+                        "ai_code": code[:1000],
+                        "nodes_added": result.get("nodes_added", 0),
+                    }
+                    self.history_manager.capture("AI Merge", metadata=meta)
             else:
                 error_msg = "\n".join(result["errors"][:5])
                 LOGGER.error(f"Failed to merge AI code:\n{error_msg}")
@@ -2325,38 +2583,9 @@ class EfficientManimWindow(QMainWindow):
 
     # --- PROJECT I/O ---
 
-    def save_project(self):
-        # Get default filename from project name textbox
-        default_filename = self.project_name_edit.text().strip() or "Untitled Project"
-        if not default_filename.endswith(PROJECT_EXT):
-            default_filename += PROJECT_EXT
-
-        # Use last project path directory if available, otherwise Documents
-        last_dir = (
-            str(Path(self.project_path).parent)
-            if self.project_path
-            else str(Path.home() / "Documents")
-        )
-
-        path, _ = QFileDialog.getSaveFileName(
-            self,
-            "Save Project",
-            str(Path(last_dir) / default_filename),
-            f"EfficientManim (*{PROJECT_EXT})",
-        )
-        if not path:
-            return
-
-        # Update project name from saved path
-        self.project_name_edit.setText(Path(path).stem)
-
-        meta = {
-            "name": Path(path).stem,
-            "created": str(datetime.now()),
-            "version": APP_VERSION,
-        }
-
-        graph_data = {
+    def get_graph_json(self) -> dict:
+        """Return current graph as a JSON-serializable dict."""
+        return {
             "nodes": [n.data.to_dict() for n in self.nodes.values()],
             "wires": [
                 {
@@ -2367,6 +2596,45 @@ class EfficientManimWindow(QMainWindow):
                 if isinstance(w, WireItem)
             ],
         }
+
+    def export_code_to(self, path: str) -> bool:
+        """Export current code view to a file path."""
+        try:
+            code = self.code_view.toPlainText()
+            if not code.strip():
+                return False
+            Path(path).parent.mkdir(parents=True, exist_ok=True)
+            with open(path, "w", encoding="utf-8") as f:
+                f.write(code)
+            return True
+        except Exception as e:
+            LOGGER.error(f"Export code failed: {e}")
+            return False
+
+    def export_code_to_clipboard(self) -> int:
+        """Copy current code to clipboard. Returns chars copied."""
+        code = self.code_view.toPlainText()
+        QApplication.clipboard().setText(code)
+        return len(code)
+
+    def save_project_to(self, path: str) -> bool:
+        """Save project directly to a path (no dialogs)."""
+        if not path:
+            return False
+        if not str(path).endswith(PROJECT_EXT):
+            path = f"{path}{PROJECT_EXT}"
+
+        # Update project name from saved path
+        if hasattr(self, "project_name_edit"):
+            self.project_name_edit.setText(Path(path).stem)
+
+        meta = {
+            "name": Path(path).stem,
+            "created": str(datetime.now()),
+            "version": APP_VERSION,
+        }
+
+        graph_data = self.get_graph_json()
 
         try:
             with tempfile.TemporaryDirectory() as td:
@@ -2427,10 +2695,36 @@ class EfficientManimWindow(QMainWindow):
 
                 self.reset_modified()
                 LOGGER.info(f"Project saved to {final_efp}")
+                return True
 
         except Exception as e:
             LOGGER.error(f"Save Failed: {e}")
             traceback.print_exc()
+            return False
+
+    def save_project(self):
+        # Get default filename from project name textbox
+        default_filename = self.project_name_edit.text().strip() or "Untitled Project"
+        if not default_filename.endswith(PROJECT_EXT):
+            default_filename += PROJECT_EXT
+
+        # Use last project path directory if available, otherwise Documents
+        last_dir = (
+            str(Path(self.project_path).parent)
+            if self.project_path
+            else str(Path.home() / "Documents")
+        )
+
+        path, _ = QFileDialog.getSaveFileName(
+            self,
+            "Save Project",
+            str(Path(last_dir) / default_filename),
+            f"EfficientManim (*{PROJECT_EXT})",
+        )
+        if not path:
+            return
+
+        self.save_project_to(path)
 
     def open_project(self):
         path, _ = QFileDialog.getOpenFileName(
@@ -2443,9 +2737,15 @@ class EfficientManimWindow(QMainWindow):
     def _do_open_project(self, path: str):
         """Core project loading logic."""
         try:
-            self.nodes.clear()
-            self.scene.clear()
-            ASSETS.clear()
+            ctx = (
+                self.history_manager.suspend()
+                if self.history_manager
+                else nullcontext()
+            )
+            with ctx:
+                self.nodes.clear()
+                self.scene.clear()
+                ASSETS.clear()
 
             # Create a clean extraction folder for this project workspace
             dest = AppPaths.TEMP_DIR / "Project_Assets"
@@ -2484,39 +2784,39 @@ class EfficientManimWindow(QMainWindow):
                         ASSETS.assets[a.id] = a
                     ASSETS.assets_changed.emit()
 
-            # 2. Load Graph
-            graph_json = dest / "graph.json"
-            if graph_json.exists():
-                with open(graph_json, encoding="utf-8") as f:
-                    g = json.load(f)
-                    node_map = {}
-                    for nd in g["nodes"]:
-                        # Pass the raw type string directly — add_node handles all variants
-                        type_str = nd[
-                            "type"
-                        ].upper()  # MOBJECT, ANIMATION, PLAY, WAIT, VGROUP
+                # 2. Load Graph
+                graph_json = dest / "graph.json"
+                if graph_json.exists():
+                    with open(graph_json, encoding="utf-8") as f:
+                        g = json.load(f)
+                        node_map = {}
+                        for nd in g["nodes"]:
+                            # Pass the raw type string directly — add_node handles all variants
+                            type_str = nd[
+                                "type"
+                            ].upper()  # MOBJECT, ANIMATION, PLAY, WAIT, VGROUP
 
-                        node = self.add_node(
-                            type_str,
-                            nd["cls_name"],
-                            nd["params"],
-                            nd["pos"],
-                            nd["id"],
-                            name=nd.get("name", nd["cls_name"]),
-                        )
+                            node = self.add_node(
+                                type_str,
+                                nd["cls_name"],
+                                nd["params"],
+                                nd["pos"],
+                                nd["id"],
+                                name=nd.get("name", nd["cls_name"]),
+                            )
 
-                        # Restore metadata
-                        if "param_metadata" in nd:
-                            node.data.param_metadata = nd["param_metadata"]
-                        if "is_ai_generated" in nd:
-                            node.data.is_ai_generated = nd["is_ai_generated"]
+                            # Restore metadata
+                            if "param_metadata" in nd:
+                                node.data.param_metadata = nd["param_metadata"]
+                            if "is_ai_generated" in nd:
+                                node.data.is_ai_generated = nd["is_ai_generated"]
 
-                        node_map[nd["id"]] = node
+                            node_map[nd["id"]] = node
 
-                    for w in g["wires"]:
-                        n1, n2 = node_map.get(w["start"]), node_map.get(w["end"])
-                        if n1 and n2:
-                            self.scene.try_connect(n1.out_socket, n2.in_socket)
+                        for w in g["wires"]:
+                            n1, n2 = node_map.get(w["start"]), node_map.get(w["end"])
+                            if n1 and n2:
+                                self.scene.try_connect(n1.out_socket, n2.in_socket)
 
             # 3. Load Saved Code (if any)
             code_py = dest / "code.py"
@@ -2525,6 +2825,10 @@ class EfficientManimWindow(QMainWindow):
                     self.code_view.setText(f.read())
 
             self.compile_graph()
+            if self.history_manager:
+                self.history_manager.reset(
+                    description="Open Project", clear_checkpoints=True
+                )
             self.project_path = path
             add_recent(path)
             if hasattr(self, "project_name_edit"):

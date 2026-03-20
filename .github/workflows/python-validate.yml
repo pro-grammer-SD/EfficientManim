@@ -63,7 +63,8 @@ jobs:
 
       - name: Auto-approve Dependabot PRs
         if: github.actor == 'dependabot[bot]' && steps.validate.outputs.valid == 'true'
-        uses: hmarr/auto-approve-action@v2.1.0
+        uses: hmarr/auto-approve-action@v4
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
+          review-message: "Auto-approved Dependabot PR ✅"
           

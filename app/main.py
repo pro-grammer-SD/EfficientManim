@@ -55,7 +55,8 @@ def main() -> None:
         elif example:
             _open_example(win)
         elif new:
-            win.new_project()
+            # Home screen always starts a fresh project; skip the confirm dialog.
+            win.new_project(force=True)
         win.show()
         home_window.close()
 

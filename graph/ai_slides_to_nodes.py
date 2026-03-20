@@ -17,6 +17,9 @@ class SlidesToNodes:
         scene_graph: Any,
         clear_existing: bool = True,
     ) -> dict:
+        history = getattr(scene_graph, "history_manager", None)
+        if history is not None:
+            history.begin_group("AI Slides Import", metadata={"source": "slides"})
         if isinstance(slide_deck, dict):
             slides = slide_deck.get("slides") or []
         else:
@@ -39,106 +42,107 @@ class SlidesToNodes:
 
         previous_struct = None
 
-        for idx, slide in enumerate(slides, start=1):
-            if not isinstance(slide, dict):
-                continue
+        try:
+            for idx, slide in enumerate(slides, start=1):
+                if not isinstance(slide, dict):
+                    continue
 
-            slide_x = start_x + (idx - 1) * slide_gap_x
-            y = start_y
+                slide_x = start_x + (idx - 1) * slide_gap_x
+                y = start_y
 
-            title = str(slide.get("title") or "").strip()
-            bullets = slide.get("bullets") or []
-            equations = slide.get("equations") or []
-            deriv = slide.get("derivation_steps") or []
+                title = str(slide.get("title") or "").strip()
+                bullets = slide.get("bullets") or []
+                equations = slide.get("equations") or []
+                deriv = slide.get("derivation_steps") or []
 
-            bullets = [str(b).strip() for b in bullets if str(b).strip()]
-            equations = [str(e).strip() for e in equations if str(e).strip()]
-            deriv_eqs = [
-                str(d.get("equation")).strip()
-                for d in deriv
-                if isinstance(d, dict) and str(d.get("equation") or "").strip()
-            ]
+                bullets = [str(b).strip() for b in bullets if str(b).strip()]
+                equations = [str(e).strip() for e in equations if str(e).strip()]
+                deriv_eqs = [
+                    str(d.get("equation")).strip()
+                    for d in deriv
+                    if isinstance(d, dict) and str(d.get("equation") or "").strip()
+                ]
 
-            mobject_nodes: list[NodeItem] = []
-            anim_nodes: list[NodeItem] = []
+                mobject_nodes: list[NodeItem] = []
+                anim_nodes: list[NodeItem] = []
 
-            if title:
-                node = scene_graph.add_node(
-                    "MOBJECT",
-                    "Text",
-                    params={"text": title, "font_size": 48},
-                    pos=(slide_x, y),
-                    name=f"slide_{idx}_title",
-                )
-                node.data.is_ai_generated = True
-                mobject_nodes.append(node)
-                created_nodes.append(node)
-                y += row_h
+                if title:
+                    node = scene_graph.add_node(
+                        "MOBJECT",
+                        "Text",
+                        params={"text": title, "font_size": 48},
+                        pos=(slide_x, y),
+                        name=f"slide_{idx}_title",
+                    )
+                    node.data.is_ai_generated = True
+                    mobject_nodes.append(node)
+                    created_nodes.append(node)
+                    y += row_h
 
-                anim = SlidesToNodes._create_anim(
-                    scene_graph, node, "Write", (slide_x + col_w, y - row_h)
-                )
-                anim_nodes.append(anim)
-                created_nodes.append(anim)
+                    anim = SlidesToNodes._create_anim(
+                        scene_graph, node, "Write", (slide_x + col_w, y - row_h)
+                    )
+                    anim_nodes.append(anim)
+                    created_nodes.append(anim)
 
-            for b in bullets:
-                node = scene_graph.add_node(
-                    "MOBJECT",
-                    "Text",
-                    params={"text": f"- {b}", "font_size": 30},
-                    pos=(slide_x, y),
-                    name=f"slide_{idx}_bullet_{len(mobject_nodes) + 1}",
-                )
-                node.data.is_ai_generated = True
-                mobject_nodes.append(node)
-                created_nodes.append(node)
+                for b in bullets:
+                    node = scene_graph.add_node(
+                        "MOBJECT",
+                        "Text",
+                        params={"text": f"- {b}", "font_size": 30},
+                        pos=(slide_x, y),
+                        name=f"slide_{idx}_bullet_{len(mobject_nodes) + 1}",
+                    )
+                    node.data.is_ai_generated = True
+                    mobject_nodes.append(node)
+                    created_nodes.append(node)
 
-                anim = SlidesToNodes._create_anim(
-                    scene_graph, node, "FadeIn", (slide_x + col_w, y)
-                )
-                anim_nodes.append(anim)
-                created_nodes.append(anim)
-                y += row_h
+                    anim = SlidesToNodes._create_anim(
+                        scene_graph, node, "FadeIn", (slide_x + col_w, y)
+                    )
+                    anim_nodes.append(anim)
+                    created_nodes.append(anim)
+                    y += row_h
 
-            for eq in equations:
-                node = scene_graph.add_node(
-                    "MOBJECT",
-                    "MathTex",
-                    params={"arg0": SlidesToNodes._latex_str(eq)},
-                    pos=(slide_x, y),
-                    name=f"slide_{idx}_eq_{len(mobject_nodes) + 1}",
-                )
-                node.data.set_escape_string("arg0", True)
-                node.data.is_ai_generated = True
-                mobject_nodes.append(node)
-                created_nodes.append(node)
+                for eq in equations:
+                    node = scene_graph.add_node(
+                        "MOBJECT",
+                        "MathTex",
+                        params={"arg0": SlidesToNodes._latex_str(eq)},
+                        pos=(slide_x, y),
+                        name=f"slide_{idx}_eq_{len(mobject_nodes) + 1}",
+                    )
+                    node.data.set_escape_string("arg0", True)
+                    node.data.is_ai_generated = True
+                    mobject_nodes.append(node)
+                    created_nodes.append(node)
 
-                anim = SlidesToNodes._create_anim(
-                    scene_graph, node, "Write", (slide_x + col_w, y)
-                )
-                anim_nodes.append(anim)
-                created_nodes.append(anim)
-                y += row_h
+                    anim = SlidesToNodes._create_anim(
+                        scene_graph, node, "Write", (slide_x + col_w, y)
+                    )
+                    anim_nodes.append(anim)
+                    created_nodes.append(anim)
+                    y += row_h
 
-            for eq in deriv_eqs:
-                node = scene_graph.add_node(
-                    "MOBJECT",
-                    "MathTex",
-                    params={"arg0": SlidesToNodes._latex_str(eq)},
-                    pos=(slide_x, y),
-                    name=f"slide_{idx}_deriv_{len(mobject_nodes) + 1}",
-                )
-                node.data.set_escape_string("arg0", True)
-                node.data.is_ai_generated = True
-                mobject_nodes.append(node)
-                created_nodes.append(node)
+                for eq in deriv_eqs:
+                    node = scene_graph.add_node(
+                        "MOBJECT",
+                        "MathTex",
+                        params={"arg0": SlidesToNodes._latex_str(eq)},
+                        pos=(slide_x, y),
+                        name=f"slide_{idx}_deriv_{len(mobject_nodes) + 1}",
+                    )
+                    node.data.set_escape_string("arg0", True)
+                    node.data.is_ai_generated = True
+                    mobject_nodes.append(node)
+                    created_nodes.append(node)
 
-                anim = SlidesToNodes._create_anim(
-                    scene_graph, node, "Write", (slide_x + col_w, y)
-                )
-                anim_nodes.append(anim)
-                created_nodes.append(anim)
-                y += row_h
+                    anim = SlidesToNodes._create_anim(
+                        scene_graph, node, "Write", (slide_x + col_w, y)
+                    )
+                    anim_nodes.append(anim)
+                    created_nodes.append(anim)
+                    y += row_h
 
             group_name = f"slide_{idx}_group"
             group = scene_graph.add_node(
@@ -193,13 +197,17 @@ class SlidesToNodes:
                 created_wires.append(wire)
             previous_struct = wait
 
-        if hasattr(scene_graph, "scene") and hasattr(
-            scene_graph.scene, "notify_change"
-        ):
-            try:
-                scene_graph.scene.notify_change()
-            except Exception:
-                pass
+            if hasattr(scene_graph, "scene") and hasattr(
+                scene_graph.scene, "notify_change"
+            ):
+                try:
+                    scene_graph.scene.notify_change()
+                except Exception:
+                    pass
+
+        finally:
+            if history is not None:
+                history.end_group()
 
         return {
             "nodes": created_nodes,

@@ -102,3 +102,7 @@ Rendering is handled in `rendering/`:
 4. Preview nodes to validate changes.
 5. Render the full scene in the Video tab.
 6. Export Python code if needed.
+
+## History & MCP
+- `docs/history_system.md` explains the new `HistoryManager`, checkpoint APIs, signals, and how grouped actions (including AI merges/imports) are recorded.
+- `docs/mcp_commands.md` is the canonical reference for the expanded MCP surface covering nodes, wires, AI workflows, rendering, settings, recents, themes, keybindings, and history operations.

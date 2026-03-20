@@ -218,6 +218,29 @@ class AssetManager(QObject):
     def get_list(self) -> list[Asset]:
         return list(self.assets.values())
 
+    def get_asset(self, asset_id: str) -> Asset | None:
+        return self.assets.get(asset_id)
+
+    def delete_asset(self, asset_id: str) -> bool:
+        if asset_id in self.assets:
+            del self.assets[asset_id]
+            self.assets_changed.emit()
+            return True
+        return False
+
+    def update_asset(
+        self, asset_id: str, new_path: str | None = None, new_name: str | None = None
+    ) -> Asset | None:
+        asset = self.assets.get(asset_id)
+        if not asset:
+            return None
+        if new_path:
+            asset.current_path = str(Path(new_path).resolve().as_posix())
+        if new_name:
+            asset.name = new_name
+        self.assets_changed.emit()
+        return asset
+
     def get_asset_path(self, asset_id: str) -> str | None:
         if asset_id in self.assets:
             asset = self.assets[asset_id]

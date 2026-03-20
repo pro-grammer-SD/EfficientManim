@@ -631,7 +631,12 @@ class PropertiesPanel(QWidget):
                 lambda s: (
                     self.current_node.node_data.set_param_enabled(key, s == 2)
                     if self.current_node
-                    else None
+                    else None,
+                    self.main_window.on_node_property_changed(
+                        self.current_node, f"{key}_enabled", s == 2
+                    )
+                    if self.main_window and self.current_node
+                    else None,
                 )
             )
             row_layout.addWidget(state_chk, 1)
@@ -645,7 +650,12 @@ class PropertiesPanel(QWidget):
                 lambda s: (
                     self.current_node.node_data.set_escape_string(key, s == 2)
                     if self.current_node
-                    else None
+                    else None,
+                    self.main_window.on_node_property_changed(
+                        self.current_node, f"{key}_escape", s == 2
+                    )
+                    if self.main_window and self.current_node
+                    else None,
                 )
             )
             row_layout.addWidget(escape_chk, 1)
