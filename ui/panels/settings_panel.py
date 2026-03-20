@@ -64,7 +64,9 @@ class SettingsPanel(QWidget):
         form_ai.addRow("API Key:", self.api_key)
 
         self.gemini_model = QComboBox()
-        self.gemini_model.addItems(["gemini-3-flash-preview", "gemini-3-pro-preview"])
+        self.gemini_model.addItems(
+            ["gemini-3-flash-preview", "gemini-3.1-flash-lite-preview"]
+        )
         self.gemini_model.setCurrentText(
             str(SETTINGS.get("GEMINI_MODEL", "gemini-3-flash-preview") or "")
         )

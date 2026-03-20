@@ -8,11 +8,22 @@
 
 ## 🚀 Key Features
 
+### 📄 Convert Slides into Animated Math Videos
+- What it does: Upload one or multiple PDFs and the AI turns each slide into animated Manim scenes and a ready-to-edit node graph.
+- Who it's for: Students, teachers, and YouTube educators who need clear animated explanations quickly.
+- Why it's powerful: It converts static slides into structured animations automatically, saving hours of manual scene building.
+- How it works: PDFs are parsed into slide structure, sent to the AI for an animation plan, then converted into Manim code and nodes.
+
 ### 🎬 Node-Based Visual Workflow
 - **Visual Editor:** Drag-and-drop Mobjects and Animations with intuitive wiring
 - **Infinite Canvas:** Pan and zoom freely to manage large node graphs
 - **Live Preview:** Real-time static previews of individual nodes
 - **Smart Connections:** Automatic wire validation and scene synchronization
+
+### 🤖 AI Features
+- **Prompt-to-Manim Code:** Describe animations in plain English and get runnable Manim code
+- **PDF Slide Animation:** Attach PDFs in the AI tab and generate animated scenes automatically
+- **AI Voiceover Studio:** TTS generation with multi-voice support and duration syncing
 
 ### 🎯 Tooltips
 
@@ -32,15 +43,6 @@ This makes the app easier to learn, faster to use, and far more intuitive overal
 - Select Mobject nodes → click **Create VGroup** in the **VGroups** tab
 - VGroup code automatically generated: `group_1 = VGroup(circle_1, square_1)`
 - Groups shown in expandable tree view
-
-### 🤖 Gemini AI Code Generation
-- Describe animations in plain English — AI generates Manim code
-- AI code parsed into editable nodes with correct wiring
-- Streaming responses with real-time feedback
-
-### 🎙️ AI-Powered Voiceover Studio
-- Gemini TTS Integration with multi-voice support (Zephyr, Puck, Fenrir, etc.)
-- Auto-sync animation duration to audio length
 
 ### 🐙 GitHub Snippet Loader
 - Clone any GitHub repository into `~/.efficientmanim/snippets/`
@@ -135,7 +137,7 @@ python main.py
 
 Manual install:
 ```bash
-pip install manim PySide6 google-genai pydub requests numpy
+pip install manim PySide6 google-genai pydub requests numpy pdfplumber regex
 ```
 
 ---

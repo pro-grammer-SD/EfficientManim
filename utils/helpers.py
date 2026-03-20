@@ -50,6 +50,28 @@ def detect_scene_class(code: str) -> str:
     return matches[0] if matches else "Scene"
 
 
+_BACKGROUND_SETTING_LINE_PATTERNS = (
+    re.compile(r"^[ \t]*(?:self\.)?camera\.background_color\s*=(?!=)"),
+    re.compile(r"^[ \t]*(?:manim\.)?config\.background_color\s*=(?!=)"),
+    re.compile(
+        r"^[ \t]*(?:return\s+)?(?:[A-Za-z_][A-Za-z0-9_]*\s*=\s*)?Scene\s*\(.*\bbackground_color\s*=(?!=)"
+    ),
+)
+
+
+def sanitize_background_settings(code: str) -> str:
+    """Remove lines that set background color in AI-generated code."""
+    if not code:
+        return code
+    lines = code.splitlines(keepends=True)
+    cleaned: list[str] = []
+    for line in lines:
+        if any(p.search(line) for p in _BACKGROUND_SETTING_LINE_PATTERNS):
+            continue
+        cleaned.append(line)
+    return "".join(cleaned)
+
+
 def convert_to_wav(audio_data: bytes, mime_type: str) -> bytes:
     """Generate WAV header for Gemini PCM output."""
 

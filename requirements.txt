@@ -1,18 +1,42 @@
-# Core Animation Library
+# ==============================
+# Core Animation Engine
+# ==============================
 manim>=0.18.0
+numpy>=1.24.0
 
-# GUI Framework (Includes QtMultimedia)
-PySide6>=6.4.0
+# ==============================
+# Desktop GUI
+# ==============================
+PySide6>=6.6.0
 
-# Google Gemini AI SDK
-google-genai>=0.3.0
+# ==============================
+# AI / LLM Integration
+# ==============================
+google-genai>=0.4.0
+python-dotenv>=1.0.0
+requests>=2.31.0
+tqdm>=4.66.0
 
-# Audio Processing
-# Note: You must also have FFmpeg installed on your system PATH
+# ==============================
+# PDF → Animated Slides Pipeline
+# ==============================
+pdfplumber>=0.11.0
+pdfminer.six>=20221105
+regex>=2024.11.6
+
+# ==============================
+# Audio / Rendering Support
+# ==============================
 pydub>=0.25.0
 
-# API Requests (For the LaTeX preview feature)
-requests>=2.31.0
+# ==============================
+# Code Quality / Static Analysis (used by cleanup script)
+# ==============================
+ruff>=0.3.0
+mypy>=1.8.0
+bandit>=1.7.8
 
-# Numerical Operations
-numpy>=1.24.0
+# ==============================
+# Testing
+# ==============================
+pytest>=8.0.0

@@ -48,7 +48,7 @@ All AI-generated nodes are marked with a ✨ badge in the Properties panel and s
 
 Go to **File → Settings → Code Model** to choose between:
 - `gemini-3-flash-preview` — fast, good for most scenes
-- `gemini-3-pro-preview` — slower, better for complex multi-step scenes
+- `gemini-3.1-flash-lite-preview` — slower, better for complex multi-step scenes
 
 ---
 

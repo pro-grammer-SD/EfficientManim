@@ -13,6 +13,7 @@ ui/
   toolbar.py         Quick export toolbar
   menus.py           Menu bar builder
   dialogs.py         Settings and shortcuts dialogs
+  ai_pdf_upload_widget.py PDF attachment UI for the AI Assistant tab
   panels/
     node_panel.py    Node, AI, assets, voiceover, outliner panels
     render_panel.py  Render + output panels
@@ -24,6 +25,7 @@ graph/
   edge.py            Wire graphics
   layout.py          Auto-layout helpers
   node_factory.py    Node creation helpers
+  ai_slides_to_nodes.py Slide plan to node graph conversion
 
 rendering/
   render_manager.py  Worker threads for preview + video render
@@ -35,12 +37,17 @@ core/
   file_manager.py    Recents + asset management
   history_manager.py Undo/redo stack
   config.py          App config + settings
+  ai_slides_to_manim.py Slide plan to Manim scene generator
 
 utils/
   shortcuts.py       Keybinding helpers
   tooltips.py        Consistent tooltip builder
   helpers.py         Parsing + AI helpers
   logger.py          Application logging
+  ai_pdf_attachment_manager.py PDF attachment state
+  ai_pdf_parser.py   PDF text and structure extraction
+  ai_context_builder.py Structured AI context builder
+  ai_slide_animator.py AI JSON slide/animation planner
 ```
 
 ## How The App Starts
@@ -71,6 +78,15 @@ Rendering is handled in `rendering/`:
 - `preview.py` provides lightweight preview helpers.
 - `export.py` contains code export helpers.
 - `ui/panels/render_panel.py` provides the UI to control rendering and preview playback.
+
+## AI PDF Animation Pipeline
+1. `ui/ai_pdf_upload_widget.py` embeds PDF attachment controls in the AI Assistant tab and drives the pipeline.
+2. `utils/ai_pdf_attachment_manager.py` stores ordered PDF paths and supports add/remove/clear.
+3. `utils/ai_pdf_parser.py` reads PDFs with `pdfplumber`, extracting headings, bullets, equations, and page order.
+4. `utils/ai_context_builder.py` compacts slide data and merges it with the user prompt into structured context.
+5. `utils/ai_slide_animator.py` calls the AI API using `GEMINI_API_KEY` and returns a JSON slide plan.
+6. `core/ai_slides_to_manim.py` converts the plan into runnable Manim scenes.
+7. `graph/ai_slides_to_nodes.py` creates node groups, animations, and wiring per slide, then loads them into the editor.
 
 ## Where To Add New Features
 - UI widgets: add to `ui/panels/` or `ui/dialogs.py`.

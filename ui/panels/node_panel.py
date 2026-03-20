@@ -58,6 +58,7 @@ from graph.edge import WireItem
 from graph.node import NodeData, NodeItem, NodeType
 from rendering.render_manager import AIWorker, LatexApiWorker, TTSWorker
 from ui.runtime_flags import MCP_AVAILABLE, PYDUB_AVAILABLE
+from ui.ai_pdf_upload_widget import AIPDFUploadWidget
 from utils.helpers import MANIM_AVAILABLE, TypeSafeParser, bold_font, manim
 from utils.logger import LOGGER
 from utils.tooltips import apply_tooltip
@@ -979,6 +980,10 @@ class AIPanel(QWidget):
         # Response section (scrollable)
         response_group = self._create_response_section()
         left_layout.addWidget(response_group)
+
+        # PDF upload section (inside AI panel)
+        self.pdf_upload_widget = AIPDFUploadWidget(self.input, self.output, parent=self)
+        left_layout.insertWidget(1, self.pdf_upload_widget)
 
         # Control buttons
         button_layout = self._create_button_layout()
