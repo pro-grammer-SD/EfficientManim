@@ -13,6 +13,7 @@ class QuickExportBar(QWidget):
     export_requested = Signal(str)  # format
     undo_requested = Signal()
     redo_requested = Signal()
+    explain_requested = Signal()
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -34,6 +35,18 @@ class QuickExportBar(QWidget):
             self.btn_redo, "Redo last action", "Step forward", "Ctrl+Y", "Redo"
         )
         layout.addWidget(self.btn_redo)
+
+        self.btn_explain = QPushButton("🧠 Explain")
+        self.btn_explain.setFixedHeight(28)
+        self.btn_explain.clicked.connect(lambda: self.explain_requested.emit())
+        apply_tooltip(
+            self.btn_explain,
+            "Explain the current animation",
+            "Open the Explain Panel",
+            "Ctrl+Shift+E",
+            "Explain",
+        )
+        layout.addWidget(self.btn_explain)
 
         for label, fmt, tip in [
             (

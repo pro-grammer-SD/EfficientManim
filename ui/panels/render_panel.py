@@ -3,7 +3,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from PySide6.QtCore import Qt, Signal, QUrl
+from PySide6.QtCore import Qt, Signal, QUrl, QTimer
 from PySide6.QtGui import QFont
 from PySide6.QtMultimedia import QAudioOutput, QMediaPlayer
 from PySide6.QtMultimediaWidgets import QVideoWidget
@@ -35,6 +35,8 @@ class VideoOutputPanel(QWidget):
         self.setup_ui()
         self.duration = 0
         self._autoplay_pending = False
+        self._has_media = False
+        self._was_playing = False
 
         # Init Player
         self.player = QMediaPlayer()
@@ -47,6 +49,9 @@ class VideoOutputPanel(QWidget):
         self.player.positionChanged.connect(self.on_position_changed)
         self.player.durationChanged.connect(self.on_duration_changed)
         self.player.mediaStatusChanged.connect(self.on_media_status_changed)
+        self.player.playbackStateChanged.connect(self.on_playback_state_changed)
+        if hasattr(self.player, "errorOccurred"):
+            self.player.errorOccurred.connect(self.on_player_error)
 
     def setup_ui(self):
         layout = QVBoxLayout(self)
@@ -56,13 +61,13 @@ class VideoOutputPanel(QWidget):
         # Header
         header_bar = QFrame()
         header_bar.setStyleSheet(
-            "background: #2c3e50; border-bottom: 1px solid #34495e;"
+            "background: #ffffff; border-bottom: 1px solid #34495e;"
         )
         header_layout = QHBoxLayout(header_bar)
         header_layout.setContentsMargins(10, 5, 10, 5)
 
         lbl = QLabel("Output Monitor")
-        lbl.setStyleSheet("color: white; font-weight: bold;")
+        lbl.setStyleSheet("color: #000000; font-weight: bold;")
         header_layout.addWidget(lbl)
         layout.addWidget(header_bar)
 
@@ -77,10 +82,10 @@ class VideoOutputPanel(QWidget):
         ctrl_layout = QHBoxLayout(controls)
         ctrl_layout.setContentsMargins(10, 5, 10, 5)
 
-        # Play/Pause Button
+        # Play Button
         self.btn_play = QPushButton("Play")
         self.btn_play.setFixedSize(60, 30)
-        self.btn_play.clicked.connect(self.toggle_play)
+        self.btn_play.clicked.connect(self.play)
         apply_tooltip(
             self.btn_play,
             "Play or pause preview",
@@ -90,10 +95,27 @@ class VideoOutputPanel(QWidget):
         )
         ctrl_layout.addWidget(self.btn_play)
 
+        # Pause Button
+        self.btn_pause = QPushButton("Pause")
+        self.btn_pause.setFixedSize(60, 30)
+        self.btn_pause.clicked.connect(self.pause)
+        apply_tooltip(
+            self.btn_pause,
+            "Pause playback",
+            "Pause video without resetting",
+            None,
+            "Pause",
+        )
+        ctrl_layout.addWidget(self.btn_pause)
+
         # Slider
         self.slider = QSlider(Qt.Orientation.Horizontal)
         self.slider.setRange(0, 0)
         self.slider.sliderMoved.connect(self.set_position)
+        self.slider.sliderPressed.connect(self.on_slider_pressed)
+        self.slider.sliderReleased.connect(self.on_slider_released)
+        self.slider.valueChanged.connect(self.on_slider_value_changed)
+        self.slider.setEnabled(False)
         ctrl_layout.addWidget(self.slider)
 
         # Time Label
@@ -111,12 +133,22 @@ class VideoOutputPanel(QWidget):
         arm a one-shot slot that fires once the media reaches LoadedMedia status.
         """
         self._autoplay_pending = autoplay
+        self._has_media = False
+        self.btn_play.setEnabled(False)
+        self.btn_pause.setEnabled(False)
+        self.slider.setEnabled(False)
         # Disconnect any previous one-shot connection to avoid stacking
         try:
             self.player.mediaStatusChanged.disconnect(self._on_load_ready)
         except RuntimeError:
             pass
         self.player.mediaStatusChanged.connect(self._on_load_ready)
+
+        # Reset player to avoid stale state
+        try:
+            self.player.stop()
+        except Exception:
+            pass
 
         self.player.setSource(QUrl.fromLocalFile(file_path))
         self.audio_output.setVolume(1.0)
@@ -133,17 +165,28 @@ class VideoOutputPanel(QWidget):
                 self.player.mediaStatusChanged.disconnect(self._on_load_ready)
             except RuntimeError:
                 pass
+            self._has_media = True
+            self.slider.setEnabled(True)
+            self.btn_play.setEnabled(True)
+            self.btn_pause.setEnabled(True)
             if self._autoplay_pending:
                 self.player.play()
-                self.btn_play.setText("Pause")
+            else:
+                # Force first frame to display
+                self.player.play()
+                QTimer.singleShot(60, self.player.pause)
+            self._autoplay_pending = False
 
-    def toggle_play(self):
-        if self.player.playbackState() == QMediaPlayer.PlaybackState.Playing:
-            self.player.pause()
-            self.btn_play.setText("Play")
-        else:
-            self.player.play()
-            self.btn_play.setText("Pause")
+    def play(self):
+        if not self._has_media:
+            self.lbl_time.setText("No video loaded")
+            return
+        self.player.play()
+
+    def pause(self):
+        if not self._has_media:
+            return
+        self.player.pause()
 
     def on_position_changed(self, position):
         """Update slider as video plays."""
@@ -158,7 +201,9 @@ class VideoOutputPanel(QWidget):
 
     def set_position(self, position):
         """User dragged slider."""
-        self.player.setPosition(position)
+        if self._has_media:
+            self.player.setPosition(position)
+            self.update_time_label(position)
 
     def update_time_label(self, current_ms):
         def fmt(ms):
@@ -170,7 +215,36 @@ class VideoOutputPanel(QWidget):
 
     def on_media_status_changed(self, status):
         if status == QMediaPlayer.MediaStatus.EndOfMedia:
-            self.btn_play.setText("Play")
+            self.player.pause()
+            self.player.setPosition(0)
+
+    def on_playback_state_changed(self, state):
+        playing = state == QMediaPlayer.PlaybackState.Playing
+        self.btn_play.setEnabled(not playing)
+        self.btn_pause.setEnabled(playing)
+
+    def on_slider_pressed(self):
+        self._was_playing = (
+            self.player.playbackState() == QMediaPlayer.PlaybackState.Playing
+        )
+        if self._was_playing:
+            self.player.pause()
+
+    def on_slider_released(self):
+        if self._has_media:
+            self.player.setPosition(self.slider.value())
+            if self._was_playing:
+                self.player.play()
+
+    def on_slider_value_changed(self, value):
+        if self.slider.isSliderDown():
+            self.update_time_label(value)
+
+    def on_player_error(self, *args):
+        self.btn_play.setEnabled(False)
+        self.btn_pause.setEnabled(False)
+        self.slider.setEnabled(False)
+        self.lbl_time.setText("Playback error")
 
 
 class VideoRenderPanel(QWidget):
@@ -330,3 +404,4 @@ class VideoRenderPanel(QWidget):
 
     def update_status(self, msg, col):
         self.status_display.append(f"<span style='color:{col}'>{msg}</span>")
+        

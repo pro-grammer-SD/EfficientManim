@@ -86,3 +86,47 @@ Summarize the last 5 actions:
 - Project and scene scope currently operate on the active scene graph.
 - Checkpoints include metadata such as `description`, `timestamp`, and `affected_nodes`.
 - Per-node undo/redo is recorded as separate global actions to keep project history consistent.
+
+---
+
+## History-Powered Explanations
+
+EfficientManim now supports student-friendly explanations of past scene states and changes between checkpoints. This layer uses the same analysis engine as the Explain Panel and the MCP explain commands, so descriptions stay consistent across UI and automation.
+
+**How explanations work with checkpoints**
+- Each checkpoint stores a snapshot of the scene graph.
+- The explainer analyzes the snapshot and produces a structured `SceneAnalysis`.
+- The AI converts that analysis into a plain-language explanation.
+
+**Undo and redo in student language**
+- `explain.undo_action` describes what was removed or reversed.
+- `explain.redo_action` describes what was restored.
+- Explanations focus on the conceptual impact (e.g., removing a tangent line means the slope idea is no longer shown).
+
+**Comparing two versions**
+`explain.history_change` compares two checkpoints and reports:
+- Objects added / removed
+- Animations added / removed
+- Concept-level change summary
+- Educational significance of the change
+
+**Example MCP usage**
+Request:
+```json
+{"command": "explain.history_change", "payload": {"from_checkpoint": "Graph Added", "to_checkpoint": "Tangent Line Added", "mode": "detailed"}}
+```
+
+Response:
+```json
+{
+  "objects_added": ["tangent_line"],
+  "objects_removed": [],
+  "animations_added": ["DrawBorderThenFill"],
+  "animations_removed": [],
+  "concept_change_summary": "Introduced: slope or derivative",
+  "educational_significance": "The new tangent line makes the slope at a point visible, which is the idea behind the derivative."
+}
+```
+
+**Concept-level change summaries**
+The explainer compares concept hints from the two snapshots. When hints differ, it summarizes the new or de-emphasized ideas (e.g., “Introduced: slope or derivative”). This summary is then refined into student-friendly language by the AI.

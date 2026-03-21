@@ -83,6 +83,24 @@ class SettingsPanel(QWidget):
 
         layout.addWidget(grp_ai)
 
+        grp_learning = QGroupBox("Learning Mode")
+        form_learning = QFormLayout(grp_learning)
+        self.chk_learning = QCheckBox("Enable Learning Mode (auto-explanations while building animations)")
+        self.chk_learning.setChecked(
+            bool(SETTINGS.get("LEARNING_MODE_ENABLED", False, type=bool))
+        )
+        form_learning.addRow(self.chk_learning)
+        layout.addWidget(grp_learning)
+
+        grp_teacher = QGroupBox("Teacher Mode")
+        form_teacher = QFormLayout(grp_teacher)
+        self.chk_teacher = QCheckBox("Enable Teacher Mode (auto-generate lesson notes)")
+        self.chk_teacher.setChecked(
+            bool(SETTINGS.get("TEACHER_MODE_ENABLED", False, type=bool))
+        )
+        form_teacher.addRow(self.chk_teacher)
+        layout.addWidget(grp_teacher)
+
     def apply_settings(self) -> None:
         SETTINGS.set("GEMINI_API_KEY", self.api_key.text())
         SETTINGS.set("FPS", self.fps.value())
@@ -90,3 +108,5 @@ class SettingsPanel(QWidget):
         SETTINGS.set("GEMINI_MODEL", self.gemini_model.currentText())
         SETTINGS.set("TTS_MODEL", self.tts_model.currentText())
         SETTINGS.set("ENABLE_PREVIEW", self.chk_preview.isChecked())
+        SETTINGS.set("LEARNING_MODE_ENABLED", self.chk_learning.isChecked())
+        SETTINGS.set("TEACHER_MODE_ENABLED", self.chk_teacher.isChecked())

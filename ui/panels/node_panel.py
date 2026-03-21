@@ -1015,8 +1015,7 @@ class AIPanel(QWidget):
         """Create visually distinct header."""
         header = QFrame()
         header.setStyleSheet(
-            "QFrame { background: linear-gradient(90deg, #1e88e5 0%, #1565c0 100%); "
-            "border-bottom: 2px solid #0d47a1; }"
+            "QFrame { background-color: #ffffff; border-bottom: 2px solid #cccccc; }"
         )
         header.setMaximumHeight(50)
 
@@ -1028,17 +1027,17 @@ class AIPanel(QWidget):
         font.setPointSize(11)
         font.setBold(True)
         title.setFont(font)
-        title.setStyleSheet("color: white; font-weight: bold;")
+        title.setStyleSheet("color: #000000; font-weight: bold;")  # text black
 
         subtitle = QLabel("Generate Manim code with Gemini AI")
-        subtitle.setStyleSheet("color: rgba(255,255,255,0.7); font-size: 9pt;")
+        subtitle.setStyleSheet("color: #555555; font-size: 9pt;")  # dark grey
 
         layout.addWidget(title)
         layout.addWidget(subtitle)
         layout.addStretch()
 
         status_label = QLabel("Status: Ready")
-        status_label.setStyleSheet("color: rgba(255,255,255,0.8);")
+        status_label.setStyleSheet("color: #333333;")  # dark grey
         self.status_label = status_label
         layout.addWidget(status_label)
 
@@ -1325,7 +1324,8 @@ class AIPanel(QWidget):
         match = re.findall(r"```python(.*?)```", full, re.DOTALL)
 
         if match:
-            self.last_code = match[-1].strip()
+            raw_code = match[-1].strip()
+            self.last_code = self._normalize_scene_class_name(raw_code)
             self._extract_nodes_from_code(self.last_code)
 
             if self.extracted_nodes:
@@ -1341,6 +1341,23 @@ class AIPanel(QWidget):
                 self.status_label.setText("Status: Code ready (no nodes detected)")
         else:
             self.status_label.setText("Status: No code block found")
+
+    def _normalize_scene_class_name(self, code: str) -> str:
+        """Force the scene class name to GeneratedScene(Scene) for AI output."""
+        pattern = re.compile(
+            r"^(\s*)class\s+([A-Za-z_]\w*)\s*\(([^)]*)\)\s*:",
+            re.MULTILINE,
+        )
+
+        def repl(match):
+            bases = match.group(3)
+            if "Scene" not in bases:
+                return match.group(0)
+            indent = match.group(1)
+            return f"{indent}class GeneratedScene(Scene):"
+
+        updated, _ = pattern.subn(repl, code, count=1)
+        return updated
 
     def _extract_nodes_from_code(self, code: str):
         """Extract BOTH mobjects and animations from AI-generated code."""
@@ -2021,16 +2038,18 @@ class AINodeIntegrator:
         Parse AI-generated code and extract BOTH node and animation definitions.
         Handles:
           - var = ClassName(...) definitions
-          - self.play(AnimationClass(target, ...)) inline calls
+          - self.play(AnimationClass(target, ...)) inline calls (multiple allowed)
           - self.play(target.animate.method(...)) calls
+          - self.wait(...) calls
 
         Returns: (mobjects, animations, play_sequence)
-        Where play_sequence = list of {anim_class, anim_var, target_var, params, raw}
+        Where play_sequence = list of play/wait entries in execution order
         """
         mobjects = []
         animations = []
         play_sequence = []
         mobject_vars = {}  # var_name -> class_name
+        anim_vars = {}  # var_name -> animation entry
 
         KNOWN_ANIMS = {
             "FadeIn",
@@ -2079,6 +2098,65 @@ class AINodeIntegrator:
             except Exception:
                 return False
 
+        def _split_top_level_args(s: str) -> list[str]:
+            args = []
+            buf = []
+            depth = 0
+            in_str = False
+            str_char = ""
+            esc = False
+            for ch in s:
+                if in_str:
+                    buf.append(ch)
+                    if esc:
+                        esc = False
+                    elif ch == "\\":
+                        esc = True
+                    elif ch == str_char:
+                        in_str = False
+                    continue
+                if ch in ("'", '"'):
+                    in_str = True
+                    str_char = ch
+                    buf.append(ch)
+                    continue
+                if ch in "([{":
+                    depth += 1
+                elif ch in ")]}":
+                    depth -= 1 if depth > 0 else 0
+                if ch == "," and depth == 0:
+                    arg = "".join(buf).strip()
+                    if arg:
+                        args.append(arg)
+                    buf = []
+                else:
+                    buf.append(ch)
+            tail = "".join(buf).strip()
+            if tail:
+                args.append(tail)
+            return args
+
+        def _is_kw_arg(token: str) -> bool:
+            return bool(re.match(r"^[A-Za-z_]\w*\s*=", token))
+
+        def _parse_kw_arg(token: str) -> tuple[str, str] | None:
+            if not _is_kw_arg(token):
+                return None
+            key, value = token.split("=", 1)
+            return key.strip(), value.strip()
+
+        def _match_class_call(token: str) -> tuple[str, str] | None:
+            m = re.match(r"([A-Z][a-zA-Z0-9]*)\s*\(", token)
+            if not m:
+                return None
+            class_name = m.group(1)
+            start = m.end()
+            end = _balanced_paren_end(token, start)
+            if end <= start:
+                return None
+            inner = token[start : end - 1]
+            return class_name, inner
+
         # ── Step 1: Variable assignments ──────────────────────────────────
         for m in re.finditer(
             r"^[ \t]*(\w+)\s*=\s*([A-Z][a-zA-Z0-9]*)\s*\(", code, re.MULTILINE
@@ -2095,67 +2173,197 @@ class AINodeIntegrator:
                 "var_name": var_name,
                 "class_name": class_name,
                 "params": params,
+                "raw_args": params_str,
                 "source": "ai",
                 "code_snippet": code[m.start() : end_idx],
             }
             if is_anim:
                 animations.append(entry)
+                anim_vars[var_name] = entry
             else:
                 mobjects.append(entry)
                 mobject_vars[var_name] = class_name
 
-        # ── Step 2: self.play() calls in order ────────────────────────────
-        for m in re.finditer(r"self\.play\(", code):
-            end_idx = _balanced_paren_end(code, m.end())
-            raw_play = code[m.end() : end_idx - 1].strip()
+        inline_counter = 0
+        anim_counter = 0
 
-            # .animate chain: var.animate.method(args)
-            animate_m = re.match(
-                r"(\w+)\.animate\.([\w]+)\((.*)\)$", raw_play, re.DOTALL
-            )
-            if animate_m:
-                target_var, method, method_args = animate_m.groups()
+        def _create_inline_mobject(class_name: str, params_str: str) -> str:
+            nonlocal inline_counter
+            inline_counter += 1
+            var_name = f"inline_{class_name.lower()}_{inline_counter}"
+            entry = {
+                "var_name": var_name,
+                "class_name": class_name,
+                "params": AINodeIntegrator._parse_params(params_str),
+                "raw_args": params_str,
+                "source": "ai",
+                "code_snippet": f"{class_name}({params_str})",
+            }
+            mobjects.append(entry)
+            mobject_vars[var_name] = class_name
+            return var_name
+
+        def _extract_target_vars(arg_str: str) -> list[str]:
+            targets = []
+            for tok in _split_top_level_args(arg_str):
+                tok = tok.strip()
+                if not tok:
+                    continue
+                tok = tok.lstrip("*").strip()
+                if not tok:
+                    continue
+                if _is_kw_arg(tok):
+                    continue
+                if re.match(r"^[A-Za-z_]\w*$", tok) and tok in mobject_vars:
+                    targets.append(tok)
+                    continue
+                cc = _match_class_call(tok)
+                if cc:
+                    cname, cargs = cc
+                    if hasattr(manim, cname) and not _is_animation_class(cname):
+                        targets.append(_create_inline_mobject(cname, cargs))
+                        continue
+            # Fallback: scan for any referenced mobject vars
+            for mob_var in mobject_vars:
+                if mob_var in targets:
+                    continue
+                if re.search(r"\b" + re.escape(mob_var) + r"\b", arg_str):
+                    targets.append(mob_var)
+            return targets
+
+        def _parse_play_kwargs(args: list[str]) -> dict:
+            play_kwargs = {}
+            for tok in args:
+                kw = _parse_kw_arg(tok)
+                if not kw:
+                    continue
+                key, val = kw
+                if key not in ("run_time", "rate_func", "lag_ratio"):
+                    continue
+                if key == "run_time":
+                    try:
+                        play_kwargs[key] = float(val)
+                    except Exception:
+                        play_kwargs[key] = val.strip("'\"")
+                else:
+                    play_kwargs[key] = val.strip()
+            return play_kwargs
+
+        def _make_anim_entry(
+            anim_class: str,
+            anim_var: str,
+            anim_args: str,
+            is_chain: bool,
+            display_override: str | None = None,
+        ) -> dict:
+            params = AINodeIntegrator._parse_params(anim_args)
+            targets = _extract_target_vars(anim_args)
+            return {
+                "anim_class": anim_class,
+                "anim_var": anim_var,
+                "target_vars": targets,
+                "params": params,
+                "raw": anim_args,
+                "is_animate_chain": is_chain,
+                "display_override": display_override,
+            }
+
+        # ── Step 2: self.play()/self.wait() calls in order ───────────────
+        for m in re.finditer(r"self\.(play|wait)\(", code):
+            call_type = m.group(1)
+            end_idx = _balanced_paren_end(code, m.end())
+            raw_args = code[m.end() : end_idx - 1].strip()
+
+            if call_type == "wait":
+                wait_args = _split_top_level_args(raw_args)
+                duration = 1.0
+                if wait_args:
+                    first = wait_args[0].strip()
+                    kw = _parse_kw_arg(first)
+                    if kw and kw[0] == "duration":
+                        first = kw[1]
+                    try:
+                        duration = float(first)
+                    except Exception:
+                        duration = first.strip("'\"")
                 play_sequence.append(
-                    {
-                        "anim_class": f"animate.{method}",
-                        "anim_var": f"{target_var}_animate_{method}_{len(play_sequence) + 1}",
-                        "target_var": target_var,
-                        "params": AINodeIntegrator._parse_params(method_args),
-                        "raw": raw_play,
-                        "is_animate_chain": True,
-                    }
+                    {"kind": "wait", "duration": duration, "raw": raw_args}
                 )
                 continue
 
-            # Standard AnimClass(args)
-            inner_m = re.match(r"([A-Z][a-zA-Z0-9]*)\s*\((.*)\)$", raw_play, re.DOTALL)
-            if inner_m:
-                anim_class, anim_args = inner_m.groups()
-                if not hasattr(manim, anim_class):
+            # play(...)
+            args = _split_top_level_args(raw_args)
+            play_kwargs = _parse_play_kwargs(args)
+            anim_entries = []
+
+            for arg in args:
+                if _is_kw_arg(arg):
+                    # already handled in play_kwargs
                     continue
-                if not _is_animation_class(anim_class):
+                arg_clean = arg.strip().lstrip("*").strip()
+                if not arg_clean:
                     continue
 
-                target_var = None
-                for mob_var in mobject_vars:
-                    if re.search(r"\b" + re.escape(mob_var) + r"\b", anim_args):
-                        target_var = mob_var
-                        break
-
-                params = AINodeIntegrator._parse_params(anim_args)
-                if target_var and target_var in params:
-                    del params[target_var]
-
-                play_sequence.append(
-                    {
-                        "anim_class": anim_class,
-                        "anim_var": f"{anim_class.lower()}_{len(play_sequence) + 1}",
-                        "target_var": target_var,
-                        "params": params,
-                        "raw": raw_play,
-                        "is_animate_chain": False,
-                    }
+                # .animate chain: var.animate.method(args)
+                animate_m = re.match(
+                    r"(\w+)\.animate\.([\w]+)\((.*)\)$", arg_clean, re.DOTALL
                 )
+                if animate_m:
+                    target_var, method, method_args = animate_m.groups()
+                    anim_counter += 1
+                    anim_entries.append(
+                        _make_anim_entry(
+                            "ApplyMethod",
+                            f"{target_var}_animate_{method}_{anim_counter}",
+                            method_args,
+                            True,
+                            display_override=f"animate.{method}",
+                        )
+                    )
+                    # Ensure target is explicitly connected
+                    if anim_entries[-1]["target_vars"] == [] and target_var:
+                        anim_entries[-1]["target_vars"] = [target_var]
+                    continue
+
+                # Animation variable reference (e.g., self.play(anim1))
+                if re.match(r"^[A-Za-z_]\w*$", arg_clean) and arg_clean in anim_vars:
+                    anim_def = anim_vars[arg_clean]
+                    anim_class = anim_def["class_name"]
+                    anim_args = anim_def.get("raw_args", "")
+                    anim_entries.append(
+                        _make_anim_entry(
+                            anim_class, arg_clean, anim_args, False, None
+                        )
+                    )
+                    continue
+
+                # Standard AnimClass(args)
+                cc = _match_class_call(arg_clean)
+                if cc:
+                    anim_class, anim_args = cc
+                    if not hasattr(manim, anim_class):
+                        continue
+                    if not _is_animation_class(anim_class):
+                        continue
+                    anim_counter += 1
+                    anim_entries.append(
+                        _make_anim_entry(
+                            anim_class,
+                            f"{anim_class.lower()}_{anim_counter}",
+                            anim_args,
+                            False,
+                            None,
+                        )
+                    )
+
+            play_sequence.append(
+                {
+                    "kind": "play",
+                    "animations": anim_entries,
+                    "play_kwargs": play_kwargs,
+                    "raw": raw_args,
+                }
+            )
 
         return mobjects, animations, play_sequence
 
@@ -2248,6 +2456,43 @@ class AINodeIntegrator:
         if hasattr(manim, class_name):
             AINodeIntegrator._load_class_parameters(node_data, class_name)
 
+        return item
+
+    @staticmethod
+    def create_structural_node_from_ai(
+        name: str,
+        node_type: NodeType,
+        scene_graph,
+        pos: "tuple[int, int]" = (50, 50),
+        params: dict | None = None,
+        cls_name: str | None = None,
+    ) -> "NodeItem":
+        """Create PLAY/WAIT nodes for AI-generated graphs."""
+        display_cls = cls_name
+        if display_cls is None:
+            if node_type == NodeType.PLAY:
+                display_cls = "play()"
+            elif node_type == NodeType.WAIT:
+                display_cls = "wait()"
+            else:
+                display_cls = "struct"
+
+        node_data = NodeData(name, node_type, display_cls)
+        node_data.pos_x, node_data.pos_y = pos
+        if params is None:
+            params = {"duration": 1.0} if node_type == NodeType.WAIT else {}
+        node_data.params = dict(params)
+
+        node_data.is_ai_generated = True
+        node_data.ai_source = display_cls
+
+        item = NodeItem(node_data)
+        try:
+            item._window = scene_graph
+        except Exception:
+            pass
+        scene_graph.scene.addItem(item)
+        scene_graph.nodes[item.data.id] = item
         return item
 
     @staticmethod
@@ -2362,69 +2607,147 @@ class AINodeIntegrator:
                         f"Failed to create mobject {node_def['var_name']}: {e}"
                     )
 
-            # ── Create Animation Nodes (per play_sequence entry) ──────────
+            # ── Create Animation + Play/Wait Nodes (connected) ────────────
             anim_col = 1
-            prev_anim_item = None
+            struct_col = 2
+            play_index = 0
+            wait_index = 0
+            cursor_row = 0
+            prev_struct_item = None
+            struct_allowed = {
+                (NodeType.PLAY, NodeType.WAIT),
+                (NodeType.WAIT, NodeType.PLAY),
+                (NodeType.PLAY, NodeType.PLAY),
+            }
 
-            for seq_idx, play_entry in enumerate(play_sequence):
-                anim_class = play_entry["anim_class"]
-                anim_var = play_entry["anim_var"]
-                target_var = play_entry["target_var"]
-                params = play_entry.get("params", {})
-                is_chain = play_entry.get("is_animate_chain", False)
-
-                # For .animate chains use a generic label
-                display_class = (
-                    anim_class.split(".")[-1] if "." in anim_class else anim_class
-                )
-                if is_chain:
-                    display_class = f"animate.{display_class}"
-
-                # Position: column based on animation index
-                pos_x = START_X + anim_col * COL_WIDTH
-                pos_y = START_Y + seq_idx * ROW_HEIGHT
-
+            def _connect_struct(prev_item, next_item):
+                if not prev_item or not next_item:
+                    return
+                if (prev_item.data.type, next_item.data.type) not in struct_allowed:
+                    return
                 try:
-                    item = AINodeIntegrator.create_node_from_ai(
-                        anim_var,
-                        anim_class if not is_chain else "ApplyMethod",
-                        params,
-                        scene_graph,
-                        node_type=NodeType.ANIMATION,
-                        pos=(pos_x, pos_y),
-                        override_cls_name=display_class,
+                    scene_graph.scene.try_connect(
+                        prev_item.out_socket, next_item.in_socket
                     )
-                    created_nodes.append(item)
+                except Exception:
+                    pass
 
-                    # Connect animation to target mobject
-                    if target_var and target_var in mobject_items:
-                        mob_item = mobject_items[target_var]
-                        try:
-                            wire = WireItem(mob_item.out_socket, item.in_socket)
-                            scene_graph.scene.addItem(wire)
-                            mob_item.out_socket.links.append(wire)
-                            item.in_socket.links.append(wire)
-                        except Exception as we:
-                            LOGGER.warning(
-                                f"Wire creation failed ({target_var} -> {anim_var}): {we}"
-                            )
+            for entry in play_sequence:
+                kind = entry.get("kind", "play")
 
-                    # Chain animations sequentially via out -> in
-                    if prev_anim_item is not None:
-                        try:
-                            chain_wire = WireItem(
-                                prev_anim_item.out_socket, item.in_socket
-                            )
-                            scene_graph.scene.addItem(chain_wire)
-                            prev_anim_item.out_socket.links.append(chain_wire)
-                            item.in_socket.links.append(chain_wire)
-                        except Exception:
-                            pass
+                if kind == "wait":
+                    wait_index += 1
+                    pos_x = START_X + struct_col * COL_WIDTH
+                    pos_y = START_Y + cursor_row * ROW_HEIGHT
+                    wait_item = AINodeIntegrator.create_structural_node_from_ai(
+                        f"wait_{wait_index}",
+                        NodeType.WAIT,
+                        scene_graph,
+                        pos=(pos_x, pos_y),
+                        params={"duration": entry.get("duration", 1.0)},
+                        cls_name="wait()",
+                    )
+                    created_nodes.append(wait_item)
+                    _connect_struct(prev_struct_item, wait_item)
+                    prev_struct_item = wait_item
+                    cursor_row += 1
+                    continue
 
-                    prev_anim_item = item
+                # Play entries
+                anim_entries = entry.get("animations", [])
+                play_kwargs = entry.get("play_kwargs", {})
+                if not anim_entries:
+                    continue
 
-                except Exception as e:
-                    errors.append(f"Failed to create animation node {anim_var}: {e}")
+                play_index += 1
+                play_start_row = cursor_row
+                anim_items = []
+
+                for anim_entry in anim_entries:
+                    anim_class = anim_entry["anim_class"]
+                    anim_var = anim_entry["anim_var"]
+                    is_chain = anim_entry.get("is_animate_chain", False)
+                    display_override = anim_entry.get("display_override")
+
+                    params = dict(anim_entry.get("params", {}))
+                    for k, v in play_kwargs.items():
+                        if k not in params:
+                            params[k] = v
+
+                    display_class = (
+                        display_override
+                        if display_override
+                        else (
+                            anim_class.split(".")[-1]
+                            if "." in anim_class
+                            else anim_class
+                        )
+                    )
+
+                    pos_x = START_X + anim_col * COL_WIDTH
+                    pos_y = START_Y + cursor_row * ROW_HEIGHT
+
+                    try:
+                        item = AINodeIntegrator.create_node_from_ai(
+                            anim_var,
+                            anim_class if not is_chain else "ApplyMethod",
+                            params,
+                            scene_graph,
+                            node_type=NodeType.ANIMATION,
+                            pos=(pos_x, pos_y),
+                            override_cls_name=display_class,
+                        )
+                        created_nodes.append(item)
+                        anim_items.append(item)
+
+                        # Connect animation to target mobjects (all found)
+                        targets = list(anim_entry.get("target_vars", []))
+                        if not targets and len(mobject_items) == 1:
+                            targets = list(mobject_items.keys())
+                        for target_var in targets:
+                            mob_item = mobject_items.get(target_var)
+                            if not mob_item:
+                                continue
+                            try:
+                                scene_graph.scene.try_connect(
+                                    mob_item.out_socket, item.in_socket
+                                )
+                            except Exception:
+                                pass
+
+                    except Exception as e:
+                        errors.append(
+                            f"Failed to create animation node {anim_var}: {e}"
+                        )
+
+                    cursor_row += 1
+
+                # Create PLAY node aligned to this batch
+                play_row = play_start_row + max(0, len(anim_items) - 1) / 2
+                pos_x = START_X + struct_col * COL_WIDTH
+                pos_y = START_Y + play_row * ROW_HEIGHT
+                play_item = AINodeIntegrator.create_structural_node_from_ai(
+                    f"play_{play_index}",
+                    NodeType.PLAY,
+                    scene_graph,
+                    pos=(pos_x, pos_y),
+                    params={},
+                    cls_name="play()",
+                )
+                created_nodes.append(play_item)
+
+                # Connect anims into the PLAY node
+                for anim_item in anim_items:
+                    try:
+                        scene_graph.scene.try_connect(
+                            anim_item.out_socket, play_item.in_socket
+                        )
+                    except Exception:
+                        pass
+
+                # Chain structural flow (PLAY/WAIT)
+                _connect_struct(prev_struct_item, play_item)
+                prev_struct_item = play_item
 
             scene_graph.scene.notify_change()
 
@@ -3145,6 +3468,100 @@ class SnippetLibrary(QWidget):
             "        s = Square(color=BLUE)\n"
             "        group = VGroup(c, s).arrange(RIGHT)\n"
             "        self.play(Create(group))\n"
+            "        self.wait(1)\n"
+        ),
+        "📈 Axes + Function Graph": (
+            "from manim import *\n\n"
+            "class MyScene(Scene):\n"
+            "    def construct(self):\n"
+            "        axes = Axes(\n"
+            "            x_range=[-4, 4, 1],\n"
+            "            y_range=[-2, 8, 2],\n"
+            "            x_length=8,\n"
+            "            y_length=5,\n"
+            "            tips=False,\n"
+            "        )\n"
+            "        graph = axes.plot(lambda x: 0.5 * x**2, color=BLUE)\n"
+            "        label = axes.get_graph_label(graph, label=\"y=0.5x^2\")\n"
+            "        self.play(Create(axes), Create(graph), FadeIn(label))\n"
+            "        self.wait(1)\n"
+        ),
+        "🧮 Equation Steps (TransformMatchingTex)": (
+            "from manim import *\n\n"
+            "class MyScene(Scene):\n"
+            "    def construct(self):\n"
+            "        eq1 = MathTex(r\"ax + b = c\")\n"
+            "        eq2 = MathTex(r\"ax = c - b\").move_to(eq1)\n"
+            "        eq3 = MathTex(r\"x = {c-b \\\\over a}\").move_to(eq1)\n"
+            "        self.play(Write(eq1))\n"
+            "        self.play(TransformMatchingTex(eq1, eq2))\n"
+            "        self.play(TransformMatchingTex(eq2, eq3))\n"
+            "        self.wait(1)\n"
+        ),
+        "🧭 NumberPlane + Labeled Point": (
+            "from manim import *\n\n"
+            "class MyScene(Scene):\n"
+            "    def construct(self):\n"
+            "        plane = NumberPlane(\n"
+            "            x_range=[-5, 5, 1],\n"
+            "            y_range=[-3, 3, 1],\n"
+            "            background_line_style={\"stroke_opacity\": 0.4},\n"
+            "        )\n"
+            "        dot = Dot(plane.c2p(2, 1), color=YELLOW)\n"
+            "        label = MathTex(\"(2, 1)\").next_to(dot, UR)\n"
+            "        self.play(Create(plane), FadeIn(dot), Write(label))\n"
+            "        self.wait(1)\n"
+        ),
+        "📉 Area Under Curve": (
+            "from manim import *\n\n"
+            "class MyScene(Scene):\n"
+            "    def construct(self):\n"
+            "        axes = Axes(\n"
+            "            x_range=[-3, 3, 1],\n"
+            "            y_range=[-1, 5, 1],\n"
+            "            x_length=8,\n"
+            "            y_length=5,\n"
+            "            tips=False,\n"
+            "        )\n"
+            "        graph = axes.plot(lambda x: x**2 / 2, color=BLUE)\n"
+            "        area = axes.get_area(graph, x_range=[-1, 2], color=BLUE, opacity=0.3)\n"
+            "        self.play(Create(axes), Create(graph))\n"
+            "        self.play(FadeIn(area))\n"
+            "        self.wait(1)\n"
+        ),
+        "🧲 Vector Arrow + Label": (
+            "from manim import *\n\n"
+            "class MyScene(Scene):\n"
+            "    def construct(self):\n"
+            "        plane = NumberPlane(\n"
+            "            x_range=[-4, 4, 1],\n"
+            "            y_range=[-3, 3, 1],\n"
+            "            background_line_style={\"stroke_opacity\": 0.4},\n"
+            "        )\n"
+            "        vec = Vector([3, 2], color=GREEN)\n"
+            "        label = MathTex(r\"\\\\vec{v}\").next_to(vec.get_end(), UR)\n"
+            "        self.play(Create(plane), GrowArrow(vec), Write(label))\n"
+            "        self.wait(1)\n"
+        ),
+        "✨ Staggered Reveal (LaggedStartMap)": (
+            "from manim import *\n\n"
+            "class MyScene(Scene):\n"
+            "    def construct(self):\n"
+            "        dots = VGroup(*[Dot([x, 0, 0]) for x in range(-4, 5)])\n"
+            "        self.play(LaggedStartMap(FadeIn, dots, lag_ratio=0.1))\n"
+            "        self.wait(1)\n"
+        ),
+        "🌀 Parametric Curve": (
+            "from manim import *\n"
+            "import numpy as np\n\n"
+            "class MyScene(Scene):\n"
+            "    def construct(self):\n"
+            "        curve = ParametricFunction(\n"
+            "            lambda t: np.array([np.cos(t), np.sin(2 * t) / 2, 0]),\n"
+            "            t_range=[0, TAU],\n"
+            "            color=PURPLE,\n"
+            "        )\n"
+            "        self.play(Create(curve))\n"
             "        self.wait(1)\n"
         ),
     }

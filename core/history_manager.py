@@ -149,6 +149,7 @@ class HistoryManager(QObject):
     state_changed = Signal(bool, bool)
     snapshot_applied = Signal(object)
     diff_available = Signal(object)
+    checkpoint_created = Signal(object)
 
     def __init__(
         self,
@@ -598,6 +599,10 @@ class HistoryManager(QObject):
             metadata=meta,
         )
         self._checkpoints[name] = cp
+        try:
+            self.checkpoint_created.emit(cp)
+        except Exception:
+            pass
         return cp
 
     def restore_checkpoint(self, name: str) -> Optional[dict]:

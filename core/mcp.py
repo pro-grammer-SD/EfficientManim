@@ -41,6 +41,7 @@ from dataclasses import dataclass
 from typing import Any, Callable, Optional
 
 from graph.node import NodeData, NodeItem
+from core.config import SETTINGS
 
 LOGGER = logging.getLogger("mcp")
 
@@ -2589,6 +2590,259 @@ class MCPAgent:
             if extra:
                 payload.update(extra)
             return payload
+
+        # ── Explain & Learning/Teacher Modes ──────────────────────────────
+
+        @self._register("explain.scene")
+        def _(payload: dict) -> MCPResult:
+            mode = payload.get("mode", "detailed")
+            service = getattr(win, "explain_service", None)
+            if service is None:
+                return MCPResult(success=False, error="Explain service not available.")
+            try:
+                analysis = service.analyze_scene()
+                resp = service.explain_scene(analysis, mode)
+                data = {
+                    "scene_name": analysis.scene_name,
+                    "concept_explanation": resp.concept_explanation,
+                    "step_by_step": resp.step_by_step,
+                    "visual_reasoning": resp.visual_reasoning,
+                    "simple_explanation": resp.simple_explanation,
+                    "key_takeaways": resp.key_takeaways,
+                }
+                return MCPResult(success=True, data=data)
+            except Exception as e:
+                return MCPResult(success=False, error=str(e))
+
+        @self._register("explain.selected_nodes")
+        def _(payload: dict) -> MCPResult:
+            node_ids = payload.get("node_ids", [])
+            mode = payload.get("mode", "detailed")
+            if not node_ids:
+                return MCPResult(success=False, error="node_ids is required.")
+            service = getattr(win, "explain_service", None)
+            if service is None:
+                return MCPResult(success=False, error="Explain service not available.")
+            try:
+                analysis = service.analyze_scene(node_ids=node_ids)
+                resp = service.explain_scene(analysis, mode)
+                data = {
+                    "scene_name": analysis.scene_name,
+                    "concept_explanation": resp.concept_explanation,
+                    "step_by_step": resp.step_by_step,
+                    "visual_reasoning": resp.visual_reasoning,
+                    "simple_explanation": resp.simple_explanation,
+                    "key_takeaways": resp.key_takeaways,
+                }
+                return MCPResult(success=True, data=data)
+            except Exception as e:
+                return MCPResult(success=False, error=str(e))
+
+        @self._register("explain.selected_animation")
+        def _(payload: dict) -> MCPResult:
+            animation_id = payload.get("animation_id", "")
+            mode = payload.get("mode", "detailed")
+            if not animation_id:
+                return MCPResult(success=False, error="animation_id is required.")
+            service = getattr(win, "explain_service", None)
+            if service is None:
+                return MCPResult(success=False, error="Explain service not available.")
+            try:
+                analysis = service.analyze_scene(animation_id=animation_id)
+                resp = service.explain_scene(analysis, mode)
+                data = {
+                    "scene_name": analysis.scene_name,
+                    "concept_explanation": resp.concept_explanation,
+                    "step_by_step": resp.step_by_step,
+                    "visual_reasoning": resp.visual_reasoning,
+                    "simple_explanation": resp.simple_explanation,
+                    "key_takeaways": resp.key_takeaways,
+                }
+                return MCPResult(success=True, data=data)
+            except Exception as e:
+                return MCPResult(success=False, error=str(e))
+
+        @self._register("explain.regenerate")
+        def _(payload: dict) -> MCPResult:
+            mode = payload.get("mode", "detailed")
+            service = getattr(win, "explain_service", None)
+            if service is None:
+                return MCPResult(success=False, error="Explain service not available.")
+            try:
+                analysis = service.analyze_scene()
+                resp = service.explain_scene(analysis, mode)
+                data = {
+                    "scene_name": analysis.scene_name,
+                    "concept_explanation": resp.concept_explanation,
+                    "step_by_step": resp.step_by_step,
+                    "visual_reasoning": resp.visual_reasoning,
+                    "simple_explanation": resp.simple_explanation,
+                    "key_takeaways": resp.key_takeaways,
+                }
+                return MCPResult(success=True, data=data)
+            except Exception as e:
+                return MCPResult(success=False, error=str(e))
+
+        @self._register("explain.history_checkpoint")
+        def _(payload: dict) -> MCPResult:
+            checkpoint_id = payload.get("checkpoint_id", "")
+            mode = payload.get("mode", "detailed")
+            if not checkpoint_id:
+                return MCPResult(success=False, error="checkpoint_id is required.")
+            history = getattr(win, "history_manager", None)
+            service = getattr(win, "explain_service", None)
+            if history is None or service is None:
+                return MCPResult(success=False, error="History or explain service not available.")
+            try:
+                from scene_explainer.history_explainer import HistoryExplainer
+
+                explainer = HistoryExplainer(
+                    history, service.analyzer, service.prompt_builder, service.ai
+                )
+                resp = explainer.explain_checkpoint(checkpoint_id, mode)
+                data = {
+                    "checkpoint_id": checkpoint_id,
+                    "concept_explanation": resp.concept_explanation,
+                    "step_by_step": resp.step_by_step,
+                    "visual_reasoning": resp.visual_reasoning,
+                    "simple_explanation": resp.simple_explanation,
+                }
+                return MCPResult(success=True, data=data)
+            except Exception as e:
+                return MCPResult(success=False, error=str(e))
+
+        @self._register("explain.history_change")
+        def _(payload: dict) -> MCPResult:
+            from_cp = payload.get("from_checkpoint", "")
+            to_cp = payload.get("to_checkpoint", "")
+            mode = payload.get("mode", "detailed")
+            if not from_cp or not to_cp:
+                return MCPResult(success=False, error="from_checkpoint and to_checkpoint are required.")
+            history = getattr(win, "history_manager", None)
+            service = getattr(win, "explain_service", None)
+            if history is None or service is None:
+                return MCPResult(success=False, error="History or explain service not available.")
+            try:
+                from scene_explainer.history_explainer import HistoryExplainer
+
+                explainer = HistoryExplainer(
+                    history, service.analyzer, service.prompt_builder, service.ai
+                )
+                resp = explainer.explain_history_change(from_cp, to_cp, mode)
+                data = {
+                    "objects_added": resp.objects_added,
+                    "objects_removed": resp.objects_removed,
+                    "animations_added": resp.animations_added,
+                    "animations_removed": resp.animations_removed,
+                    "concept_change_summary": resp.concept_change_summary,
+                    "educational_significance": resp.educational_significance,
+                }
+                return MCPResult(success=True, data=data)
+            except Exception as e:
+                return MCPResult(success=False, error=str(e))
+
+        @self._register("explain.undo_action")
+        def _(payload: dict) -> MCPResult:
+            mode = payload.get("mode", "detailed")
+            history = getattr(win, "history_manager", None)
+            service = getattr(win, "explain_service", None)
+            if history is None or service is None:
+                return MCPResult(success=False, error="History or explain service not available.")
+            try:
+                from scene_explainer.history_explainer import HistoryExplainer
+
+                explainer = HistoryExplainer(
+                    history, service.analyzer, service.prompt_builder, service.ai
+                )
+                resp = explainer.explain_undo(mode)
+                return MCPResult(success=True, data=resp)
+            except Exception as e:
+                return MCPResult(success=False, error=str(e))
+
+        @self._register("explain.redo_action")
+        def _(payload: dict) -> MCPResult:
+            mode = payload.get("mode", "detailed")
+            history = getattr(win, "history_manager", None)
+            service = getattr(win, "explain_service", None)
+            if history is None or service is None:
+                return MCPResult(success=False, error="History or explain service not available.")
+            try:
+                from scene_explainer.history_explainer import HistoryExplainer
+
+                explainer = HistoryExplainer(
+                    history, service.analyzer, service.prompt_builder, service.ai
+                )
+                resp = explainer.explain_redo(mode)
+                return MCPResult(success=True, data=resp)
+            except Exception as e:
+                return MCPResult(success=False, error=str(e))
+
+        @self._register("learning_mode.enable")
+        def _(payload: dict) -> MCPResult:
+            SETTINGS.set("LEARNING_MODE_ENABLED", True)
+            return MCPResult(success=True, data={"enabled": True, "status": "Learning Mode is now active"})
+
+        @self._register("learning_mode.disable")
+        def _(payload: dict) -> MCPResult:
+            SETTINGS.set("LEARNING_MODE_ENABLED", False)
+            return MCPResult(success=True, data={"enabled": False, "status": "Learning Mode has been disabled"})
+
+        @self._register("learning_mode.status")
+        def _(payload: dict) -> MCPResult:
+            enabled = bool(SETTINGS.get("LEARNING_MODE_ENABLED", False, type=bool))
+            return MCPResult(success=True, data={"enabled": enabled})
+
+        @self._register("teacher_mode.enable")
+        def _(payload: dict) -> MCPResult:
+            SETTINGS.set("TEACHER_MODE_ENABLED", True)
+            return MCPResult(success=True, data={"enabled": True, "status": "Teacher Mode is now active"})
+
+        @self._register("teacher_mode.disable")
+        def _(payload: dict) -> MCPResult:
+            SETTINGS.set("TEACHER_MODE_ENABLED", False)
+            return MCPResult(success=True, data={"enabled": False, "status": "Teacher Mode has been disabled"})
+
+        @self._register("teacher_mode.generate_lesson")
+        def _(payload: dict) -> MCPResult:
+            service = getattr(win, "explain_service", None)
+            if service is None:
+                return MCPResult(success=False, error="Explain service not available.")
+            try:
+                analysis = service.analyze_scene()
+                lesson = service.lesson_notes(analysis)
+                data = {
+                    "concept_explanation": lesson.concept_explanation,
+                    "visual_explanation": lesson.visual_explanation,
+                    "step_by_step_teaching": lesson.step_by_step_teaching,
+                    "student_notes": lesson.student_notes,
+                    "key_takeaways": lesson.key_takeaways,
+                }
+                return MCPResult(success=True, data=data)
+            except Exception as e:
+                return MCPResult(success=False, error=str(e))
+
+        @self._register("app.quit")
+        def _(payload: dict) -> MCPResult:
+            try:
+                if hasattr(win, "explain_service") and win.explain_service is not None:
+                    try:
+                        win.explain_service.cancel_all()
+                    except Exception:
+                        pass
+                if hasattr(win, "request_app_quit"):
+                    should_close = bool(win.request_app_quit())
+                    if not should_close:
+                        return MCPResult(success=False, error="Quit cancelled by user.")
+                    try:
+                        setattr(win, "_skip_quit_prompt", True)
+                    except Exception:
+                        pass
+                    win.close()
+                    return MCPResult(success=True, data={"status": "success", "message": "Application closed safely"})
+                win.close()
+                return MCPResult(success=True, data={"status": "success", "message": "Application closed safely"})
+            except Exception as e:
+                return MCPResult(success=False, error=str(e))
 
         @self._register("history.undo_project")
         def _(payload: dict) -> MCPResult:

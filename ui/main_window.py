@@ -70,6 +70,8 @@ from utils.shortcuts import (
     KEYBINDINGS_AVAILABLE,
     initialize_default_keybindings,
 )
+from scene_explainer.ai_explainer import ExplainService
+from scene_explainer.ui_panel import ExplainPanel, LearningModeController, TeacherModeController
 
 try:
     from core.keybindings_panel import UnifiedKeybindingsPanel
@@ -120,6 +122,7 @@ class EfficientManimWindow(QMainWindow):
         self.history_manager: HistoryManager | None = None
         self.project_modified = False
         self.is_ai_generated_code = False
+        self._skip_quit_prompt = False
 
         # ═════════════════════════════════════════════════════════════════════
         # Initialize unified keybinding registry
@@ -144,6 +147,7 @@ class EfficientManimWindow(QMainWindow):
         self.setup_ui()
         build_menus(self)
         self._init_history()
+        self._init_explain_panel()
         self.apply_theme()
 
         # FIX: Ensure window is destroyed on close to trigger destroyed signal in home.py
@@ -245,6 +249,7 @@ class EfficientManimWindow(QMainWindow):
         self.quick_export_bar.export_requested.connect(self._quick_export)
         self.quick_export_bar.undo_requested.connect(self.undo_action)
         self.quick_export_bar.redo_requested.connect(self.redo_action)
+        self.quick_export_bar.explain_requested.connect(self.explain_current_context)
         canvas_layout.addWidget(self.quick_export_bar)
 
         left_splitter.addWidget(canvas_widget)
@@ -329,7 +334,7 @@ class EfficientManimWindow(QMainWindow):
         self.ai_dock.setFeatures(QDockWidget.DockWidgetFeature.NoDockWidgetFeatures)
         self.ai_dock.setAllowedAreas(Qt.DockWidgetArea.LeftDockWidgetArea)
         self.ai_dock.setWidget(self.panel_ai)
-        self.ai_dock.setMinimumWidth(320)
+        self.ai_dock.setMinimumWidth(240)
         self.addDockWidget(Qt.DockWidgetArea.LeftDockWidgetArea, self.ai_dock)
 
         self.tabs_bot = QTabWidget()
@@ -386,6 +391,27 @@ class EfficientManimWindow(QMainWindow):
 
         # Initialize root snapshot
         self.history_manager.reset(description="Initial State")
+
+    def _init_explain_panel(self) -> None:
+        """Initialize Explain Panel and learning/teacher mode controllers."""
+        try:
+            self.explain_service = ExplainService(self)
+            self.panel_explain = ExplainPanel(self)
+            self.explain_dock = QDockWidget("Explain Panel", self)
+            self.explain_dock.setObjectName("ExplainDockWidget")
+            self.explain_dock.setFeatures(
+                QDockWidget.DockWidgetFeature.NoDockWidgetFeatures
+            )
+            self.explain_dock.setAllowedAreas(
+                Qt.DockWidgetArea.RightDockWidgetArea
+            )
+            self.explain_dock.setWidget(self.panel_explain)
+            self.explain_dock.setMinimumWidth(240)
+            self.addDockWidget(Qt.DockWidgetArea.RightDockWidgetArea, self.explain_dock)
+            self.learning_mode_controller = LearningModeController(self, self.panel_explain)
+            self.teacher_mode_controller = TeacherModeController(self, self.panel_explain)
+        except Exception as exc:
+            LOGGER.error(f"Explain panel init failed: {exc}")
 
     def _history_snapshot_provider(self):
         """Return raw node/wire state for snapshotting."""
@@ -919,6 +945,78 @@ class EfficientManimWindow(QMainWindow):
             self.add_vgroup_node(group_name=name, member_ids=ids)
         if self.history_manager:
             self.history_manager.end_group()
+
+    # ── Explain Panel Integration ──────────────────────────────────────────
+
+    def _show_explain_panel(self) -> None:
+        if hasattr(self, "explain_dock"):
+            try:
+                self.explain_dock.show()
+            except Exception:
+                pass
+
+    def explain_current_context(self) -> None:
+        if not hasattr(self, "panel_explain"):
+            return
+        selected = [
+            item
+            for item in self.scene.selectedItems()
+            if isinstance(item, NodeItem)
+        ]
+        if selected:
+            anim = next((n for n in selected if n.data.type == NodeType.ANIMATION), None)
+            if anim is not None:
+                self.panel_explain.explain_selected_animation(anim.data.id)
+            else:
+                self.panel_explain.explain_selected_nodes([n.data.id for n in selected])
+        else:
+            self.panel_explain.explain_scene()
+        self._show_explain_panel()
+
+    def explain_selected_objects(self) -> None:
+        if not hasattr(self, "panel_explain"):
+            return
+        selected = [
+            item
+            for item in self.scene.selectedItems()
+            if isinstance(item, NodeItem) and item.data.type == NodeType.MOBJECT
+        ]
+        if not selected:
+            return
+        self.panel_explain.explain_selected_objects([n.data.id for n in selected])
+        self._show_explain_panel()
+
+    def explain_selected_nodes(self) -> None:
+        if not hasattr(self, "panel_explain"):
+            return
+        selected = [
+            item
+            for item in self.scene.selectedItems()
+            if isinstance(item, NodeItem)
+        ]
+        if not selected:
+            return
+        self.panel_explain.explain_selected_nodes([n.data.id for n in selected])
+        self._show_explain_panel()
+
+    def explain_selected_animation(self) -> None:
+        if not hasattr(self, "panel_explain"):
+            return
+        selected = [
+            item
+            for item in self.scene.selectedItems()
+            if isinstance(item, NodeItem) and item.data.type == NodeType.ANIMATION
+        ]
+        if not selected:
+            return
+        self.panel_explain.explain_selected_animation(selected[0].data.id)
+        self._show_explain_panel()
+
+    def generate_lesson_notes(self) -> None:
+        if not hasattr(self, "panel_explain"):
+            return
+        self.panel_explain.generate_lesson_notes()
+        self._show_explain_panel()
         self.statusBar().showMessage(f"VGroup created with {len(ids)} nodes", 2000)
 
     def mark_modified(self):
@@ -1001,6 +1099,17 @@ class EfficientManimWindow(QMainWindow):
 
     def closeEvent(self, event):
         """Intercept close event to check for unsaved changes and cleanup resources."""
+        if getattr(self, "_skip_quit_prompt", False):
+            event.accept()
+            return
+        should_close = self.request_app_quit()
+        if should_close:
+            event.accept()
+        else:
+            event.ignore()
+
+    def request_app_quit(self) -> bool:
+        """Attempt to close the application with the standard save prompt."""
         # FIX: Clean up all preview workers before closing
         for node_id in list(self.nodes.keys()):
             self._cleanup_preview_worker(node_id)
@@ -1027,18 +1136,36 @@ class EfficientManimWindow(QMainWindow):
                 self.save_project()
                 # If save was cancelled inside save_project, ignore close
                 if self.project_modified:
-                    event.ignore()
-                else:
-                    should_close = True
+                    return False
+                should_close = True
             elif reply == QMessageBox.StandardButton.Discard:
                 should_close = True
             else:
-                event.ignore()
+                return False
         else:
             should_close = True
 
         if should_close:
-            event.accept()
+            try:
+                if hasattr(self, "explain_service") and self.explain_service is not None:
+                    self.explain_service.cancel_all()
+            except Exception:
+                pass
+            try:
+                panel = getattr(self, "panel_ai", None)
+                if panel is not None:
+                    for attr in ("worker", "_auto_vo_worker"):
+                        w = getattr(panel, attr, None)
+                        if w is not None and hasattr(w, "isRunning") and w.isRunning():
+                            try:
+                                w.requestInterruption()
+                                w.quit()
+                                w.wait(500)
+                            except Exception:
+                                pass
+            except Exception:
+                pass
+        return should_close
 
     # ═══════════════════════════════════════════════════════════════════════════
     # AUTO-RELOAD SYSTEM IMPLEMENTATION
@@ -2256,6 +2383,13 @@ class EfficientManimWindow(QMainWindow):
             self.preview_lbl.setText("No Selection")
             return
 
+        if node.data.type == NodeType.ANIMATION:
+            self.preview_lbl.setPixmap(QPixmap())
+            self.preview_lbl.setText(
+                "Preview not supported\nfor Animation nodes."
+            )
+            return
+
         if not node.data.preview_path:
             # FIX: Check toggle state
             if not SETTINGS.get("ENABLE_PREVIEW", True, type=bool):
@@ -2378,6 +2512,9 @@ class EfficientManimWindow(QMainWindow):
     def render_to_video(self, config):
         """Render full scene to video with specified config."""
         try:
+            # Normalize config and apply sane defaults (menu actions may pass {})
+            config = self._normalize_render_config(config)
+
             # ── Graph validation before render ─────────────────────────────
             if not self.is_ai_generated_code:
                 issues = self.validate_graph()
@@ -2451,6 +2588,76 @@ class EfficientManimWindow(QMainWindow):
         except Exception as e:
             LOGGER.error(f"Video render setup failed: {e}")
             QMessageBox.critical(self, "Render Error", f"Failed to start render:\n{e}")
+
+    def _normalize_render_config(self, config: dict | None) -> dict:
+        cfg = dict(config or {})
+
+        # Output path (menu actions can pass empty config)
+        output_path = cfg.get("output_path") or cfg.get("output_dir")
+        if not output_path:
+            try:
+                output_path = self.panel_video.output_path_lbl.text().strip()
+            except Exception:
+                output_path = ""
+        if not output_path:
+            output_path = str(AppPaths.TEMP_DIR)
+        cfg["output_path"] = str(output_path)
+
+        # FPS
+        fps = cfg.get("fps")
+        if fps is None or fps == "":
+            try:
+                fps = int(self.panel_video.fps_spin.value())
+            except Exception:
+                fps = 30
+        cfg["fps"] = int(fps)
+
+        # Resolution
+        resolution = cfg.get("resolution") or cfg.get("res")
+        if resolution is None:
+            w = cfg.get("width") or cfg.get("w")
+            h = cfg.get("height") or cfg.get("h")
+            if w is not None and h is not None:
+                resolution = (int(w), int(h))
+            else:
+                try:
+                    resolution = (
+                        int(self.panel_video.width_spin.value()),
+                        int(self.panel_video.height_spin.value()),
+                    )
+                except Exception:
+                    resolution = (1280, 720)
+        else:
+            try:
+                resolution = (int(resolution[0]), int(resolution[1]))
+            except Exception:
+                resolution = (1280, 720)
+        cfg["resolution"] = resolution
+
+        # Quality
+        quality = cfg.get("quality")
+        if not quality:
+            try:
+                quality = ["l", "m", "h", "k"][
+                    self.panel_video.quality_combo.currentIndex()
+                ]
+            except Exception:
+                quality = "m"
+        if isinstance(quality, str):
+            ql = quality.strip().lower()
+            if ql.startswith("q") and len(ql) >= 2:
+                quality = ql[-1]
+            elif "low" in ql:
+                quality = "l"
+            elif "medium" in ql:
+                quality = "m"
+            elif "high" in ql:
+                quality = "h"
+            elif "ultra" in ql or "4k" in ql:
+                quality = "k"
+        cfg["quality"] = str(quality)
+
+        return cfg
 
     def on_video_render_success(self, video_path):
         """Called when video render completes successfully."""

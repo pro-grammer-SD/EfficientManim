@@ -7,11 +7,13 @@ from PySide6.QtWidgets import (
     QGraphicsPathItem,
     QGraphicsScene,
     QGraphicsView,
+    QMenu,
     QMessageBox,
 )
 
 from graph.edge import WireItem
 from graph.node import NodeType, SocketItem
+from core.config import SETTINGS
 from utils.logger import LOGGER
 
 
@@ -215,3 +217,62 @@ class GraphView(QGraphicsView):
             event.accept()
         else:
             super().keyPressEvent(event)
+
+    def contextMenuEvent(self, event):
+        win = getattr(self.scene(), "main_window", None)
+        if win is None:
+            return super().contextMenuEvent(event)
+
+        selected_nodes = [
+            item for item in self.scene().selectedItems() if hasattr(item, "data")
+        ]
+        has_selection = bool(selected_nodes)
+        has_animation = any(
+            getattr(item.data, "type", None) == NodeType.ANIMATION for item in selected_nodes
+        )
+        has_mobject = any(
+            getattr(item.data, "type", None) == NodeType.MOBJECT for item in selected_nodes
+        )
+
+        menu = QMenu(self)
+        act_scene = menu.addAction("Explain This Scene")
+        act_nodes = menu.addAction("Explain Selected Nodes")
+        act_anim = menu.addAction("Explain Selected Animation")
+        act_objs = menu.addAction("Explain Selected Objects")
+
+        act_nodes.setEnabled(has_selection)
+        act_anim.setEnabled(has_animation)
+        act_objs.setEnabled(has_mobject)
+
+        teacher_on = bool(SETTINGS.get("TEACHER_MODE_ENABLED", False, type=bool))
+        if teacher_on:
+            menu.addSeparator()
+            act_lesson = menu.addAction("Generate Lesson Notes")
+            export_menu = menu.addMenu("Export Teaching Notes")
+            export_md = export_menu.addAction("Markdown (.md)")
+            export_txt = export_menu.addAction("Plain Text (.txt)")
+            export_copy = export_menu.addAction("Copy to Clipboard")
+        else:
+            act_lesson = export_menu = export_md = export_txt = export_copy = None
+
+        action = menu.exec(event.globalPos())
+
+        if action == act_scene:
+            win.explain_current_context()
+        elif action == act_nodes:
+            win.explain_selected_nodes()
+        elif action == act_anim:
+            win.explain_selected_animation()
+        elif action == act_objs:
+            win.explain_selected_objects()
+        elif act_lesson and action == act_lesson:
+            win.generate_lesson_notes()
+        elif export_md and action == export_md:
+            if hasattr(win, "panel_explain"):
+                win.panel_explain._export_lesson("md")
+        elif export_txt and action == export_txt:
+            if hasattr(win, "panel_explain"):
+                win.panel_explain._export_lesson("txt")
+        elif export_copy and action == export_copy:
+            if hasattr(win, "panel_explain"):
+                win.panel_explain._export_lesson("copy")
