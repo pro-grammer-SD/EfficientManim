@@ -5,14 +5,17 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/pro-grammer-SD/EfficientManim"><img src="https://img.shields.io/badge/Python-3.10+-3776ab?style=flat-square&logo=python&logoColor=white" alt="Python"/></a>
-  <a href="https://www.manim.community/"><img src="https://img.shields.io/badge/Manim-Community-4caf50?style=flat-square" alt="Manim"/></a>
-  <a href="https://github.com/pro-grammer-SD/EfficientManim/blob/main/LICENSE"><img src="https://img.shields.io/badge/License-MIT-f59e0b?style=flat-square" alt="MIT License"/></a>
-  <a href="https://www.reddit.com/r/manim/comments/1qck0ji/i_built_a_nodebased_manim_ide_with_ai_assistance/"><img src="https://img.shields.io/badge/Reddit-Discussion-ff4500?style=flat-square&logo=reddit&logoColor=white" alt="Reddit"/></a>
+  <a href="https://github.com/pro-grammer-SD/EfficientManim"><img src="https://img.shields.io/badge/Python-3.10+-3776ab?style=for-the-badge&logo=python&logoColor=white" alt="Python"/></a>
+  <a href="https://ideacred.com/submissions" target="_blank" rel="noopener noreferrer">
+  <img src="https://ideacred.com/api/badge/pro-grammer-SD/EfficientManim?style=for-the-badge" 
+       alt="IdeaCred"></a>
+  <a href="https://www.manim.community/"><img src="https://img.shields.io/badge/Manim-Community-4caf50?style=for-the-badge" alt="Manim"/></a>
+  <a href="https://github.com/pro-grammer-SD/EfficientManim/blob/main/LICENSE"><img src="https://img.shields.io/badge/License-MIT-f59e0b?style=for-the-badge" alt="MIT License"/></a>
+  <a href="https://www.reddit.com/r/manim/comments/1qck0ji/i_built_a_nodebased_manim_ide_with_ai_assistance/"><img src="https://img.shields.io/badge/Reddit-Discussion-ff4500?style=for-the-badge&logo=reddit&logoColor=white" alt="Reddit"/></a>
 </p>
 
 <p align="center">
-  <strong>A node-based visual IDE for mathematical animations — with AI tooling, a structured history system, and a built-in explanation engine for students and teachers.</strong>
+  <strong>✨🌿 A node-based visual IDE for mathematical animations — with AI tooling, a structured history system, and a built-in explanation engine for students and teachers. 🎊🎯</strong>
 </p>
 
 ---
