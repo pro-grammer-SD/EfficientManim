@@ -71,7 +71,11 @@ from utils.shortcuts import (
     initialize_default_keybindings,
 )
 from scene_explainer.ai_explainer import ExplainService
-from scene_explainer.ui_panel import ExplainPanel, LearningModeController, TeacherModeController
+from scene_explainer.ui_panel import (
+    ExplainPanel,
+    LearningModeController,
+    TeacherModeController,
+)
 
 try:
     from core.keybindings_panel import UnifiedKeybindingsPanel
@@ -402,14 +406,16 @@ class EfficientManimWindow(QMainWindow):
             self.explain_dock.setFeatures(
                 QDockWidget.DockWidgetFeature.NoDockWidgetFeatures
             )
-            self.explain_dock.setAllowedAreas(
-                Qt.DockWidgetArea.RightDockWidgetArea
-            )
+            self.explain_dock.setAllowedAreas(Qt.DockWidgetArea.RightDockWidgetArea)
             self.explain_dock.setWidget(self.panel_explain)
             self.explain_dock.setMinimumWidth(240)
             self.addDockWidget(Qt.DockWidgetArea.RightDockWidgetArea, self.explain_dock)
-            self.learning_mode_controller = LearningModeController(self, self.panel_explain)
-            self.teacher_mode_controller = TeacherModeController(self, self.panel_explain)
+            self.learning_mode_controller = LearningModeController(
+                self, self.panel_explain
+            )
+            self.teacher_mode_controller = TeacherModeController(
+                self, self.panel_explain
+            )
         except Exception as exc:
             LOGGER.error(f"Explain panel init failed: {exc}")
 
@@ -945,6 +951,7 @@ class EfficientManimWindow(QMainWindow):
             self.add_vgroup_node(group_name=name, member_ids=ids)
         if self.history_manager:
             self.history_manager.end_group()
+        self.statusBar().showMessage(f"VGroup created with {len(ids)} nodes", 2000)
 
     # ── Explain Panel Integration ──────────────────────────────────────────
 
@@ -959,12 +966,12 @@ class EfficientManimWindow(QMainWindow):
         if not hasattr(self, "panel_explain"):
             return
         selected = [
-            item
-            for item in self.scene.selectedItems()
-            if isinstance(item, NodeItem)
+            item for item in self.scene.selectedItems() if isinstance(item, NodeItem)
         ]
         if selected:
-            anim = next((n for n in selected if n.data.type == NodeType.ANIMATION), None)
+            anim = next(
+                (n for n in selected if n.data.type == NodeType.ANIMATION), None
+            )
             if anim is not None:
                 self.panel_explain.explain_selected_animation(anim.data.id)
             else:
@@ -990,9 +997,7 @@ class EfficientManimWindow(QMainWindow):
         if not hasattr(self, "panel_explain"):
             return
         selected = [
-            item
-            for item in self.scene.selectedItems()
-            if isinstance(item, NodeItem)
+            item for item in self.scene.selectedItems() if isinstance(item, NodeItem)
         ]
         if not selected:
             return
@@ -1017,7 +1022,6 @@ class EfficientManimWindow(QMainWindow):
             return
         self.panel_explain.generate_lesson_notes()
         self._show_explain_panel()
-        self.statusBar().showMessage(f"VGroup created with {len(ids)} nodes", 2000)
 
     def mark_modified(self):
         """Mark project as modified and update window title."""
@@ -1147,7 +1151,10 @@ class EfficientManimWindow(QMainWindow):
 
         if should_close:
             try:
-                if hasattr(self, "explain_service") and self.explain_service is not None:
+                if (
+                    hasattr(self, "explain_service")
+                    and self.explain_service is not None
+                ):
                     self.explain_service.cancel_all()
             except Exception:
                 pass
@@ -2385,9 +2392,7 @@ class EfficientManimWindow(QMainWindow):
 
         if node.data.type == NodeType.ANIMATION:
             self.preview_lbl.setPixmap(QPixmap())
-            self.preview_lbl.setText(
-                "Preview not supported\nfor Animation nodes."
-            )
+            self.preview_lbl.setText("Preview not supported\nfor Animation nodes.")
             return
 
         if not node.data.preview_path:

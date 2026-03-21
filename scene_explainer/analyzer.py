@@ -83,7 +83,9 @@ class SceneAnalyzer:
                 scene_name = getattr(main_window, "_current_scene_name", "Scene")
         except Exception as exc:
             LOGGER.warn(f"SceneAnalyzer: failed to read window scene: {exc}")
-            return self._empty_analysis(getattr(main_window, "_current_scene_name", "Scene"))
+            return self._empty_analysis(
+                getattr(main_window, "_current_scene_name", "Scene")
+            )
 
         return self._analyze_raw(
             scene_name=scene_name,
@@ -124,7 +126,9 @@ class SceneAnalyzer:
     # Internal helpers
     # ──────────────────────────────────────────────────────────────────
 
-    def _snapshot_from_window(self, main_window) -> Tuple[Dict[str, dict], List[WireState]]:
+    def _snapshot_from_window(
+        self, main_window
+    ) -> Tuple[Dict[str, dict], List[WireState]]:
         nodes_data: Dict[str, dict] = {}
         for nid, node in getattr(main_window, "nodes", {}).items():
             try:
@@ -141,7 +145,9 @@ class SceneAnalyzer:
                     try:
                         from_id = item.start_socket.parentItem().data.id
                         to_id = item.end_socket.parentItem().data.id
-                        wire_id = getattr(item, "wire_id", f"wire_{from_id[:6]}_{to_id[:6]}")
+                        wire_id = getattr(
+                            item, "wire_id", f"wire_{from_id[:6]}_{to_id[:6]}"
+                        )
                         wires.append(WireState(wire_id, from_id, to_id))
                     except Exception:
                         pass
@@ -168,7 +174,9 @@ class SceneAnalyzer:
                 if isinstance(raw, NodeItem):
                     data = raw.data
                     params = dict(data.params)
-                    ntype = data.type.name if hasattr(data.type, "name") else str(data.type)
+                    ntype = (
+                        data.type.name if hasattr(data.type, "name") else str(data.type)
+                    )
                     normalized[nid] = NormalizedNode(
                         id=data.id,
                         name=data.name,
@@ -180,7 +188,9 @@ class SceneAnalyzer:
                     continue
                 if isinstance(raw, NodeData):
                     params = dict(raw.params)
-                    ntype = raw.type.name if hasattr(raw.type, "name") else str(raw.type)
+                    ntype = (
+                        raw.type.name if hasattr(raw.type, "name") else str(raw.type)
+                    )
                     normalized[nid] = NormalizedNode(
                         id=raw.id,
                         name=raw.name,
@@ -192,7 +202,9 @@ class SceneAnalyzer:
                     continue
                 if isinstance(raw, dict):
                     raw_id = raw.get("id") or nid
-                    cls_name = raw.get("cls_name") or raw.get("class") or raw.get("name", "")
+                    cls_name = (
+                        raw.get("cls_name") or raw.get("class") or raw.get("name", "")
+                    )
                     ntype = raw.get("type", "MOBJECT")
                     params = dict(raw.get("params", {}))
                     normalized[nid] = NormalizedNode(
@@ -272,7 +284,10 @@ class SceneAnalyzer:
 
         for nid in sorted(nodes.keys()):
             node = nodes[nid]
-            if node.type.upper() != NodeType.MOBJECT.name and node.type.upper() != NodeType.VGROUP.name:
+            if (
+                node.type.upper() != NodeType.MOBJECT.name
+                and node.type.upper() != NodeType.VGROUP.name
+            ):
                 continue
             obj_type, category = self._classify(node.cls_name)
             label = self._extract_label(node)
@@ -318,7 +333,9 @@ class SceneAnalyzer:
             concept_hints=concept_hints,
         )
 
-    def _build_maps(self, wires: List[Tuple[str, str]]) -> Tuple[Dict[str, List[str]], Dict[str, List[str]]]:
+    def _build_maps(
+        self, wires: List[Tuple[str, str]]
+    ) -> Tuple[Dict[str, List[str]], Dict[str, List[str]]]:
         out_map: Dict[str, List[str]] = {}
         in_map: Dict[str, List[str]] = {}
         for a, b in wires:
@@ -429,25 +446,35 @@ class SceneAnalyzer:
         in_map: Dict[str, List[str]],
         out_map: Dict[str, List[str]],
     ) -> List[AnimationStep]:
-        play_nodes = [nid for nid, n in nodes.items() if n.type.upper() == NodeType.PLAY.name]
-        wait_nodes = [nid for nid, n in nodes.items() if n.type.upper() == NodeType.WAIT.name]
-        anim_nodes = [nid for nid, n in nodes.items() if n.type.upper() == NodeType.ANIMATION.name]
+        play_nodes = [
+            nid for nid, n in nodes.items() if n.type.upper() == NodeType.PLAY.name
+        ]
+        wait_nodes = [
+            nid for nid, n in nodes.items() if n.type.upper() == NodeType.WAIT.name
+        ]
+        anim_nodes = [
+            nid for nid, n in nodes.items() if n.type.upper() == NodeType.ANIMATION.name
+        ]
 
         def _struct_upstream(nid: str) -> List[str]:
             return [
                 src
                 for src in in_map.get(nid, [])
-                if nodes.get(src) and nodes[src].type.upper() in (NodeType.PLAY.name, NodeType.WAIT.name)
+                if nodes.get(src)
+                and nodes[src].type.upper() in (NodeType.PLAY.name, NodeType.WAIT.name)
             ]
 
         def _struct_downstream(nid: str) -> List[str]:
             return [
                 dst
                 for dst in out_map.get(nid, [])
-                if nodes.get(dst) and nodes[dst].type.upper() in (NodeType.PLAY.name, NodeType.WAIT.name)
+                if nodes.get(dst)
+                and nodes[dst].type.upper() in (NodeType.PLAY.name, NodeType.WAIT.name)
             ]
 
-        structural_roots = [nid for nid in play_nodes + wait_nodes if not _struct_upstream(nid)]
+        structural_roots = [
+            nid for nid in play_nodes + wait_nodes if not _struct_upstream(nid)
+        ]
         ordered_structural: List[str] = []
         visited: set[str] = set()
 
@@ -481,7 +508,9 @@ class SceneAnalyzer:
                         targets = [
                             t
                             for t in in_map.get(src, [])
-                            if t in nodes and nodes[t].type.upper() in (NodeType.MOBJECT.name, NodeType.VGROUP.name)
+                            if t in nodes
+                            and nodes[t].type.upper()
+                            in (NodeType.MOBJECT.name, NodeType.VGROUP.name)
                         ]
                         step_index += 1
                         steps.append(
@@ -489,7 +518,9 @@ class SceneAnalyzer:
                                 step_index=step_index,
                                 animation_type=src_node.cls_name or "Animation",
                                 targets=sorted(targets),
-                                duration=self._parse_duration(src_node.params, default=1.0),
+                                duration=self._parse_duration(
+                                    src_node.params, default=1.0
+                                ),
                                 lag_ratio=self._parse_lag_ratio(src_node.params),
                             )
                         )
@@ -524,7 +555,9 @@ class SceneAnalyzer:
             targets = [
                 t
                 for t in in_map.get(anim_id, [])
-                if t in nodes and nodes[t].type.upper() in (NodeType.MOBJECT.name, NodeType.VGROUP.name)
+                if t in nodes
+                and nodes[t].type.upper()
+                in (NodeType.MOBJECT.name, NodeType.VGROUP.name)
             ]
             step_index += 1
             steps.append(
@@ -587,7 +620,10 @@ class SceneAnalyzer:
 
         # Transform relationships
         for nid, node in nodes.items():
-            if node.type.upper() == NodeType.ANIMATION.name and node.cls_name in self.TRANSFORM_TYPES:
+            if (
+                node.type.upper() == NodeType.ANIMATION.name
+                and node.cls_name in self.TRANSFORM_TYPES
+            ):
                 targets = [
                     t
                     for t in in_map.get(nid, [])
@@ -613,7 +649,9 @@ class SceneAnalyzer:
                     if t in nodes and nodes[t].type.upper() == NodeType.MOBJECT.name
                 ]
                 labels = [t for t in targets if nodes[t].cls_name in self.LABEL_TYPES]
-                others = [t for t in targets if nodes[t].cls_name not in self.LABEL_TYPES]
+                others = [
+                    t for t in targets if nodes[t].cls_name not in self.LABEL_TYPES
+                ]
                 for label in labels:
                     for other in others:
                         relationships.append(
@@ -660,22 +698,31 @@ class SceneAnalyzer:
                 hints.append("translation")
 
         # Tangent/derivative hint
-        if (cls_names & self.AXES_TYPES) and (cls_names & self.LINE_TYPES) and (
-            cls_names & self.GRAPH_TYPES or any("Graph" in c for c in cls_names)
+        if (
+            (cls_names & self.AXES_TYPES)
+            and (cls_names & self.LINE_TYPES)
+            and (cls_names & self.GRAPH_TYPES or any("Graph" in c for c in cls_names))
         ):
             hints.append("slope or derivative")
 
         # Area/integral hint
         if (cls_names & self.AXES_TYPES) and (cls_names & self.GRAPH_TYPES):
             for n in nodes.values():
-                if "area" in n.name.lower() or "integral" in n.name.lower() or "shade" in n.name.lower():
+                if (
+                    "area" in n.name.lower()
+                    or "integral" in n.name.lower()
+                    or "shade" in n.name.lower()
+                ):
                     hints.append("area under a curve")
                     break
 
         # Algebraic derivation hint
         math_count = sum(1 for c in cls_names if c in self.MATH_TYPES)
         if math_count >= 2:
-            if any(step.animation_type in ("Write", "TransformMatchingTex") for step in animation_steps):
+            if any(
+                step.animation_type in ("Write", "TransformMatchingTex")
+                for step in animation_steps
+            ):
                 hints.append("algebraic derivation")
 
         # Deduplicate, deterministic order

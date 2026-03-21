@@ -54,7 +54,6 @@ from PySide6.QtWidgets import (
 
 from core.config import AppPaths, SETTINGS
 from core.file_manager import ASSETS, USAGE_TRACKER
-from graph.edge import WireItem
 from graph.node import NodeData, NodeItem, NodeType
 from rendering.render_manager import AIWorker, LatexApiWorker, TTSWorker
 from ui.runtime_flags import MCP_AVAILABLE, PYDUB_AVAILABLE
@@ -2331,9 +2330,7 @@ class AINodeIntegrator:
                     anim_class = anim_def["class_name"]
                     anim_args = anim_def.get("raw_args", "")
                     anim_entries.append(
-                        _make_anim_entry(
-                            anim_class, arg_clean, anim_args, False, None
-                        )
+                        _make_anim_entry(anim_class, arg_clean, anim_args, False, None)
                     )
                     continue
 
@@ -3482,7 +3479,7 @@ class SnippetLibrary(QWidget):
             "            tips=False,\n"
             "        )\n"
             "        graph = axes.plot(lambda x: 0.5 * x**2, color=BLUE)\n"
-            "        label = axes.get_graph_label(graph, label=\"y=0.5x^2\")\n"
+            '        label = axes.get_graph_label(graph, label="y=0.5x^2")\n'
             "        self.play(Create(axes), Create(graph), FadeIn(label))\n"
             "        self.wait(1)\n"
         ),
@@ -3490,9 +3487,9 @@ class SnippetLibrary(QWidget):
             "from manim import *\n\n"
             "class MyScene(Scene):\n"
             "    def construct(self):\n"
-            "        eq1 = MathTex(r\"ax + b = c\")\n"
-            "        eq2 = MathTex(r\"ax = c - b\").move_to(eq1)\n"
-            "        eq3 = MathTex(r\"x = {c-b \\\\over a}\").move_to(eq1)\n"
+            '        eq1 = MathTex(r"ax + b = c")\n'
+            '        eq2 = MathTex(r"ax = c - b").move_to(eq1)\n'
+            '        eq3 = MathTex(r"x = {c-b \\\\over a}").move_to(eq1)\n'
             "        self.play(Write(eq1))\n"
             "        self.play(TransformMatchingTex(eq1, eq2))\n"
             "        self.play(TransformMatchingTex(eq2, eq3))\n"
@@ -3505,10 +3502,10 @@ class SnippetLibrary(QWidget):
             "        plane = NumberPlane(\n"
             "            x_range=[-5, 5, 1],\n"
             "            y_range=[-3, 3, 1],\n"
-            "            background_line_style={\"stroke_opacity\": 0.4},\n"
+            '            background_line_style={"stroke_opacity": 0.4},\n'
             "        )\n"
             "        dot = Dot(plane.c2p(2, 1), color=YELLOW)\n"
-            "        label = MathTex(\"(2, 1)\").next_to(dot, UR)\n"
+            '        label = MathTex("(2, 1)").next_to(dot, UR)\n'
             "        self.play(Create(plane), FadeIn(dot), Write(label))\n"
             "        self.wait(1)\n"
         ),
@@ -3536,10 +3533,10 @@ class SnippetLibrary(QWidget):
             "        plane = NumberPlane(\n"
             "            x_range=[-4, 4, 1],\n"
             "            y_range=[-3, 3, 1],\n"
-            "            background_line_style={\"stroke_opacity\": 0.4},\n"
+            '            background_line_style={"stroke_opacity": 0.4},\n'
             "        )\n"
             "        vec = Vector([3, 2], color=GREEN)\n"
-            "        label = MathTex(r\"\\\\vec{v}\").next_to(vec.get_end(), UR)\n"
+            '        label = MathTex(r"\\\\vec{v}").next_to(vec.get_end(), UR)\n'
             "        self.play(Create(plane), GrowArrow(vec), Write(label))\n"
             "        self.wait(1)\n"
         ),

@@ -6,13 +6,16 @@ import os
 import re
 from typing import Any, Callable, Dict, Optional
 
-from PySide6.QtCore import QObject, QThread, Signal, QEventLoop, QTimer
+from PySide6.QtCore import QObject, QThread, Signal, QEventLoop
 
 from core.config import SETTINGS
-from utils.logger import LOGGER
 
 from scene_explainer.analyzer import SceneAnalyzer
-from scene_explainer.explanation_models import ExplainResponse, LessonNotes, SceneAnalysis
+from scene_explainer.explanation_models import (
+    ExplainResponse,
+    LessonNotes,
+    SceneAnalysis,
+)
 from scene_explainer.prompt_builder import PromptBuilder
 
 
@@ -41,7 +44,10 @@ class _AIWorker(QThread):
     def run(self) -> None:
         api_key = os.environ.get("GEMINI_API_KEY")
         if not api_key:
-            self.failed.emit("Gemini API key not configured. Open Settings to add it.", self.request_id)
+            self.failed.emit(
+                "Gemini API key not configured. Open Settings to add it.",
+                self.request_id,
+            )
             return
         try:
             from google import genai
@@ -78,7 +84,9 @@ class AIExplainer(QObject):
     history_ready = Signal(object)
     error = Signal(str)
 
-    def __init__(self, prompt_builder: PromptBuilder | None = None, parent=None) -> None:
+    def __init__(
+        self, prompt_builder: PromptBuilder | None = None, parent=None
+    ) -> None:
         super().__init__(parent)
         self.prompt_builder = prompt_builder or PromptBuilder()
         self._current_worker: Optional[_AIWorker] = None
@@ -91,24 +99,38 @@ class AIExplainer(QObject):
             except Exception:
                 pass
 
-    def request_explanation(self, analysis: SceneAnalysis, mode: str = "detailed") -> int:
+    def request_explanation(
+        self, analysis: SceneAnalysis, mode: str = "detailed"
+    ) -> int:
         prompt = self.prompt_builder.build_explain_prompt(analysis, mode)
-        return self._start_worker(prompt, self._parse_explain_response, self.explanation_ready)
+        return self._start_worker(
+            prompt, self._parse_explain_response, self.explanation_ready
+        )
 
     def request_lesson_notes(self, analysis: SceneAnalysis) -> int:
         prompt = self.prompt_builder.build_lesson_prompt(analysis)
         return self._start_worker(prompt, self._parse_lesson_notes, self.lesson_ready)
 
-    def request_learning_explanation(self, analysis: SceneAnalysis, what_happened: str) -> int:
+    def request_learning_explanation(
+        self, analysis: SceneAnalysis, what_happened: str
+    ) -> int:
         prompt = self.prompt_builder.build_learning_prompt(analysis, what_happened)
-        return self._start_worker(prompt, self._parse_learning_response, self.learning_ready)
+        return self._start_worker(
+            prompt, self._parse_learning_response, self.learning_ready
+        )
 
     def request_history_change(self, prompt: str) -> int:
-        return self._start_worker(prompt, self._parse_history_change, self.history_ready)
+        return self._start_worker(
+            prompt, self._parse_history_change, self.history_ready
+        )
 
-    def request_history_checkpoint(self, analysis: SceneAnalysis, mode: str = "detailed") -> int:
+    def request_history_checkpoint(
+        self, analysis: SceneAnalysis, mode: str = "detailed"
+    ) -> int:
         prompt = self.prompt_builder.build_explain_prompt(analysis, mode)
-        return self._start_worker(prompt, self._parse_explain_response, self.history_ready)
+        return self._start_worker(
+            prompt, self._parse_explain_response, self.history_ready
+        )
 
     def run_blocking(self, prompt: str, parser: Callable[[str], object]) -> object:
         """Run AI call in background thread and wait (UI-safe via nested event loop)."""
@@ -143,7 +165,9 @@ class AIExplainer(QObject):
     # Worker helpers
     # ──────────────────────────────────────────────────────────────
 
-    def _start_worker(self, prompt: str, parser: Callable[[str], object], signal: Signal) -> int:
+    def _start_worker(
+        self, prompt: str, parser: Callable[[str], object], signal: Signal
+    ) -> int:
         self.cancel_current()
         request_id = self._next_request_id()
         worker = self._create_worker(prompt, parser, request_id)
@@ -164,9 +188,13 @@ class AIExplainer(QObject):
         worker.start()
         return request_id
 
-    def _create_worker(self, prompt: str, parser: Callable[[str], object], request_id: int) -> _AIWorker:
+    def _create_worker(
+        self, prompt: str, parser: Callable[[str], object], request_id: int
+    ) -> _AIWorker:
         model = str(SETTINGS.get("GEMINI_MODEL", "gemini-3-flash-preview"))
-        return _AIWorker(prompt=prompt, model=model, parser=parser, request_id=request_id)
+        return _AIWorker(
+            prompt=prompt, model=model, parser=parser, request_id=request_id
+        )
 
     def _next_request_id(self) -> int:
         self._request_id += 1
@@ -185,7 +213,9 @@ class AIExplainer(QObject):
         key_takeaways = data.get("key_takeaways") or []
         if not isinstance(key_takeaways, list):
             key_takeaways = [str(key_takeaways)]
-        key_takeaways = [self._sanitize_text(str(k).strip()) for k in key_takeaways if str(k).strip()]
+        key_takeaways = [
+            self._sanitize_text(str(k).strip()) for k in key_takeaways if str(k).strip()
+        ]
         mode_used = str(data.get("mode_used", "detailed")).strip().lower()
         if mode_used not in ("simple", "detailed"):
             mode_used = "detailed"
@@ -206,7 +236,10 @@ class AIExplainer(QObject):
 
     def _parse_lesson_notes(self, text: str) -> LessonNotes:
         data = self._extract_json(text)
-        title = self._sanitize_text(str(data.get("lesson_title", "Lesson"))).strip() or "Lesson"
+        title = (
+            self._sanitize_text(str(data.get("lesson_title", "Lesson"))).strip()
+            or "Lesson"
+        )
         concept = self._sanitize_text(str(data.get("concept_explanation", "")).strip())
         visual = self._sanitize_text(str(data.get("visual_explanation", "")).strip())
         step = self._sanitize_text(str(data.get("step_by_step_teaching", "")).strip())
@@ -214,7 +247,9 @@ class AIExplainer(QObject):
         key_takeaways = data.get("key_takeaways") or []
         if not isinstance(key_takeaways, list):
             key_takeaways = [str(key_takeaways)]
-        key_takeaways = [self._sanitize_text(str(k).strip()) for k in key_takeaways if str(k).strip()]
+        key_takeaways = [
+            self._sanitize_text(str(k).strip()) for k in key_takeaways if str(k).strip()
+        ]
         return LessonNotes(
             lesson_title=title,
             concept_explanation=concept,
@@ -226,9 +261,16 @@ class AIExplainer(QObject):
 
     def _parse_history_change(self, text: str) -> dict:
         data = self._extract_json(text)
-        concept_change = self._sanitize_text(str(data.get("concept_change_summary", "")).strip())
-        educational = self._sanitize_text(str(data.get("educational_significance", "")).strip())
-        return {"concept_change_summary": concept_change, "educational_significance": educational}
+        concept_change = self._sanitize_text(
+            str(data.get("concept_change_summary", "")).strip()
+        )
+        educational = self._sanitize_text(
+            str(data.get("educational_significance", "")).strip()
+        )
+        return {
+            "concept_change_summary": concept_change,
+            "educational_significance": educational,
+        }
 
     def _extract_json(self, text: str) -> Dict[str, Any]:
         cleaned = self._strip_fences(text)
@@ -293,7 +335,9 @@ class AIExplainer(QObject):
         for bad in banned:
             lowered = re.sub(rf"\b{re.escape(bad)}\b", "", lowered, flags=re.IGNORECASE)
         for key, value in replacements.items():
-            lowered = re.sub(rf"\b{re.escape(key)}\b", value, lowered, flags=re.IGNORECASE)
+            lowered = re.sub(
+                rf"\b{re.escape(key)}\b", value, lowered, flags=re.IGNORECASE
+            )
         lowered = re.sub(r"\s{2,}", " ", lowered)
         return lowered.strip()
 
@@ -321,7 +365,9 @@ class ExplainService(QObject):
             objects_only=objects_only,
         )
 
-    def explain_scene(self, analysis: SceneAnalysis, mode: str = "detailed") -> ExplainResponse:
+    def explain_scene(
+        self, analysis: SceneAnalysis, mode: str = "detailed"
+    ) -> ExplainResponse:
         prompt = self.prompt_builder.build_explain_prompt(analysis, mode)
         result = self.ai.run_blocking(prompt, self.ai._parse_explain_response)
         if isinstance(result, ExplainResponse):

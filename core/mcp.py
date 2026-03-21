@@ -2692,7 +2692,9 @@ class MCPAgent:
             history = getattr(win, "history_manager", None)
             service = getattr(win, "explain_service", None)
             if history is None or service is None:
-                return MCPResult(success=False, error="History or explain service not available.")
+                return MCPResult(
+                    success=False, error="History or explain service not available."
+                )
             try:
                 from scene_explainer.history_explainer import HistoryExplainer
 
@@ -2717,11 +2719,16 @@ class MCPAgent:
             to_cp = payload.get("to_checkpoint", "")
             mode = payload.get("mode", "detailed")
             if not from_cp or not to_cp:
-                return MCPResult(success=False, error="from_checkpoint and to_checkpoint are required.")
+                return MCPResult(
+                    success=False,
+                    error="from_checkpoint and to_checkpoint are required.",
+                )
             history = getattr(win, "history_manager", None)
             service = getattr(win, "explain_service", None)
             if history is None or service is None:
-                return MCPResult(success=False, error="History or explain service not available.")
+                return MCPResult(
+                    success=False, error="History or explain service not available."
+                )
             try:
                 from scene_explainer.history_explainer import HistoryExplainer
 
@@ -2747,7 +2754,9 @@ class MCPAgent:
             history = getattr(win, "history_manager", None)
             service = getattr(win, "explain_service", None)
             if history is None or service is None:
-                return MCPResult(success=False, error="History or explain service not available.")
+                return MCPResult(
+                    success=False, error="History or explain service not available."
+                )
             try:
                 from scene_explainer.history_explainer import HistoryExplainer
 
@@ -2765,7 +2774,9 @@ class MCPAgent:
             history = getattr(win, "history_manager", None)
             service = getattr(win, "explain_service", None)
             if history is None or service is None:
-                return MCPResult(success=False, error="History or explain service not available.")
+                return MCPResult(
+                    success=False, error="History or explain service not available."
+                )
             try:
                 from scene_explainer.history_explainer import HistoryExplainer
 
@@ -2780,12 +2791,18 @@ class MCPAgent:
         @self._register("learning_mode.enable")
         def _(payload: dict) -> MCPResult:
             SETTINGS.set("LEARNING_MODE_ENABLED", True)
-            return MCPResult(success=True, data={"enabled": True, "status": "Learning Mode is now active"})
+            return MCPResult(
+                success=True,
+                data={"enabled": True, "status": "Learning Mode is now active"},
+            )
 
         @self._register("learning_mode.disable")
         def _(payload: dict) -> MCPResult:
             SETTINGS.set("LEARNING_MODE_ENABLED", False)
-            return MCPResult(success=True, data={"enabled": False, "status": "Learning Mode has been disabled"})
+            return MCPResult(
+                success=True,
+                data={"enabled": False, "status": "Learning Mode has been disabled"},
+            )
 
         @self._register("learning_mode.status")
         def _(payload: dict) -> MCPResult:
@@ -2795,12 +2812,18 @@ class MCPAgent:
         @self._register("teacher_mode.enable")
         def _(payload: dict) -> MCPResult:
             SETTINGS.set("TEACHER_MODE_ENABLED", True)
-            return MCPResult(success=True, data={"enabled": True, "status": "Teacher Mode is now active"})
+            return MCPResult(
+                success=True,
+                data={"enabled": True, "status": "Teacher Mode is now active"},
+            )
 
         @self._register("teacher_mode.disable")
         def _(payload: dict) -> MCPResult:
             SETTINGS.set("TEACHER_MODE_ENABLED", False)
-            return MCPResult(success=True, data={"enabled": False, "status": "Teacher Mode has been disabled"})
+            return MCPResult(
+                success=True,
+                data={"enabled": False, "status": "Teacher Mode has been disabled"},
+            )
 
         @self._register("teacher_mode.generate_lesson")
         def _(payload: dict) -> MCPResult:
@@ -2838,9 +2861,18 @@ class MCPAgent:
                     except Exception:
                         pass
                     win.close()
-                    return MCPResult(success=True, data={"status": "success", "message": "Application closed safely"})
+                    return MCPResult(
+                        success=True,
+                        data={
+                            "status": "success",
+                            "message": "Application closed safely",
+                        },
+                    )
                 win.close()
-                return MCPResult(success=True, data={"status": "success", "message": "Application closed safely"})
+                return MCPResult(
+                    success=True,
+                    data={"status": "success", "message": "Application closed safely"},
+                )
             except Exception as e:
                 return MCPResult(success=False, error=str(e))
 

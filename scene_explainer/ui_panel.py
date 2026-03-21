@@ -1,7 +1,6 @@
 from __future__ import annotations
 # -*- coding: utf-8 -*-
 
-import json
 from dataclasses import dataclass
 from typing import Optional
 
@@ -9,7 +8,6 @@ from PySide6.QtCore import Qt, QTimer, Signal, QObject
 from PySide6.QtGui import QAction
 from PySide6.QtWidgets import (
     QApplication,
-    QCheckBox,
     QComboBox,
     QFrame,
     QGroupBox,
@@ -49,7 +47,9 @@ class ExplainPanel(QWidget):
     def __init__(self, main_window, parent=None):
         super().__init__(parent)
         self.main_window = main_window
-        self.service = getattr(main_window, "explain_service", None) or ExplainService(main_window)
+        self.service = getattr(main_window, "explain_service", None) or ExplainService(
+            main_window
+        )
         self.history_explainer = None
         if getattr(main_window, "history_manager", None):
             self.history_explainer = HistoryExplainer(
@@ -82,7 +82,9 @@ class ExplainPanel(QWidget):
         layout.setSpacing(8)
 
         header = QLabel("Explain Panel")
-        header.setStyleSheet("font-weight: bold; font-size: 14px; color: #2c3e50; background: transparent;")
+        header.setStyleSheet(
+            "font-weight: bold; font-size: 14px; color: #2c3e50; background: transparent;"
+        )
         layout.addWidget(header)
 
         controls = QHBoxLayout()
@@ -104,7 +106,9 @@ class ExplainPanel(QWidget):
         layout.addLayout(controls)
 
         self.loading_label = QLabel("Generating explanation...")
-        self.loading_label.setStyleSheet("color: #1e88e5; font-weight: bold; background: transparent;")
+        self.loading_label.setStyleSheet(
+            "color: #1e88e5; font-weight: bold; background: transparent;"
+        )
         self.loading_label.setVisible(False)
         layout.addWidget(self.loading_label)
 
@@ -114,7 +118,9 @@ class ExplainPanel(QWidget):
         auto_layout = QVBoxLayout(self.auto_frame)
         auto_layout.setContentsMargins(8, 6, 8, 6)
         self.auto_title = QLabel("Learning Mode Insight")
-        self.auto_title.setStyleSheet("font-weight: bold; color: #2e7d32; background: transparent;")
+        self.auto_title.setStyleSheet(
+            "font-weight: bold; color: #2e7d32; background: transparent;"
+        )
         self.auto_text = QLabel("")
         self.auto_text.setWordWrap(True)
         self.auto_text.setStyleSheet("background: transparent;")
@@ -152,9 +158,7 @@ class ExplainPanel(QWidget):
         self.section_takeaways, self.txt_takeaways = self._create_section(
             "Key Takeaways"
         )
-        self.section_lesson, self.txt_lesson = self._create_section(
-            "Lesson Notes"
-        )
+        self.section_lesson, self.txt_lesson = self._create_section("Lesson Notes")
 
         self.content_layout.addWidget(self.section_concept)
         self.content_layout.addWidget(self.section_steps)
@@ -172,7 +176,9 @@ class ExplainPanel(QWidget):
         self.btn_generate_lesson = QPushButton("Generate Lesson Notes")
         self.btn_export_lesson = QToolButton()
         self.btn_export_lesson.setText("Export")
-        self.btn_export_lesson.setPopupMode(QToolButton.ToolButtonPopupMode.InstantPopup)
+        self.btn_export_lesson.setPopupMode(
+            QToolButton.ToolButtonPopupMode.InstantPopup
+        )
         self.btn_export_lesson.setMenu(self._build_export_menu())
 
         self.teacher_controls.addWidget(self.btn_generate_lesson)
@@ -262,13 +268,19 @@ class ExplainPanel(QWidget):
     def explain_scene(self, mode: Optional[str] = None) -> None:
         self._request_explanation(mode=mode)
 
-    def explain_selected_nodes(self, node_ids: list[str], mode: Optional[str] = None) -> None:
+    def explain_selected_nodes(
+        self, node_ids: list[str], mode: Optional[str] = None
+    ) -> None:
         self._request_explanation(mode=mode, node_ids=node_ids)
 
-    def explain_selected_animation(self, animation_id: str, mode: Optional[str] = None) -> None:
+    def explain_selected_animation(
+        self, animation_id: str, mode: Optional[str] = None
+    ) -> None:
         self._request_explanation(mode=mode, animation_id=animation_id)
 
-    def explain_selected_objects(self, node_ids: list[str], mode: Optional[str] = None) -> None:
+    def explain_selected_objects(
+        self, node_ids: list[str], mode: Optional[str] = None
+    ) -> None:
         self._request_explanation(mode=mode, node_ids=node_ids, objects_only=True)
 
     def show_auto_explanation(self, what: str, why: str) -> None:
@@ -338,7 +350,9 @@ class ExplainPanel(QWidget):
         self.txt_steps.setPlainText(response.step_by_step)
         self.txt_visual.setPlainText(response.visual_reasoning)
         self.txt_simple.setPlainText(response.simple_explanation)
-        self.txt_takeaways.setPlainText("\n".join(f"- {k}" for k in response.key_takeaways))
+        self.txt_takeaways.setPlainText(
+            "\n".join(f"- {k}" for k in response.key_takeaways)
+        )
 
     def _on_learning_ready(self, payload: dict) -> None:
         self._set_loading(False)
@@ -371,7 +385,11 @@ class ExplainPanel(QWidget):
         self.btn_copy.setEnabled(not loading)
 
     def _current_mode(self) -> str:
-        return "simple" if self.mode_combo.currentText().lower() == "simple" else "detailed"
+        return (
+            "simple"
+            if self.mode_combo.currentText().lower() == "simple"
+            else "detailed"
+        )
 
     def _format_explanation_text(self, response: ExplainResponse) -> str:
         lines = [
@@ -402,7 +420,9 @@ class ExplainPanel(QWidget):
 
         ext = "md" if mode == "md" else "txt"
         filt = "Markdown (*.md)" if ext == "md" else "Text (*.txt)"
-        path, _ = QFileDialog.getSaveFileName(self, "Export Lesson Notes", f"lesson.{ext}", filt)
+        path, _ = QFileDialog.getSaveFileName(
+            self, "Export Lesson Notes", f"lesson.{ext}", filt
+        )
         if not path:
             return
         content = (
@@ -439,7 +459,9 @@ class LearningModeController(QObject):
         if getattr(main_window, "history_manager", None):
             main_window.history_manager.history_changed.connect(self._on_history_change)
             if hasattr(main_window.history_manager, "checkpoint_created"):
-                main_window.history_manager.checkpoint_created.connect(self._on_checkpoint)
+                main_window.history_manager.checkpoint_created.connect(
+                    self._on_checkpoint
+                )
 
         self.explain_panel.auto_explain_completed.connect(self._on_auto_done)
 
@@ -551,7 +573,13 @@ class LearningModeController(QObject):
 
     def _only_minor_changes(self, before_data: dict, after_data: dict) -> bool:
         ignore_keys = {"pos", "pos_x", "pos_y", "name"}
-        style_keys = {"color", "stroke_width", "stroke_opacity", "fill_opacity", "opacity"}
+        style_keys = {
+            "color",
+            "stroke_width",
+            "stroke_opacity",
+            "fill_opacity",
+            "opacity",
+        }
         for key in set(before_data.keys()) | set(after_data.keys()):
             if key in ignore_keys:
                 continue
@@ -620,7 +648,9 @@ class TeacherModeController(QObject):
         if getattr(main_window, "history_manager", None):
             main_window.history_manager.history_changed.connect(self._on_history_change)
             if hasattr(main_window.history_manager, "checkpoint_created"):
-                main_window.history_manager.checkpoint_created.connect(self._on_checkpoint)
+                main_window.history_manager.checkpoint_created.connect(
+                    self._on_checkpoint
+                )
 
     def _sync_enabled(self) -> None:
         self.enabled = bool(SETTINGS.get("TEACHER_MODE_ENABLED", False, type=bool))
@@ -653,7 +683,8 @@ class TeacherModeController(QObject):
         has_math = any(t in ("MathTex", "Tex") for t in types)
         has_graph = any("Graph" in t or "Function" in t for t in types)
         has_transform = any(
-            step.animation_type in ("Transform", "ReplacementTransform", "TransformMatchingTex")
+            step.animation_type
+            in ("Transform", "ReplacementTransform", "TransformMatchingTex")
             for step in analysis.animation_steps
         )
 
@@ -662,4 +693,3 @@ class TeacherModeController(QObject):
         if len(analysis.animation_steps) >= 5:
             return True
         return False
-    

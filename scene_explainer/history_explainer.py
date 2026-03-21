@@ -4,14 +4,12 @@ from __future__ import annotations
 from typing import Dict, List, Optional, Tuple
 
 from core.history_manager import HistoryManager
-from utils.logger import LOGGER
 
 from scene_explainer.analyzer import SceneAnalyzer
 from scene_explainer.explanation_models import (
     ExplainResponse,
     HistoryDiff,
     HistoryExplainResponse,
-    LessonNotes,
     SceneAnalysis,
 )
 from scene_explainer.prompt_builder import PromptBuilder
@@ -39,7 +37,9 @@ class HistoryExplainer:
         self._checkpoint_cache.clear()
         self._scene_fingerprint = self._current_fingerprint()
 
-    def explain_checkpoint(self, checkpoint_id: str, mode: str = "detailed") -> ExplainResponse:
+    def explain_checkpoint(
+        self, checkpoint_id: str, mode: str = "detailed"
+    ) -> ExplainResponse:
         self._ensure_cache_valid()
         if checkpoint_id in self._checkpoint_cache:
             return self._checkpoint_cache[checkpoint_id]
@@ -48,7 +48,9 @@ class HistoryExplainer:
         if cp is None or cp.snapshot is None:
             raise ValueError("Checkpoint not found or has no snapshot.")
 
-        analysis = self.analyzer.analyze_snapshot(cp.snapshot, scene_name=cp.snapshot.scene)
+        analysis = self.analyzer.analyze_snapshot(
+            cp.snapshot, scene_name=cp.snapshot.scene
+        )
         prompt = self.prompt_builder.build_explain_prompt(analysis, mode)
         response = self.ai.run_blocking(prompt, self.ai._parse_explain_response)
         if isinstance(response, ExplainResponse):
@@ -68,9 +70,13 @@ class HistoryExplainer:
 
         before_analysis = self.analyzer.analyze_snapshot(before_cp.snapshot)
         after_analysis = self.analyzer.analyze_snapshot(after_cp.snapshot)
-        diff = self._compute_diff(before_cp.snapshot, after_cp.snapshot, from_checkpoint, to_checkpoint)
+        diff = self._compute_diff(
+            before_cp.snapshot, after_cp.snapshot, from_checkpoint, to_checkpoint
+        )
 
-        prompt = self.prompt_builder.build_history_change_prompt(diff, before_analysis, after_analysis, mode)
+        prompt = self.prompt_builder.build_history_change_prompt(
+            diff, before_analysis, after_analysis, mode
+        )
         ai_payload = self.ai.run_blocking(prompt, self.ai._parse_history_change)
         if not isinstance(ai_payload, dict):
             raise RuntimeError("Invalid history change response")
@@ -81,7 +87,9 @@ class HistoryExplainer:
             objects_removed=diff.objects_removed,
             animations_added=diff.animations_added,
             animations_removed=diff.animations_removed,
-            concept_change_summary=ai_payload.get("concept_change_summary", diff.concept_change_summary),
+            concept_change_summary=ai_payload.get(
+                "concept_change_summary", diff.concept_change_summary
+            ),
             educational_significance=ai_payload.get("educational_significance", ""),
         )
 
@@ -118,7 +126,9 @@ class HistoryExplainer:
     def _get_checkpoint(self, checkpoint_id: str):
         return getattr(self.history, "_checkpoints", {}).get(checkpoint_id)
 
-    def _compute_diff(self, before_snapshot, after_snapshot, from_id: str, to_id: str) -> HistoryDiff:
+    def _compute_diff(
+        self, before_snapshot, after_snapshot, from_id: str, to_id: str
+    ) -> HistoryDiff:
         before_nodes = before_snapshot.nodes if before_snapshot else {}
         after_nodes = after_snapshot.nodes if after_snapshot else {}
 
@@ -157,7 +167,9 @@ class HistoryExplainer:
         # Add animation step differences
         added_steps, removed_steps = self._diff_steps(before_analysis, after_analysis)
         animations_added.extend(a for a in added_steps if a not in animations_added)
-        animations_removed.extend(a for a in removed_steps if a not in animations_removed)
+        animations_removed.extend(
+            a for a in removed_steps if a not in animations_removed
+        )
 
         return HistoryDiff(
             from_checkpoint=from_id,
@@ -226,6 +238,10 @@ class HistoryExplainer:
         if not isinstance(payload, dict):
             raise RuntimeError("Invalid undo/redo explanation response")
         return {
-            "action_description": self.ai._sanitize_text(str(payload.get("action_description", "")).strip()),
-            "educational_impact": self.ai._sanitize_text(str(payload.get("educational_impact", "")).strip()),
+            "action_description": self.ai._sanitize_text(
+                str(payload.get("action_description", "")).strip()
+            ),
+            "educational_impact": self.ai._sanitize_text(
+                str(payload.get("educational_impact", "")).strip()
+            ),
         }

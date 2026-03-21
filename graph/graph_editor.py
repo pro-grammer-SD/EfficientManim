@@ -228,10 +228,12 @@ class GraphView(QGraphicsView):
         ]
         has_selection = bool(selected_nodes)
         has_animation = any(
-            getattr(item.data, "type", None) == NodeType.ANIMATION for item in selected_nodes
+            getattr(item.data, "type", None) == NodeType.ANIMATION
+            for item in selected_nodes
         )
         has_mobject = any(
-            getattr(item.data, "type", None) == NodeType.MOBJECT for item in selected_nodes
+            getattr(item.data, "type", None) == NodeType.MOBJECT
+            for item in selected_nodes
         )
 
         menu = QMenu(self)

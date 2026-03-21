@@ -404,4 +404,3 @@ class VideoRenderPanel(QWidget):
 
     def update_status(self, msg, col):
         self.status_display.append(f"<span style='color:{col}'>{msg}</span>")
-        

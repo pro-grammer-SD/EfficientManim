@@ -1,7 +1,7 @@
 from __future__ import annotations
 # -*- coding: utf-8 -*-
 
-from typing import List, Tuple
+from typing import List
 
 from scene_explainer.explanation_models import SceneAnalysis, HistoryDiff
 
@@ -21,7 +21,9 @@ class PromptBuilder:
         hints = self._merge_hints(analysis)
 
         detail_note = (
-            "Use short, intuitive sentences." if mode == "simple" else "Provide a complete, step-by-step explanation."
+            "Use short, intuitive sentences."
+            if mode == "simple"
+            else "Provide a complete, step-by-step explanation."
         )
 
         return (
@@ -155,7 +157,9 @@ class PromptBuilder:
             f"{k}={v}" for k, v in sorted(counts.items())
         )
         preview = "\n".join(self._format_object_line(o) for o in objects[:max_items])
-        return f"- {summary}\n{preview}\n- ... ({len(objects) - max_items} more objects)"
+        return (
+            f"- {summary}\n{preview}\n- ... ({len(objects) - max_items} more objects)"
+        )
 
     def _format_object_line(self, obj) -> str:
         label = f" label='{obj.label}'" if obj.label else ""
@@ -210,7 +214,8 @@ class PromptBuilder:
             for t in types
         )
         has_transforms = any(
-            step.animation_type in ("Transform", "ReplacementTransform", "TransformMatchingTex")
+            step.animation_type
+            in ("Transform", "ReplacementTransform", "TransformMatchingTex")
             for step in analysis.animation_steps
         )
 
@@ -236,7 +241,9 @@ class PromptBuilder:
                 if t in ("Polygon", "Rectangle"):
                     hints.append("area under the curve")
                     break
-        if has_math and any(step.animation_type == "Write" for step in analysis.animation_steps):
+        if has_math and any(
+            step.animation_type == "Write" for step in analysis.animation_steps
+        ):
             hints.append("algebraic derivation")
         if has_shapes and has_transforms:
             hints.append("geometric transformation")
@@ -256,7 +263,8 @@ class PromptBuilder:
             for t in types
         )
         has_transforms = any(
-            step.animation_type in ("Transform", "ReplacementTransform", "TransformMatchingTex")
+            step.animation_type
+            in ("Transform", "ReplacementTransform", "TransformMatchingTex")
             for step in analysis.animation_steps
         )
 
@@ -265,7 +273,7 @@ class PromptBuilder:
         if has_math:
             lines.append("Explain what the equation or expression represents.")
         if has_transforms:
-            lines.append("Describe what the transformation demonstrates." )
+            lines.append("Describe what the transformation demonstrates.")
         if has_shapes:
             lines.append("Highlight geometric properties and spatial reasoning.")
         if has_text_only:

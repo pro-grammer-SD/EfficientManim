@@ -85,7 +85,9 @@ class SettingsPanel(QWidget):
 
         grp_learning = QGroupBox("Learning Mode")
         form_learning = QFormLayout(grp_learning)
-        self.chk_learning = QCheckBox("Enable Learning Mode (auto-explanations while building animations)")
+        self.chk_learning = QCheckBox(
+            "Enable Learning Mode (auto-explanations while building animations)"
+        )
         self.chk_learning.setChecked(
             bool(SETTINGS.get("LEARNING_MODE_ENABLED", False, type=bool))
         )
