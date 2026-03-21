@@ -1,5 +1,7 @@
 # EfficientManim
 
+![Icon](icon/icon.ico)
+
 EfficientManim is a node-based visual IDE for building mathematical animations. It combines a drag-and-drop scene graph with AI-assisted tooling, a structured history system, and a learning-first explanation engine.
 
 ---
