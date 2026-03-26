@@ -778,7 +778,7 @@ class EfficientManimWindow(QMainWindow):
             "  • Code snippet library\n"
             "  • Manim class browser\n"
             "  • One-click export\n\n"
-            "© 2026 - Soumalya Das (@programmersd)",
+            "© 2026 - Soumalya Das (@programmersd21)",
         )
 
     def _open_manim_docs(self):

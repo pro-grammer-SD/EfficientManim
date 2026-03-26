@@ -21,7 +21,7 @@ from utils.logger import LOGGER
 def configure_app_id() -> None:
     if sys.platform == "win32":
         ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID(
-            "com.programmersd.efficientmanim"
+            "com.programmersd21.efficientmanim"
         )
 
 
