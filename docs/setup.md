@@ -16,7 +16,7 @@
 ### 1. Clone the repository
 
 ```bash
-git clone https://github.com/pro-grammer-SD/EfficientManim.git
+git clone https://github.com/programmersd/EfficientManim.git
 cd EfficientManim
 ```
 

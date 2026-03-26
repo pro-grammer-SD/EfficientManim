@@ -5,12 +5,12 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/pro-grammer-SD/EfficientManim"><img src="https://img.shields.io/badge/Python-3.10+-3776ab?style=for-the-badge&logo=python&logoColor=white" alt="Python"/></a>
+  <a href="https://github.com/programmersd/EfficientManim"><img src="https://img.shields.io/badge/Python-3.10+-3776ab?style=for-the-badge&logo=python&logoColor=white" alt="Python"/></a>
   <a href="https://ideacred.com/submissions" target="_blank" rel="noopener noreferrer">
-  <img src="https://ideacred.com/api/badge/pro-grammer-SD/EfficientManim?style=for-the-badge" 
+  <img src="https://ideacred.com/api/badge/programmersd/EfficientManim?style=for-the-badge" 
        alt="IdeaCred"></a>
   <a href="https://www.manim.community/"><img src="https://img.shields.io/badge/Manim-Community-4caf50?style=for-the-badge" alt="Manim"/></a>
-  <a href="https://github.com/pro-grammer-SD/EfficientManim/blob/main/LICENSE"><img src="https://img.shields.io/badge/License-MIT-f59e0b?style=for-the-badge" alt="MIT License"/></a>
+  <a href="https://github.com/programmersd/EfficientManim/blob/main/LICENSE"><img src="https://img.shields.io/badge/License-MIT-f59e0b?style=for-the-badge" alt="MIT License"/></a>
   <a href="https://www.reddit.com/r/manim/comments/1qck0ji/i_built_a_nodebased_manim_ide_with_ai_assistance/"><img src="https://img.shields.io/badge/Reddit-Discussion-ff4500?style=for-the-badge&logo=reddit&logoColor=white" alt="Reddit"/></a>
 </p>
 
@@ -175,7 +175,7 @@ All shortcuts are fully editable via **Help → Edit Keybindings…**
 ## 📦 Installation
 
 ```bash
-git clone https://github.com/pro-grammer-SD/EfficientManim.git
+git clone https://github.com/programmersd/EfficientManim.git
 cd EfficientManim
 pip install -r requirements.txt
 python main.py
@@ -223,4 +223,4 @@ Discuss the project on Reddit: [r/manim — I built a node-based Manim IDE with 
 
 ---
 
-<p align="center">Made with ❤️💚💙 by Soumalya · <a href="https://github.com/pro-grammer-SD">@pro-grammer-SD</a></p>
+<p align="center">Made with ❤️💚💙 by Soumalya · <a href="https://github.com/programmersd">@programmersd</a></p>
