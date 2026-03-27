@@ -9,7 +9,7 @@ from pathlib import Path
 from PySide6.QtCore import QObject, QSettings, QStandardPaths, Signal
 
 APP_NAME = "EfficientManim"
-APP_VERSION = "2.3.0"
+APP_VERSION = "2.3.1"
 PROJECT_EXT = ".efp"  # EfficientManim Project (Zip)
 LIGHT_MODE = True
 

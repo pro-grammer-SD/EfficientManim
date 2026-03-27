@@ -401,7 +401,7 @@ class LatexEditorPanel(QWidget):
         node.data.params[target_param] = formatted_code
 
         # Configure Metadata
-        node.data.set_escape_string(target_param, True)
+        node.data.set_escape_string(target_param, False)
         node.data.set_param_enabled(target_param, True)
 
         node.update()
@@ -581,6 +581,7 @@ class PropertiesPanel(QWidget):
                         node_item.node_data.params[param_name] = default_val
 
             # Create Rows
+            first_param = True
             for name, param in sig.parameters.items():
                 if name in ["self", "args", "kwargs", "mobject"]:
                     continue
@@ -590,11 +591,17 @@ class PropertiesPanel(QWidget):
                 if val is inspect.Parameter.empty:
                     val = None
 
-                # FIX: Disable 'tex_strings' by default if not explicitly set
-                if name == "tex_strings":
-                    # Only disable if it wasn't manually enabled by user previously
-                    if name not in node_item.node_data.param_metadata:
-                        node_item.node_data.set_param_enabled(name, False)
+                # Handle default enablement and escaping
+                if name not in node_item.node_data.param_metadata:
+                    if name in ("tex_strings", "text"):
+                        node_item.node_data.set_param_enabled(name, True)
+                        # Ensure these are NOT escaped by default
+                        node_item.node_data.set_escape_string(name, False)
+                    else:
+                        node_item.node_data.set_param_enabled(name, first_param)
+                
+                # Mark that we've processed the first valid parameter
+                first_param = False
 
                 row_widget = self.create_parameter_row(name, val, param.annotation)
                 # FIX: Actually add the row to the form layout
@@ -787,7 +794,12 @@ class PropertiesPanel(QWidget):
                 return btn
 
             # 4. NUMERIC
-            if TypeSafeParser.is_numeric_param(key) or annotation in (float, int):
+            is_numeric = TypeSafeParser.is_numeric_param(key) or annotation in (float, int)
+            # EXCEPTION: 'text' and 'tex_strings' must ALWAYS be treated as strings, never numeric
+            if key in ("text", "tex_strings"):
+                is_numeric = False
+
+            if is_numeric:
                 # ... (Keep existing numeric logic) ...
                 if annotation is float or isinstance(value, float):
                     sb = QDoubleSpinBox()
