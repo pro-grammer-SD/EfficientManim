@@ -794,12 +794,7 @@ class PropertiesPanel(QWidget):
                 return btn
 
             # 4. NUMERIC
-            is_numeric = TypeSafeParser.is_numeric_param(key) or annotation in (float, int)
-            # EXCEPTION: 'text' and 'tex_strings' must ALWAYS be treated as strings, never numeric
-            if key in ("text", "tex_strings"):
-                is_numeric = False
-
-            if is_numeric:
+            if TypeSafeParser.is_numeric_param(key) or annotation in (float, int):
                 # ... (Keep existing numeric logic) ...
                 if annotation is float or isinstance(value, float):
                     sb = QDoubleSpinBox()

@@ -189,7 +189,14 @@ class TypeSafeParser:
     def is_numeric_param(param_name: str) -> bool:
         if TypeSafeParser.is_asset_param(param_name):
             return False
-        return any(kw in param_name.lower() for kw in TypeSafeParser.NUMERIC_KEYWORDS)
+        
+        name_lower = param_name.lower()
+        # EXCEPTION: 'text' and 'tex' parameters must never be treated as numeric
+        # even if they contain 'x' or other keywords.
+        if name_lower in ("text", "tex_strings", "tex"):
+            return False
+            
+        return any(kw in name_lower for kw in TypeSafeParser.NUMERIC_KEYWORDS)
 
     @staticmethod
     def is_color_param(param_name: str) -> bool:
